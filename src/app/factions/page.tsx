@@ -1,0 +1,146 @@
+'use client'
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+
+interface Faction {
+  id: string
+  nom: string
+  emoji?: string
+  type?: string
+  description?: string
+  gdoc?: string
+  miro?: string
+}
+
+const TYPES = ['Pirates', 'Marine', 'Gouvernement', 'Révolutionnaire', 'Neutre', 'Autre']
+const TYPE_COLORS: Record<string,string> = { Pirates:'#d4a017', Marine:'#00c8ff', Gouvernement:'#4488ff', 'Révolutionnaire':'#e03030', Neutre:'#7a9ab8', Autre:'#a060ff' }
+
+const S = {
+  page: { minHeight:'100vh', background:'#050d1a', color:'#e8eef5', fontFamily:"'Crimson Pro',Georgia,serif", paddingTop:60 } as React.CSSProperties,
+  nav: { position:'fixed' as const, top:0, left:0, right:0, zIndex:50, height:60, background:'rgba(5,13,26,.93)', backdropFilter:'blur(20px)', borderBottom:'1px solid rgba(30,120,200,.2)', display:'flex', alignItems:'center', padding:'0 2rem', gap:'1rem' },
+  logo: { fontFamily:"'Cinzel Decorative',serif", fontSize:'1rem', fontWeight:900, background:'linear-gradient(135deg,#f0c040,#d4a017)', WebkitBackgroundClip:'text' as const, WebkitTextFillColor:'transparent' as const, textDecoration:'none', display:'flex', alignItems:'center', gap:'.5rem' },
+  btnGold: { background:'linear-gradient(135deg,#d4a017,#b8860b)', color:'#050d1a', border:'none', borderRadius:10, padding:'.7rem 1.4rem', fontFamily:"'Cinzel',serif", fontSize:'.72rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase' as const, cursor:'pointer' },
+  btnCyan: { background:'rgba(0,200,255,.12)', color:'#00c8ff', border:'1px solid rgba(0,200,255,.3)', borderRadius:10, padding:'.7rem 1.4rem', fontFamily:"'Cinzel',serif", fontSize:'.72rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase' as const, cursor:'pointer' },
+  input: { width:'100%', background:'#0d2040', border:'1px solid rgba(30,120,200,.2)', borderRadius:9, padding:'.65rem .9rem', color:'#e8eef5', fontFamily:"'Crimson Pro',serif", fontSize:'.95rem', outline:'none' },
+  label: { fontFamily:"'Cinzel',serif", fontSize:'.6rem', letterSpacing:'.11em', textTransform:'uppercase' as const, color:'#4a6880', marginBottom:'.4rem', display:'block' },
+  overlay: { position:'fixed' as const, inset:0, background:'rgba(0,0,0,.88)', backdropFilter:'blur(10px)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' },
+  modal: { background:'#0a1829', border:'1px solid rgba(30,180,255,.4)', borderRadius:18, maxWidth:580, width:'100%', maxHeight:'90vh', overflowY:'auto' as const, boxShadow:'0 40px 80px rgba(0,0,0,.8)' },
+}
+
+export default function FactionsPage() {
+  const [list, setList] = useState<Faction[]>([])
+  const [typeFilter, setTypeFilter] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId] = useState<string|null>(null)
+  const [form, setForm] = useState<Partial<Faction>>({ nom:'', emoji:'⚔️', type:'Pirates', description:'', gdoc:'', miro:'' })
+
+  useEffect(() => { fetchList() }, [])
+
+  async function fetchList() {
+    const { data } = await supabase.from('factions').select('*').order('created_at', { ascending: false })
+    setList(data || [])
+  }
+
+  function openForm(f?: Faction) {
+    if (f) { setForm(f); setEditId(f.id) }
+    else { setForm({ nom:'', emoji:'⚔️', type:'Pirates', description:'', gdoc:'', miro:'' }); setEditId(null) }
+    setShowForm(true)
+  }
+
+  async function saveForm() {
+    if (!form.nom?.trim()) { alert('Le nom est obligatoire !'); return }
+    if (editId) await supabase.from('factions').update(form).eq('id', editId)
+    else await supabase.from('factions').insert([form])
+    setShowForm(false); fetchList()
+  }
+
+  async function deleteFaction(id: string) {
+    if (!confirm('Supprimer cette faction ?')) return
+    await supabase.from('factions').delete().eq('id', id); fetchList()
+  }
+
+  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
+  const filtered = typeFilter ? list.filter(f => f.type === typeFilter) : list
+
+  return (
+    <div style={S.page}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,400;1,400&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#d4a017;border-radius:3px}`}</style>
+      <nav style={S.nav}>
+        <a href="/" style={S.logo}><span style={{width:30,height:30,background:'linear-gradient(135deg,#d4a017,#f0c040)',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center'}}>☠</span>Grand Line</a>
+        <div style={{flex:1,display:'flex',gap:'.3rem',overflowX:'auto',scrollbarWidth:'none'}}>
+          {navLinks.map(([l,h]) => <a key={h} href={h} style={{fontFamily:"'Cinzel',serif",fontSize:'.6rem',letterSpacing:'.06em',textTransform:'uppercase',color:h==='/factions'?'#f0c040':'#7a9ab8',textDecoration:'none',padding:'.38rem .6rem',borderRadius:6,whiteSpace:'nowrap',background:h==='/factions'?'rgba(212,160,23,.15)':'none'}}>{l}</a>)}
+        </div>
+        <a href="/dashboard" style={{...S.btnGold,padding:'.38rem .85rem',textDecoration:'none',fontSize:'.62rem'}}>⚓ MJ</a>
+      </nav>
+
+      <div style={{padding:'2.5rem 2rem 1.5rem',maxWidth:1400,margin:'0 auto'}}>
+        <div style={{fontFamily:"'Cinzel',serif",fontSize:'.6rem',letterSpacing:'.1em',color:'#7a9ab8',textTransform:'uppercase',marginBottom:'.4rem'}}>🏴‍☠️ › Factions</div>
+        <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:'1rem',flexWrap:'wrap',marginBottom:'1.5rem'}}>
+          <h1 style={{fontFamily:"'Cinzel Decorative',serif",fontSize:'clamp(1.8rem,3.5vw,3rem)',fontWeight:700,background:'linear-gradient(135deg,#fff,#f0c040)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Factions</h1>
+          <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter une faction</button>
+        </div>
+        <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',marginBottom:'1.25rem'}}>
+          <button onClick={() => setTypeFilter('')} style={{background:typeFilter===''?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${typeFilter===''?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:typeFilter===''?'#f0c040':'#7a9ab8',cursor:'pointer'}}>Toutes</button>
+          {TYPES.map(t => <button key={t} onClick={() => setTypeFilter(t)} style={{background:typeFilter===t?`${TYPE_COLORS[t]}22`:'#0a1829',border:`1px solid ${typeFilter===t?TYPE_COLORS[t]:'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:typeFilter===t?TYPE_COLORS[t]:'#7a9ab8',cursor:'pointer'}}>{t}</button>)}
+        </div>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))',gap:'1.1rem',padding:'0 2rem 4rem',maxWidth:1400,margin:'0 auto'}}>
+        {filtered.length === 0 && <div style={{gridColumn:'1/-1',textAlign:'center',padding:'5rem 2rem',color:'#4a6880'}}><div style={{fontSize:'4rem',marginBottom:'1rem',opacity:.4}}>⚔️</div><div style={{fontFamily:"'Cinzel',serif",fontSize:'.72rem',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:'1.5rem'}}>Aucune faction</div><button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter la première</button></div>}
+        {filtered.map(f => {
+          const tc = TYPE_COLORS[f.type||''] || '#a060ff'
+          return (
+            <div key={f.id} style={{background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:14,padding:'1.35rem',transition:'all .3s',display:'flex',flexDirection:'column',gap:'.6rem'}}
+              onMouseEnter={e=>{const el=e.currentTarget;el.style.transform='translateY(-5px)';el.style.borderColor=tc;el.style.boxShadow='0 18px 36px rgba(0,0,0,.4)'}}
+              onMouseLeave={e=>{const el=e.currentTarget;el.style.transform='none';el.style.borderColor='rgba(30,120,200,.2)';el.style.boxShadow='none'}}>
+              <div style={{fontSize:'2.5rem'}}>{f.emoji||'⚔️'}</div>
+              <div style={{fontFamily:"'Cinzel',serif",fontSize:'1rem',fontWeight:700,color:'#e8eef5'}}>{f.nom}</div>
+              <div style={{display:'inline-block',background:`${tc}22`,color:tc,border:`1px solid ${tc}44`,borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.09em',textTransform:'uppercase',width:'fit-content'}}>{f.type}</div>
+              {f.description && <div style={{fontSize:'.88rem',color:'#7a9ab8',lineHeight:1.6,fontStyle:'italic',flex:1}}>{f.description}</div>}
+              <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center'}}>
+                {f.gdoc && <a href={f.gdoc} target="_blank" rel="noopener" style={{background:'rgba(66,133,244,.12)',color:'#6aabff',border:'1px solid rgba(66,133,244,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>📄 Doc</a>}
+                {f.miro && <a href={f.miro} target="_blank" rel="noopener" style={{background:'rgba(255,196,0,.1)',color:'#ffc400',border:'1px solid rgba(255,196,0,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>🗒 Miro</a>}
+                <div style={{marginLeft:'auto',display:'flex',gap:'.3rem'}}>
+                  <button onClick={() => openForm(f)} style={{background:'rgba(0,200,255,.1)',border:'1px solid rgba(0,200,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#00c8ff',cursor:'pointer',fontSize:'.7rem'}}>✏️</button>
+                  <button onClick={() => deleteFaction(f.id)} style={{background:'rgba(224,48,48,.1)',border:'1px solid rgba(224,48,48,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#ff6060',cursor:'pointer',fontSize:'.7rem'}}>🗑</button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {showForm && (
+        <div style={S.overlay} onClick={e=>{if(e.target===e.currentTarget)setShowForm(false)}}>
+          <div style={S.modal}>
+            <div style={{padding:'1.35rem 1.75rem',borderBottom:'1px solid rgba(30,120,200,.2)',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,background:'#0a1829',borderRadius:'18px 18px 0 0',zIndex:5}}>
+              <div style={{fontFamily:"'Cinzel Decorative',serif",fontSize:'1.15rem',color:'#f0c040'}}>{editId?'✏️ Modifier':'✚ Nouvelle Faction'}</div>
+              <button onClick={()=>setShowForm(false)} style={{background:'rgba(5,13,26,.75)',border:'1px solid rgba(30,120,200,.2)',color:'#7a9ab8',borderRadius:'50%',width:34,height:34,cursor:'pointer',fontSize:'.9rem'}}>✕</button>
+            </div>
+            <div style={{padding:'1.75rem',display:'flex',flexDirection:'column',gap:'1.1rem'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:'.85rem',alignItems:'end'}}>
+                <div><label style={S.label}>Nom *</label><input style={S.input} value={form.nom||''} onChange={e=>setForm(f=>({...f,nom:e.target.value}))} placeholder="Marine Mondiale" /></div>
+                <div><label style={S.label}>Emoji</label><input style={{...S.input,width:70,fontSize:'1.4rem',textAlign:'center'}} value={form.emoji||'⚔️'} onChange={e=>setForm(f=>({...f,emoji:e.target.value}))} /></div>
+              </div>
+              <div><label style={S.label}>Type</label>
+                <select style={{...S.input}} value={form.type||'Pirates'} onChange={e=>setForm(f=>({...f,type:e.target.value}))}>
+                  {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div><label style={S.label}>Description</label><textarea style={{...S.input,minHeight:100,resize:'vertical',lineHeight:1.7}} value={form.description||''} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="Rôle, objectifs, territoire..." /></div>
+              <div style={{background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:10,padding:'1.1rem'}}>
+                <div style={{...S.label,marginBottom:'.75rem'}}>🔗 Liens</div>
+                <div style={{marginBottom:'.65rem'}}><label style={{...S.label,color:'#7a9ab8'}}>📄 Google Doc</label><input style={S.input} value={form.gdoc||''} onChange={e=>setForm(f=>({...f,gdoc:e.target.value}))} placeholder="https://docs.google.com/..." /></div>
+                <div><label style={{...S.label,color:'#7a9ab8'}}>🗒 Miro</label><input style={S.input} value={form.miro||''} onChange={e=>setForm(f=>({...f,miro:e.target.value}))} placeholder="https://miro.com/..." /></div>
+              </div>
+            </div>
+            <div style={{padding:'1.1rem 1.75rem',borderTop:'1px solid rgba(30,120,200,.2)',display:'flex',gap:'.65rem',justifyContent:'flex-end',position:'sticky',bottom:0,background:'#0a1829',borderRadius:'0 0 18px 18px'}}>
+              <button style={S.btnCyan} onClick={()=>setShowForm(false)}>Annuler</button>
+              <button style={S.btnGold} onClick={saveForm}>💾 Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
