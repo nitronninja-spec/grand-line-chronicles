@@ -150,7 +150,7 @@ export default function FruitsPage() {
               {/* Image */}
               <div style={{width:'100%',height:160,background:'linear-gradient(135deg,#0a1829,#050d1a)',position:'relative',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'4rem',overflow:'hidden'}}>
                 {f.photo && <img src={f.photo} alt={f.nom} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'contain',display:'block',opacity:.85}} />}
-                <span style={{position:'relative',zIndex:1,opacity:f.photo?.0.3:1}}>{f.emoji||'🍎'}</span>
+                <span style={{position:'relative',zIndex:1,opacity:f.photo?0.3:1}}>{f.emoji||'🍎'}</span>
               </div>
               <div style={{padding:'1.1rem'}}>
                 <div style={{display:'inline-block',borderRadius:100,padding:'.18rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.52rem',letterSpacing:'.09em',textTransform:'uppercase',marginBottom:'.65rem',background:`${tc}22`,color:tc,border:`1px solid ${tc}44`}}>{f.type}</div>
