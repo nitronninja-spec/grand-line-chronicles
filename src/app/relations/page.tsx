@@ -48,10 +48,28 @@ function parentOf(f: Faction, byName: Map<string, Faction>): Faction | undefined
 function childrenOf(dossier: Faction, factions: Faction[]): Faction[] {
   return factions.filter(f => f.id !== dossier.id && (f.factions_parentes || []).includes(dossier.nom)).sort((a, b) => a.nom.localeCompare(b.nom))
 }
+// Si la cible visée est elle-même déjà rangée dans un dossier, on range plutôt la faction
+// déplacée dans ce dossier-là (le "grand-parent") — évite un rangement à deux niveaux et
+// permet d'ajouter plusieurs factions au même dossier en visant l'une de ses voisines.
+function resolveFolderTarget(target: Faction, factions: Faction[]): Faction {
+  const parentNom = target.factions_parentes?.[0]
+  if (!parentNom) return target
+  const grandParent = factions.find(f => f.nom === parentNom && f.est_dossier)
+  return grandParent || target
+}
 
 const CIRCLE_CENTER: Pos = { x: 50, y: 50 }
 const CIRCLE_R = 40
-const SATELLITE_R = 10
+
+// Le rayon du satellite s'élargit légèrement avec le nombre de factions rangées, pour que le
+// halo du dossier reste lisible même avec plusieurs membres.
+function satelliteRadius(childCount: number): number {
+  return 11 + Math.min(childCount, 8) * 1.4
+}
+// Rayon du halo qui entoure visuellement un dossier et ses membres.
+function clusterHaloRadius(childCount: number): number {
+  return satelliteRadius(childCount) + 8
+}
 
 function clampPos(p: Pos): Pos {
   return { x: Math.min(96, Math.max(4, p.x)), y: Math.min(96, Math.max(4, p.y)) }
@@ -85,9 +103,10 @@ function computeCircularLayout(factions: Faction[]): Record<string, Pos> {
     const m = children.length
     if (m === 0) return
     const base = pos[parent.id]
+    const r = satelliteRadius(m)
     children.forEach((c, j) => {
-      const angle = (j / m) * Math.PI * 2
-      pos[c.id] = clampPos({ x: base.x + SATELLITE_R * Math.cos(angle), y: base.y + SATELLITE_R * Math.sin(angle) })
+      const angle = -Math.PI / 2 + (j / m) * Math.PI * 2
+      pos[c.id] = clampPos({ x: base.x + r * Math.cos(angle), y: base.y + r * Math.sin(angle) })
     })
   })
   return pos
@@ -229,7 +248,8 @@ export default function RelationsPage() {
     if (!moved || !pos) return
 
     const dragged = factions.find(f => f.id === id)
-    const target = targetId ? factions.find(f => f.id === targetId) : null
+    const rawTarget = targetId ? factions.find(f => f.id === targetId) : null
+    const target = rawTarget ? resolveFolderTarget(rawTarget, factions) : null
     const currentParentNom = dragged?.factions_parentes?.[0]
 
     if (target) {
@@ -378,22 +398,23 @@ export default function RelationsPage() {
 
             {dragging && (
               <div style={{ position:'absolute', top:'.75rem', left:'50%', transform:'translateX(-50%)', zIndex:10, pointerEvents:'none', background: nestTarget ? 'rgba(64,208,96,.18)' : 'rgba(5,13,26,.85)', border:`1px solid ${nestTarget ? '#40d060' : 'rgba(30,120,200,.3)'}`, borderRadius:100, padding:'.4rem 1rem', fontFamily:"'Cinzel',serif", fontSize:'.68rem', color: nestTarget ? '#40d060' : '#7a9ab8', whiteSpace:'nowrap' }}>
-                {nestTarget ? `📁 Relâche pour ranger dans ${factions.find(f => f.id === nestTarget)?.nom}` : 'Glisse sur une faction pour la ranger dedans'}
+                {(() => {
+                  const raw = factions.find(f => f.id === nestTarget)
+                  if (!raw) return 'Glisse sur une faction pour la ranger dedans'
+                  return `📁 Relâche pour ranger dans ${resolveFolderTarget(raw, factions).nom}`
+                })()}
               </div>
             )}
 
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }}>
               {/* Anneau-repère du cercle */}
               <circle cx={CIRCLE_CENTER.x} cy={CIRCLE_CENTER.y} r={CIRCLE_R} fill="none" stroke="rgba(122,154,184,.18)" strokeWidth={0.25} strokeDasharray="0.8 1" />
-              {/* Liens structurels dossier → factions rangées dedans */}
+              {/* Halo regroupant visuellement un dossier et les factions rangées dedans */}
               {factions.filter(f => f.est_dossier).map(parent => {
                 const pp = positions[parent.id]
-                if (!pp) return null
-                return factions.filter(c => c.id !== parent.id && (c.factions_parentes || []).includes(parent.nom)).map(child => {
-                  const cp = positions[child.id]
-                  if (!cp) return null
-                  return <line key={`${parent.id}-${child.id}`} x1={pp.x} y1={pp.y} x2={cp.x} y2={cp.y} stroke="rgba(212,160,23,.35)" strokeWidth={0.2} strokeDasharray="0.6 0.6" />
-                })
+                const m = childrenOf(parent, factions).length
+                if (!pp || m === 0) return null
+                return <circle key={`halo-${parent.id}`} cx={pp.x} cy={pp.y} r={clusterHaloRadius(m)} fill="rgba(212,160,23,.05)" stroke="rgba(212,160,23,.3)" strokeWidth={0.25} strokeDasharray="0.9 0.7" />
               })}
               {relations.map(r => {
                 const fa = factions.find(f => f.nom === r.faction_a)
@@ -447,7 +468,7 @@ export default function RelationsPage() {
                   <div className="rel-node-circle" style={{ position:'relative', width:size, height:size, borderRadius:'50%', background:'linear-gradient(160deg,#132a4d,#0a1829)', border:`2.5px solid ${isNestTarget ? '#40d060' : active ? '#f0c040' : ring}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize: isNested ? '1.3rem' : '1.7rem', boxShadow: isNestTarget ? '0 0 22px rgba(64,208,96,.75)' : active ? '0 0 20px rgba(240,192,64,.65)' : `0 4px 14px rgba(0,0,0,.4)` }}>
                     {f.emoji || '⚔️'}
                     {f.est_dossier && (
-                      <span style={{ position:'absolute', bottom:-4, right:-4, background:'#d4a017', color:'#050d1a', borderRadius:100, width:20, height:20, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'.6rem', border:'2px solid #050d1a' }}>📁{childCount > 0 && <span style={{ marginLeft:1 }}>{childCount}</span>}</span>
+                      <span style={{ position:'absolute', bottom:-7, left:'50%', transform:'translateX(-50%)', background:'rgba(212,160,23,.22)', border:'1.5px solid #d4a017', color:'#f0c040', borderRadius:100, minWidth:22, height:20, padding:'0 6px', display:'flex', alignItems:'center', justifyContent:'center', gap:2, fontSize:'.6rem', fontWeight:700, whiteSpace:'nowrap' }}>📁{childCount > 0 && childCount}</span>
                     )}
                   </div>
                   <span style={{ fontSize: isNested ? '.56rem' : '.62rem', color: active ? '#f0c040' : '#c8d8e8', fontFamily:"'Cinzel',serif", fontWeight: active ? 700 : 400, whiteSpace:'normal', maxWidth: isNested ? 80 : 100, textAlign:'center', lineHeight:1.2, background:'rgba(5,13,26,.85)', padding:'.18rem .5rem', borderRadius:5, border:'1px solid rgba(30,120,200,.2)' }}>{f.nom}</span>
