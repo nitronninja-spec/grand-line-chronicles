@@ -37,11 +37,12 @@ create table if not exists lames (
   created_at timestamptz default now()
 );
 
--- 4) Cristaux Primordiaux
+-- 4) Cristaux Primordiaux — la catégorie est libre (créée par vous à la volée
+-- dans le formulaire), pas une liste fixe : simple colonne texte.
 create table if not exists cristaux_primordiaux (
   id uuid primary key default gen_random_uuid(),
   nom text not null,
-  element text,
+  categorie text,
   puissance int,
   emoji text,
   description text,
@@ -51,6 +52,16 @@ create table if not exists cristaux_primordiaux (
   photo text,
   created_at timestamptz default now()
 );
+
+-- Si vous aviez déjà exécuté une version précédente de ce script (colonne "element"),
+-- ce bloc la renomme automatiquement en "categorie" sans rien casser.
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_name = 'cristaux_primordiaux' and column_name = 'element')
+     and not exists (select 1 from information_schema.columns where table_name = 'cristaux_primordiaux' and column_name = 'categorie') then
+    alter table cristaux_primordiaux rename column element to categorie;
+  end if;
+end $$;
 
 -- 5) RLS — ouvre l'accès public (lecture/écriture) comme les autres tables du projet.
 -- Si tes tables existantes (fruits, iles...) utilisent des règles différentes,

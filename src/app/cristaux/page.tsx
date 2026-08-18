@@ -6,7 +6,7 @@ import { supabase, uploadImage } from '@/lib/supabase'
 interface Cristal {
   id: string
   nom: string
-  element: string
+  categorie: string
   puissance?: number
   emoji?: string
   description?: string
@@ -16,9 +16,11 @@ interface Cristal {
   photo?: string
 }
 
-const ELEMENTS = ['Feu', 'Eau', 'Terre', 'Foudre', 'Vent', 'Lumière', 'Ombre', 'Vie']
-const ELEMENT_COLORS: Record<string, string> = {
-  Feu: '#e03030', Eau: '#00c8ff', Terre: '#a06030', Foudre: '#f0c040', Vent: '#40d060', 'Lumière': '#fff0a0', Ombre: '#a060ff', Vie: '#40e0a0'
+const CATEGORY_PALETTE = ['#e03030', '#00c8ff', '#40d060', '#f0c040', '#a060ff', '#ff8c40', '#40e0a0', '#ff6090', '#7a9ab8', '#d4a017']
+function categoryColor(cat: string) {
+  let hash = 0
+  for (let i = 0; i < cat.length; i++) hash = (hash * 31 + cat.charCodeAt(i)) >>> 0
+  return CATEGORY_PALETTE[hash % CATEGORY_PALETTE.length]
 }
 
 const S = {
@@ -40,20 +42,22 @@ const navLinks = [['Accueil', '/'], ['Personnages', '/personnages'], ['Fruits', 
 export default function CristauxPage() {
   const [list, setList] = useState<Cristal[]>([])
   const [filtered, setFiltered] = useState<Cristal[]>([])
-  const [elementFilter, setElementFilter] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState('')
   const [form, setForm] = useState<Partial<Cristal>>({
-    nom: '', element: 'Feu', puissance: 5, emoji: '💎', description: '', proprietaire: '', instabilite: '', color: '#e03030'
+    nom: '', categorie: '', puissance: 5, emoji: '💎', description: '', proprietaire: '', instabilite: '', color: '#e03030'
   })
+
+  const categories = Array.from(new Set(list.map(c => c.categorie).filter(Boolean))).sort()
 
   useEffect(() => { fetchList() }, [])
   useEffect(() => {
-    setFiltered(elementFilter ? list.filter(c => c.element === elementFilter) : list)
-  }, [list, elementFilter])
+    setFiltered(categoryFilter ? list.filter(c => c.categorie === categoryFilter) : list)
+  }, [list, categoryFilter])
 
   async function fetchList() {
     const { data } = await supabase.from('cristaux_primordiaux').select('*').order('created_at', { ascending: false })
@@ -62,7 +66,7 @@ export default function CristauxPage() {
 
   function openForm(c?: Cristal) {
     if (c) { setForm(c); setEditId(c.id); setPhotoPreview(c.photo || '') }
-    else { setForm({ nom: '', element: 'Feu', puissance: 5, emoji: '💎', description: '', proprietaire: '', instabilite: '', color: '#e03030' }); setEditId(null); setPhotoPreview('') }
+    else { setForm({ nom: '', categorie: '', puissance: 5, emoji: '💎', description: '', proprietaire: '', instabilite: '', color: '#e03030' }); setEditId(null); setPhotoPreview('') }
     setPhotoFile(null)
     setShowForm(true)
   }
@@ -121,12 +125,14 @@ export default function CristauxPage() {
           <h1 style={{ fontFamily: "'Cinzel Decorative',serif", fontSize: 'clamp(1.8rem,3.5vw,3rem)', fontWeight: 700, background: 'linear-gradient(135deg,#fff,#f0c040)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Cristaux Primordiaux</h1>
           <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter un cristal</button>
         </div>
-        <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          {['', ...ELEMENTS].map(el => (
-            <button key={el} onClick={() => setElementFilter(el)} style={{ background: elementFilter === el ? `${ELEMENT_COLORS[el] || '#d4a017'}22` : '#0a1829', border: `1px solid ${elementFilter === el ? (ELEMENT_COLORS[el] || '#d4a017') : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: elementFilter === el ? (ELEMENT_COLORS[el] || '#f0c040') : '#7a9ab8', cursor: 'pointer' }}>
-              {el || 'Tous'}
+        <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '1.25rem', alignItems: 'center' }}>
+          <button onClick={() => setCategoryFilter('')} style={{ background: categoryFilter === '' ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${categoryFilter === '' ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: categoryFilter === '' ? '#f0c040' : '#7a9ab8', cursor: 'pointer' }}>Tous</button>
+          {categories.map(cat => (
+            <button key={cat} onClick={() => setCategoryFilter(cat)} style={{ background: categoryFilter === cat ? `${categoryColor(cat)}22` : '#0a1829', border: `1px solid ${categoryFilter === cat ? categoryColor(cat) : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: categoryFilter === cat ? categoryColor(cat) : '#7a9ab8', cursor: 'pointer' }}>
+              {cat}
             </button>
           ))}
+          {categories.length === 0 && <span style={{ fontSize: '.78rem', color: '#4a6880', fontStyle: 'italic' }}>Les catégories apparaîtront ici dès que tu en crées une.</span>}
         </div>
       </div>
 
@@ -139,7 +145,7 @@ export default function CristauxPage() {
           </div>
         )}
         {filtered.map(c => {
-          const ec = ELEMENT_COLORS[c.element] || '#a060ff'
+          const ec = c.categorie ? categoryColor(c.categorie) : '#a060ff'
           return (
             <div key={c.id} style={{ background: '#0d2040', border: `1px solid rgba(30,120,200,.2)`, borderRadius: 14, overflow: 'hidden', transition: 'all .3s', position: 'relative' }}
               onMouseEnter={e => { const el = e.currentTarget; el.style.transform = 'translateY(-6px)'; el.style.borderColor = ec; el.style.boxShadow = `0 18px 36px rgba(0,0,0,.4)` }}
@@ -150,7 +156,7 @@ export default function CristauxPage() {
                 <span style={{ position: 'relative', zIndex: 1, opacity: c.photo ? 0.3 : 1 }}>{c.emoji || '💎'}</span>
               </div>
               <div style={{ padding: '1.1rem' }}>
-                <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', marginBottom: '.65rem', background: `${ec}22`, color: ec, border: `1px solid ${ec}44` }}>{c.element}</div>
+                {c.categorie && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', marginBottom: '.65rem', background: `${ec}22`, color: ec, border: `1px solid ${ec}44` }}>{c.categorie}</div>}
                 <div style={{ fontFamily: "'Cinzel',serif", fontSize: '1.05rem', fontWeight: 700, color: '#e8eef5', marginBottom: '.65rem' }}>{c.nom}</div>
                 {c.description && <div style={{ fontSize: '.88rem', color: '#7a9ab8', lineHeight: 1.6, fontStyle: 'italic', marginBottom: '.85rem' }}>{c.description}</div>}
                 {c.instabilite && <div style={{ fontSize: '.8rem', color: '#ff6060', marginBottom: '.65rem' }}>⚠️ {c.instabilite}</div>}
@@ -199,10 +205,11 @@ export default function CristauxPage() {
               <div><label style={S.label}>Nom du cristal *</label><input style={S.input} value={form.nom || ''} onChange={e => setForm(f => ({ ...f, nom: e.target.value }))} placeholder="Cœur de Braise Éternelle" /></div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.85rem' }}>
-                <div><label style={S.label}>Élément</label>
-                  <select style={{ ...S.input }} value={form.element || 'Feu'} onChange={e => setForm(f => ({ ...f, element: e.target.value }))}>
-                    {ELEMENTS.map(el => <option key={el} value={el}>{el}</option>)}
-                  </select>
+                <div><label style={S.label}>Catégorie</label>
+                  <input style={S.input} list="cristal-categories" value={form.categorie || ''} onChange={e => setForm(f => ({ ...f, categorie: e.target.value }))} placeholder="Feu, Vie, ou une catégorie à toi..." />
+                  <datalist id="cristal-categories">
+                    {categories.map(cat => <option key={cat} value={cat} />)}
+                  </datalist>
                 </div>
                 <div><label style={S.label}>Puissance (1-10)</label><input style={S.input} type="number" min="1" max="10" value={form.puissance || 5} onChange={e => setForm(f => ({ ...f, puissance: parseInt(e.target.value) }))} /></div>
               </div>

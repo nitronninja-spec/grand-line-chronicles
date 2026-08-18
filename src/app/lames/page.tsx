@@ -17,10 +17,14 @@ interface Lame {
   photo?: string
 }
 
-const RANGS = ['Wazamono', 'Ryo Wazamono', 'O Wazamono', 'Saijo O Wazamono', 'Meito']
-const RANG_COLORS: Record<string, string> = {
-  Wazamono: '#7a9ab8', 'Ryo Wazamono': '#40d060', 'O Wazamono': '#00c8ff', 'Saijo O Wazamono': '#a060ff', Meito: '#d4a017'
+const RANGS = ['Lame de qualité', 'Lame de Grande qualité', 'Lame de 1er Ordre', 'Lame Légendaire']
+const RANG_MAX: Record<string, number> = {
+  'Lame de qualité': 100, 'Lame de Grande qualité': 50, 'Lame de 1er Ordre': 20, 'Lame Légendaire': 10
 }
+const RANG_COLORS: Record<string, string> = {
+  'Lame de qualité': '#7a9ab8', 'Lame de Grande qualité': '#00c8ff', 'Lame de 1er Ordre': '#a060ff', 'Lame Légendaire': '#d4a017'
+}
+function rangLabel(r: string) { return RANG_MAX[r] ? `[${RANG_MAX[r]}] ${r}` : r }
 
 const S = {
   page: { minHeight: '100vh', background: '#050d1a', color: '#e8eef5', fontFamily: "'Crimson Pro', Georgia, serif", paddingTop: 60 } as React.CSSProperties,
@@ -48,7 +52,7 @@ export default function LamesPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState('')
   const [form, setForm] = useState<Partial<Lame>>({
-    nom: '', jp: '', rang: 'Wazamono', puissance: 5, emoji: '⚔️', description: '', proprietaire: '', particularites: '', color: '#7a9ab8'
+    nom: '', jp: '', rang: 'Lame de qualité', puissance: 5, emoji: '⚔️', description: '', proprietaire: '', particularites: '', color: '#7a9ab8'
   })
 
   useEffect(() => { fetchList() }, [])
@@ -63,7 +67,7 @@ export default function LamesPage() {
 
   function openForm(l?: Lame) {
     if (l) { setForm(l); setEditId(l.id); setPhotoPreview(l.photo || '') }
-    else { setForm({ nom: '', jp: '', rang: 'Wazamono', puissance: 5, emoji: '⚔️', description: '', proprietaire: '', particularites: '', color: '#7a9ab8' }); setEditId(null); setPhotoPreview('') }
+    else { setForm({ nom: '', jp: '', rang: 'Lame de qualité', puissance: 5, emoji: '⚔️', description: '', proprietaire: '', particularites: '', color: '#7a9ab8' }); setEditId(null); setPhotoPreview('') }
     setPhotoFile(null)
     setShowForm(true)
   }
@@ -125,7 +129,7 @@ export default function LamesPage() {
         <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
           {['', ...RANGS].map(r => (
             <button key={r} onClick={() => setRangFilter(r)} style={{ background: rangFilter === r ? `${RANG_COLORS[r] || '#d4a017'}22` : '#0a1829', border: `1px solid ${rangFilter === r ? (RANG_COLORS[r] || '#d4a017') : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: rangFilter === r ? (RANG_COLORS[r] || '#f0c040') : '#7a9ab8', cursor: 'pointer' }}>
-              {r || 'Tous'}
+              {r ? rangLabel(r) : 'Tous'}
             </button>
           ))}
         </div>
@@ -151,7 +155,7 @@ export default function LamesPage() {
                 <span style={{ position: 'relative', zIndex: 1, opacity: l.photo ? 0.3 : 1 }}>{l.emoji || '⚔️'}</span>
               </div>
               <div style={{ padding: '1.1rem' }}>
-                <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', marginBottom: '.65rem', background: `${rc}22`, color: rc, border: `1px solid ${rc}44` }}>{l.rang}</div>
+                <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', marginBottom: '.65rem', background: `${rc}22`, color: rc, border: `1px solid ${rc}44` }}>{rangLabel(l.rang)}</div>
                 <div style={{ fontFamily: "'Cinzel',serif", fontSize: '1.05rem', fontWeight: 700, color: '#e8eef5', marginBottom: '.12rem' }}>{l.nom}</div>
                 {l.jp && <div style={{ fontSize: '.78rem', color: '#4a6880', marginBottom: '.65rem' }}>{l.jp}</div>}
                 {l.description && <div style={{ fontSize: '.88rem', color: '#7a9ab8', lineHeight: 1.6, fontStyle: 'italic', marginBottom: '.85rem' }}>{l.description}</div>}
@@ -204,8 +208,8 @@ export default function LamesPage() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.85rem' }}>
                 <div><label style={S.label}>Rang</label>
-                  <select style={{ ...S.input }} value={form.rang || 'Wazamono'} onChange={e => setForm(f => ({ ...f, rang: e.target.value }))}>
-                    {RANGS.map(r => <option key={r} value={r}>{r}</option>)}
+                  <select style={{ ...S.input }} value={form.rang || 'Lame de qualité'} onChange={e => setForm(f => ({ ...f, rang: e.target.value }))}>
+                    {RANGS.map(r => <option key={r} value={r}>{rangLabel(r)}</option>)}
                   </select>
                 </div>
                 <div><label style={S.label}>Puissance (1-10)</label><input style={S.input} type="number" min="1" max="10" value={form.puissance || 5} onChange={e => setForm(f => ({ ...f, puissance: parseInt(e.target.value) }))} /></div>
