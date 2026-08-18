@@ -116,7 +116,7 @@ export default function FactionsPage() {
     fetchList()
   }
 
-  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
+  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Journaux','/journaux'],['Lore','/lore'],['Dashboard','/dashboard']]
   let filtered = typeFilter ? list.filter(f => f.type === typeFilter) : list
   if (search) filtered = filtered.filter(f => f.nom.toLowerCase().includes(search.toLowerCase()))
   filtered = sortFactions(filtered, sortMode)

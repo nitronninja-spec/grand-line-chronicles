@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, uploadImage } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
 
 interface LoreArticle {
@@ -10,6 +10,7 @@ interface LoreArticle {
   contenu?: string
   emoji?: string
   tags?: string
+  photos?: string[]
   modifie?: string
 }
 
@@ -30,17 +31,60 @@ const S = {
   btnCyan: { background:'rgba(0,200,255,.12)', color:'#00c8ff', border:'1px solid rgba(0,200,255,.3)', borderRadius:10, padding:'.7rem 1.4rem', fontFamily:"'Cinzel',serif", fontSize:'.72rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase' as const, cursor:'pointer' },
   input: { width:'100%', background:'#0d2040', border:'1px solid rgba(30,120,200,.2)', borderRadius:9, padding:'.65rem .9rem', color:'#e8eef5', fontFamily:"'Crimson Pro',serif", fontSize:'.95rem', outline:'none' },
   label: { fontFamily:"'Cinzel',serif", fontSize:'.6rem', letterSpacing:'.11em', textTransform:'uppercase' as const, color:'#4a6880', marginBottom:'.4rem', display:'block' },
+  overlay: { position:'fixed' as const, inset:0, background:'rgba(0,0,0,.88)', backdropFilter:'blur(10px)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' },
+}
+
+function inlineFormat(s: string) {
+  const escaped = s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  return escaped.replace(/\*\*(.+?)\*\*/g, '<strong style="color:#f0c040">$1</strong>')
+}
+
+function renderContent(text: string) {
+  const lines = (text || '').split('\n')
+  const blocks: React.ReactNode[] = []
+  let listItems: string[] = []
+  let paraLines: string[] = []
+  const flushList = () => {
+    if (listItems.length) {
+      blocks.push(<ul key={`ul-${blocks.length}`} style={{margin:'0 0 1.1rem 1.3rem',lineHeight:1.85,color:'#c8d8e8'}}>{listItems.map((it,i) => <li key={i} dangerouslySetInnerHTML={{__html: inlineFormat(it)}} />)}</ul>)
+      listItems = []
+    }
+  }
+  const flushPara = () => {
+    if (paraLines.length) {
+      blocks.push(<p key={`p-${blocks.length}`} style={{margin:'0 0 1.1rem',lineHeight:1.85,color:'#c8d8e8',fontSize:'1rem'}} dangerouslySetInnerHTML={{__html: inlineFormat(paraLines.join(' '))}} />)
+      paraLines = []
+    }
+  }
+  lines.forEach(line => {
+    const t = line.trim()
+    if (t === '') { flushList(); flushPara(); return }
+    if (t === '---') { flushList(); flushPara(); blocks.push(<hr key={`hr-${blocks.length}`} style={{border:'none',borderTop:'1px solid rgba(30,120,200,.2)',margin:'1.75rem 0'}} />); return }
+    if (t.startsWith('## ')) { flushList(); flushPara(); blocks.push(<h3 key={`h-${blocks.length}`} style={{fontFamily:"'Cinzel',serif",fontSize:'1.08rem',color:'#00c8ff',letterSpacing:'.02em',margin:'1.75rem 0 .85rem'}}>{t.slice(3)}</h3>); return }
+    if (t.startsWith('• ') || t.startsWith('- ')) { flushPara(); listItems.push(t.slice(2)); return }
+    paraLines.push(t)
+  })
+  flushList(); flushPara()
+  return blocks.length > 0 ? blocks : <p style={{color:'#4a6880',fontStyle:'italic'}}>Article vide pour l&apos;instant.</p>
+}
+
+function parseTags(tags?: string) {
+  return (tags || '').split(',').map(t => t.trim()).filter(Boolean)
 }
 
 export default function LorePage() {
   const [articles, setArticles] = useState<LoreArticle[]>([])
   const [selected, setSelected] = useState<LoreArticle|null>(null)
   const [catFilter, setCatFilter] = useState('')
+  const [tagFilter, setTagFilter] = useState('')
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState<Partial<LoreArticle>>({ titre:'', categorie:'divers', contenu:'', emoji:'📄', tags:'' })
+  const [form, setForm] = useState<Partial<LoreArticle>>({ titre:'', categorie:'divers', contenu:'', emoji:'📄', tags:'', photos:[] })
   const [saving, setSaving] = useState(false)
   const [saveTimer, setSaveTimer] = useState<ReturnType<typeof setTimeout>|null>(null)
+  const [photoFiles, setPhotoFiles] = useState<File[]>([])
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
+  const [lightbox, setLightbox] = useState<string|null>(null)
 
   useEffect(() => {
     fetchArticles()
@@ -54,24 +98,37 @@ export default function LorePage() {
   }
 
   function newArticle() {
-    const a = { titre:'Nouvel article', categorie:'divers', contenu:'', emoji:'📄', tags:'' }
-    setForm(a); setSelected(null); setEditing(true)
+    const a = { titre:'Nouvel article', categorie:'divers', contenu:'', emoji:'📄', tags:'', photos:[] }
+    setForm(a); setSelected(null); setEditing(true); setPhotoFiles([]); setPhotoPreviews([])
   }
 
   function selectArticle(a: LoreArticle) {
-    setSelected(a); setForm(a); setEditing(false)
+    setSelected(a); setForm({ ...a, photos: a.photos || [] }); setEditing(false); setPhotoFiles([]); setPhotoPreviews([])
+  }
+
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || [])
+    setPhotoFiles(prev => [...prev, ...files])
+    setPhotoPreviews(prev => [...prev, ...files.map(f => URL.createObjectURL(f))])
   }
 
   async function saveArticle() {
     if (!form.titre?.trim()) return
     setSaving(true)
-    const data = { ...form, modifie: new Date().toISOString() }
+    let photos = form.photos || []
+    for (const file of photoFiles) {
+      const url = await uploadImage(file, 'lore')
+      if (url) photos = [...photos, url]
+    }
+    const data = { ...form, photos, modifie: new Date().toISOString() }
     if (selected) {
       await supabase.from('lore').update(data).eq('id', selected.id)
     } else {
       const { data: inserted } = await supabase.from('lore').insert([data]).select().single()
       if (inserted) setSelected(inserted)
     }
+    setForm(f => ({ ...f, photos }))
+    setPhotoFiles([]); setPhotoPreviews([])
     setSaving(false)
     fetchArticles()
   }
@@ -97,9 +154,21 @@ export default function LorePage() {
     fetchArticles()
   }
 
-  let filtered = catFilter ? articles.filter(a => a.categorie === catFilter) : articles
-  if (search) filtered = filtered.filter(a => a.titre.toLowerCase().includes(search.toLowerCase()))
-  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
+  const allTags = Array.from(new Set(articles.flatMap(a => parseTags(a.tags)))).sort()
+
+  let filtered = articles
+  if (catFilter) filtered = filtered.filter(a => a.categorie === catFilter)
+  if (tagFilter) filtered = filtered.filter(a => parseTags(a.tags).includes(tagFilter))
+  if (search) {
+    const q = search.toLowerCase()
+    filtered = filtered.filter(a => a.titre.toLowerCase().includes(q) || (a.contenu||'').toLowerCase().includes(q) || (a.tags||'').toLowerCase().includes(q))
+  }
+
+  const related = selected ? articles.filter(a => a.id !== selected.id && (
+    a.categorie === selected.categorie || parseTags(selected.tags).some(t => parseTags(a.tags).includes(t))
+  )).slice(0,6) : []
+
+  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Journaux','/journaux'],['Lore','/lore'],['Dashboard','/dashboard']]
 
   return (
     <div style={S.page}>
@@ -121,28 +190,42 @@ export default function LorePage() {
         </div>
         <div style={{position:'relative',marginBottom:'1rem'}}>
           <span style={{position:'absolute',left:'.75rem',top:'50%',transform:'translateY(-50%)',color:'#4a6880'}}>🔍</span>
-          <input style={{...S.input,paddingLeft:'2.5rem'}} placeholder="Rechercher un article..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input style={{...S.input,paddingLeft:'2.5rem'}} placeholder="Rechercher dans le titre, le contenu, les tags..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',marginBottom:'1.25rem'}}>
+        <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',marginBottom:allTags.length>0?'.65rem':'1.25rem'}}>
           <button onClick={()=>setCatFilter('')} style={{background:catFilter===''?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${catFilter===''?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:catFilter===''?'#f0c040':'#7a9ab8',cursor:'pointer'}}>Tous</button>
           {CATS.map(c => <button key={c.id} onClick={()=>setCatFilter(c.id)} style={{background:catFilter===c.id?`${c.color}22`:'#0a1829',border:`1px solid ${catFilter===c.id?c.color:'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:catFilter===c.id?c.color:'#7a9ab8',cursor:'pointer'}}>{c.label}</button>)}
         </div>
+        {allTags.length > 0 && (
+          <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center',marginBottom:'1.25rem'}}>
+            <span style={{fontFamily:"'Cinzel',serif",fontSize:'.56rem',letterSpacing:'.1em',textTransform:'uppercase',color:'#4a6880',marginRight:'.2rem'}}>🏷️ Tags :</span>
+            <button onClick={()=>setTagFilter('')} style={{background:tagFilter===''?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${tagFilter===''?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.25rem .7rem',fontFamily:"'Cinzel',serif",fontSize:'.56rem',color:tagFilter===''?'#f0c040':'#7a9ab8',cursor:'pointer'}}>Tous</button>
+            {allTags.map(tag => <button key={tag} onClick={()=>setTagFilter(tag)} style={{background:tagFilter===tag?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${tagFilter===tag?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.25rem .7rem',fontFamily:"'Cinzel',serif",fontSize:'.56rem',color:tagFilter===tag?'#f0c040':'#7a9ab8',cursor:'pointer'}}>#{tag}</button>)}
+          </div>
+        )}
       </div>
 
       <div style={{display:'grid',gridTemplateColumns:'280px 1fr',gap:'1.25rem',padding:'0 2rem 4rem',maxWidth:1400,margin:'0 auto'}}>
-        {/* Sidebar */}
-        <div style={{display:'flex',flexDirection:'column',gap:'.4rem'}}>
+        {/* Sidebar groupée par catégorie */}
+        <div style={{display:'flex',flexDirection:'column',gap:'.2rem'}}>
           <div style={{fontFamily:"'Cinzel',serif",fontSize:'.65rem',letterSpacing:'.15em',textTransform:'uppercase',color:'#4a6880',padding:'.5rem .75rem',borderBottom:'1px solid rgba(30,120,200,.2)',marginBottom:'.25rem'}}>📚 Articles ({filtered.length})</div>
-          {filtered.map(a => {
-            const cat = CATS.find(c => c.id === a.categorie)
+          {CATS.map(cat => {
+            const inCat = filtered.filter(a => a.categorie === cat.id)
+            if (inCat.length === 0) return null
             return (
-              <button key={a.id} onClick={() => selectArticle(a)} style={{width:'100%',textAlign:'left',background:selected?.id===a.id?'rgba(212,160,23,.15)':'none',border:`1px solid ${selected?.id===a.id?'#d4a017':'transparent'}`,borderRadius:9,padding:'.65rem .85rem',cursor:'pointer',transition:'all .2s',display:'flex',alignItems:'center',gap:'.65rem'}}>
-                <span style={{fontSize:'1.1rem',flexShrink:0}}>{a.emoji||'📄'}</span>
-                <div style={{flex:1,overflow:'hidden'}}>
-                  <div style={{fontFamily:"'Cinzel',serif",fontSize:'.72rem',color:'#e8eef5',fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.titre}</div>
-                  {cat && <div style={{fontFamily:"'Cinzel',serif",fontSize:'.56rem',letterSpacing:'.06em',textTransform:'uppercase',color:cat.color,marginTop:'.08rem'}}>{cat.label}</div>}
-                </div>
-              </button>
+              <div key={cat.id} style={{marginBottom:'.5rem'}}>
+                <div style={{fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.1em',textTransform:'uppercase',color:cat.color,padding:'.4rem .75rem .3rem'}}>{cat.label}</div>
+                {inCat.map(a => (
+                  <button key={a.id} onClick={() => selectArticle(a)} style={{width:'100%',textAlign:'left',background:selected?.id===a.id?'rgba(212,160,23,.15)':'none',border:`1px solid ${selected?.id===a.id?'#d4a017':'transparent'}`,borderRadius:9,padding:'.6rem .85rem',cursor:'pointer',transition:'all .2s',display:'flex',alignItems:'center',gap:'.65rem'}}>
+                    {a.photos && a.photos[0]
+                      ? <img src={a.photos[0]} style={{width:26,height:26,borderRadius:6,objectFit:'cover',flexShrink:0}} />
+                      : <span style={{fontSize:'1.1rem',flexShrink:0,width:26,textAlign:'center'}}>{a.emoji||'📄'}</span>}
+                    <div style={{flex:1,overflow:'hidden'}}>
+                      <div style={{fontFamily:"'Cinzel',serif",fontSize:'.72rem',color:'#e8eef5',fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.titre}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             )
           })}
           {filtered.length === 0 && <div style={{textAlign:'center',padding:'2rem 1rem',color:'#4a6880',fontFamily:"'Cinzel',serif",fontSize:'.65rem',letterSpacing:'.09em',textTransform:'uppercase'}}>Aucun article</div>}
@@ -160,30 +243,120 @@ export default function LorePage() {
           )}
           {(selected || editing) && (
             <>
+              {/* Cover */}
+              {(form.photos && form.photos[0]) && (
+                <div style={{height:180,position:'relative',overflow:'hidden'}}>
+                  <img src={form.photos[0]} style={{width:'100%',height:'100%',objectFit:'cover',display:'block',cursor:'pointer'}} onClick={() => setLightbox(form.photos![0])} />
+                  <div style={{position:'absolute',bottom:0,left:0,right:0,height:60,background:'linear-gradient(to top,#0d2040,transparent)'}} />
+                </div>
+              )}
+
               <div style={{display:'flex',alignItems:'center',gap:'.5rem',padding:'.75rem 1.1rem',borderBottom:'1px solid rgba(30,120,200,.2)',flexWrap:'wrap'}}>
                 <input style={{...S.input,width:52,fontSize:'1.4rem',textAlign:'center',padding:'.3rem',borderRadius:8,flexShrink:0}} value={form.emoji||'📄'} onChange={e=>setForm(f=>({...f,emoji:e.target.value}))} title="Emoji" />
                 <input style={{...S.input,flex:1,minWidth:150,fontFamily:"'Cinzel',serif",fontSize:'1.1rem',fontWeight:700,color:'#f0c040',background:'none',border:'none',padding:'.3rem'}} value={form.titre||''} onChange={e=>setForm(f=>({...f,titre:e.target.value}))} placeholder="Titre de l'article..." />
                 <select style={{...S.input,width:'auto',fontSize:'.72rem'}} value={form.categorie||'divers'} onChange={e=>setForm(f=>({...f,categorie:e.target.value}))}>
                   {CATS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </select>
-                <button style={{...S.btnGold,padding:'.4rem .9rem',fontSize:'.62rem'}} onClick={saveArticle}>{saving?'⏳':'💾'} Sauvegarder</button>
+                <button style={{...S.btnGold,padding:'.4rem .9rem',fontSize:'.62rem'}} onClick={saveArticle} disabled={saving}>{saving?'⏳':'💾'} Sauvegarder</button>
                 {selected && <button title="Dupliquer" style={{background:'rgba(160,96,255,.1)',border:'1px solid rgba(160,96,255,.25)',borderRadius:8,padding:'.4rem .75rem',color:'#a060ff',fontFamily:"'Cinzel',serif",fontSize:'.62rem',cursor:'pointer'}} onClick={()=>duplicateArticle(selected)}>⧉</button>}
                 {selected && <button style={{background:'rgba(224,48,48,.12)',color:'#ff6060',border:'1px solid rgba(224,48,48,.3)',borderRadius:8,padding:'.4rem .75rem',fontFamily:"'Cinzel',serif",fontSize:'.62rem',cursor:'pointer'}} onClick={()=>deleteArticle(selected.id)}>🗑</button>}
               </div>
-              <textarea
-                style={{flex:1,background:'none',border:'none',outline:'none',resize:'none',color:'#e8eef5',fontFamily:"'Crimson Pro',serif",fontSize:'1.05rem',lineHeight:1.85,padding:'1.35rem 1.5rem',minHeight:400}}
-                value={form.contenu||''}
-                onChange={e=>handleContentChange(e.target.value)}
-                placeholder={'Écris le contenu de cet article ici...\n\nTu peux structurer avec :\n## Titre de section\n**texte en gras**\n• élément de liste\n---  (séparateur)\n\nLa sauvegarde est automatique.'}
-              />
-              <div style={{padding:'.5rem 1.1rem',borderTop:'1px solid rgba(30,120,200,.2)',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.08em',textTransform:'uppercase',color:'#4a6880',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                <span><span style={{width:6,height:6,borderRadius:'50%',background:'#40d060',display:'inline-block',marginRight:'.4rem'}}></span>Sauvegarde automatique</span>
-                <span>{(form.contenu||'').length} caractères</span>
+
+              <div style={{padding:'.75rem 1.1rem',borderBottom:'1px solid rgba(30,120,200,.2)'}}>
+                <input style={{...S.input,fontSize:'.85rem'}} value={form.tags||''} onChange={e=>setForm(f=>({...f,tags:e.target.value}))} placeholder="🏷️ Tags séparés par virgules (ex: poneglyphe, gouvernement, ancien)" />
               </div>
+
+              {/* Photos */}
+              <div style={{padding:'.9rem 1.1rem',borderBottom:'1px solid rgba(30,120,200,.2)'}}>
+                <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap',alignItems:'center'}}>
+                  {(form.photos||[]).map((src,i) => (
+                    <div key={`existing-${i}`} style={{width:56,height:56,borderRadius:8,overflow:'hidden',position:'relative',border:i===0?'2px solid #d4a017':'1px solid rgba(30,120,200,.2)'}}>
+                      <img src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block',cursor:'pointer'}} onClick={() => setLightbox(src)} />
+                      <button onClick={() => setForm(f => ({...f, photos:(f.photos||[]).filter((_,j)=>j!==i)}))} style={{position:'absolute',top:1,right:1,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:16,height:16,color:'#fff',fontSize:'.5rem',cursor:'pointer'}}>✕</button>
+                    </div>
+                  ))}
+                  {photoPreviews.map((src,i) => (
+                    <div key={`new-${i}`} style={{width:56,height:56,borderRadius:8,overflow:'hidden',position:'relative',border:'2px solid #40d060'}}>
+                      <img src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      <button onClick={() => { setPhotoPreviews(p=>p.filter((_,j)=>j!==i)); setPhotoFiles(p=>p.filter((_,j)=>j!==i)) }} style={{position:'absolute',top:1,right:1,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:16,height:16,color:'#fff',fontSize:'.5rem',cursor:'pointer'}}>✕</button>
+                    </div>
+                  ))}
+                  <label style={{width:56,height:56,borderRadius:8,border:'2px dashed rgba(30,120,200,.3)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#0a1829',color:'#4a6880',fontSize:'1.1rem'}}>
+                    <input type="file" accept="image/*,.gif" multiple style={{display:'none'}} onChange={handlePhotoChange} />
+                    ➕
+                  </label>
+                  <span style={{fontSize:'.68rem',color:'#4a6880',fontStyle:'italic'}}>La première image sert de couverture.</span>
+                </div>
+              </div>
+
+              {editing ? (
+                <>
+                  <textarea
+                    style={{flex:1,background:'none',border:'none',outline:'none',resize:'none',color:'#e8eef5',fontFamily:"'Crimson Pro',serif",fontSize:'1.05rem',lineHeight:1.85,padding:'1.35rem 1.5rem',minHeight:400}}
+                    value={form.contenu||''}
+                    onChange={e=>handleContentChange(e.target.value)}
+                    placeholder={'Écris le contenu de cet article ici...\n\nTu peux structurer avec :\n## Titre de section\n**texte en gras**\n• élément de liste\n---  (séparateur)\n\nLa sauvegarde est automatique.'}
+                  />
+                  <div style={{padding:'.5rem 1.1rem',borderTop:'1px solid rgba(30,120,200,.2)',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.08em',textTransform:'uppercase',color:'#4a6880',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                    <span><span style={{width:6,height:6,borderRadius:'50%',background:'#40d060',display:'inline-block',marginRight:'.4rem'}}></span>Sauvegarde automatique</span>
+                    <div style={{display:'flex',alignItems:'center',gap:'.75rem'}}>
+                      <span>{(form.contenu||'').length} caractères</span>
+                      <button onClick={() => { saveArticle(); setEditing(false) }} style={{background:'rgba(64,208,96,.12)',border:'1px solid rgba(64,208,96,.3)',borderRadius:6,padding:'.25rem .6rem',color:'#40d060',cursor:'pointer',fontFamily:"'Cinzel',serif",fontSize:'.58rem'}}>✓ Terminé</button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{flex:1,padding:'1.5rem 1.75rem'}}>
+                  <div style={{display:'flex',justifyContent:'flex-end',marginBottom:'.5rem'}}>
+                    <button onClick={() => setEditing(true)} style={{background:'rgba(0,200,255,.1)',border:'1px solid rgba(0,200,255,.25)',borderRadius:8,padding:'.3rem .7rem',color:'#00c8ff',cursor:'pointer',fontFamily:"'Cinzel',serif",fontSize:'.6rem'}}>✏️ Éditer le contenu</button>
+                  </div>
+                  {renderContent(form.contenu || '')}
+
+                  {(form.photos && form.photos.length > 1) && (
+                    <>
+                      <div style={{fontFamily:"'Cinzel',serif",fontSize:'.65rem',letterSpacing:'.13em',textTransform:'uppercase',color:'#00c8ff',margin:'1.5rem 0 .65rem',display:'flex',alignItems:'center',gap:'.5rem'}}>📸 Galerie <div style={{flex:1,height:1,background:'rgba(30,120,200,.2)'}} /></div>
+                      <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap',marginBottom:'1.5rem'}}>
+                        {form.photos.slice(1).map((ph,i) => (
+                          <div key={i} onClick={() => setLightbox(ph)} style={{width:80,height:80,borderRadius:8,overflow:'hidden',border:'1px solid rgba(30,120,200,.2)',cursor:'pointer'}}>
+                            <img src={ph} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {parseTags(form.tags).length > 0 && (
+                    <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',marginTop:'1rem',paddingTop:'1rem',borderTop:'1px solid rgba(30,120,200,.15)'}}>
+                      {parseTags(form.tags).map(tag => (
+                        <button key={tag} onClick={() => setTagFilter(tag)} style={{background:'rgba(212,160,23,.1)',border:'1px solid rgba(212,160,23,.25)',borderRadius:100,padding:'.2rem .6rem',color:'#d4a017',fontSize:'.72rem',cursor:'pointer'}}>#{tag}</button>
+                      ))}
+                    </div>
+                  )}
+
+                  {related.length > 0 && (
+                    <>
+                      <div style={{fontFamily:"'Cinzel',serif",fontSize:'.65rem',letterSpacing:'.13em',textTransform:'uppercase',color:'#00c8ff',margin:'1.75rem 0 .65rem',display:'flex',alignItems:'center',gap:'.5rem'}}>🔗 Articles liés <div style={{flex:1,height:1,background:'rgba(30,120,200,.2)'}} /></div>
+                      <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap'}}>
+                        {related.map(a => (
+                          <button key={a.id} onClick={() => selectArticle(a)} style={{display:'inline-flex',alignItems:'center',gap:'.4rem',background:'#071828',border:'1px solid rgba(30,120,200,.2)',borderRadius:100,padding:'.4rem .85rem',color:'#c8d8e8',fontSize:'.82rem',cursor:'pointer'}}>
+                            <span>{a.emoji||'📄'}</span>{a.titre}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
       </div>
+
+      {lightbox && (
+        <div style={{...S.overlay, zIndex:300}} onClick={() => setLightbox(null)}>
+          <img src={lightbox} style={{maxWidth:'90vw',maxHeight:'90vh',objectFit:'contain',borderRadius:8,boxShadow:'0 20px 60px rgba(0,0,0,.6)'}} />
+        </div>
+      )}
     </div>
   )
 }

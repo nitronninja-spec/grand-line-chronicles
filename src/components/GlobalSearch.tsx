@@ -22,7 +22,7 @@ const SOURCES: { table: string; col: string; icon: string; label: string; href: 
   { table: 'cristaux_primordiaux', col: 'nom', icon: '💎', label: 'Cristaux', href: (_id, name) => `/cristaux?q=${encodeURIComponent(name)}` },
   { table: 'iles', col: 'nom', icon: '🏝️', label: 'Îles', href: (_id, name) => `/iles?q=${encodeURIComponent(name)}` },
   { table: 'factions', col: 'nom', icon: '🏴‍☠️', label: 'Factions', href: (_id, name) => `/factions?q=${encodeURIComponent(name)}` },
-  { table: 'sessions', col: 'titre', icon: '📜', label: 'Campagne', href: (_id, name) => `/campagne?q=${encodeURIComponent(name)}` },
+  { table: 'sessions', col: 'titre', icon: '📜', label: 'Journaux', href: (_id, name) => `/journaux?q=${encodeURIComponent(name)}` },
   { table: 'lore', col: 'titre', icon: '📖', label: 'Lore', href: (_id, name) => `/lore?q=${encodeURIComponent(name)}` },
 ]
 

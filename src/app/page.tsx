@@ -57,7 +57,7 @@ export default function Home() {
     { icon: '🏝️', name: 'Îles & Territoires', count: stats.iles, href: '/iles', color: '#4040ff' },
     { icon: '⚔️', name: 'Factions', count: 0, href: '/factions', color: '#e03030' },
     { icon: '💥', name: 'Techniques', count: 0, href: '/techniques', color: '#80e080' },
-    { icon: '📜', name: 'Campagne', count: stats.sessions, href: '/campagne', color: '#ff8c40' },
+    { icon: '📜', name: 'Journaux', count: stats.sessions, href: '/journaux', color: '#ff8c40' },
     { icon: '📖', name: 'Lore & Encyclopédie', count: 0, href: '/lore', color: '#c040ff' },
   ]
 
@@ -101,7 +101,7 @@ export default function Home() {
             ['Cristaux', '/cristaux'],
             ['Îles', '/iles'],
             ['Factions', '/factions'],
-            ['Campagne', '/campagne'],
+            ['Journaux', '/journaux'],
             ['Lore', '/lore'],
             ['Dashboard', '/dashboard'],
           ].map(([label, href]) => (
