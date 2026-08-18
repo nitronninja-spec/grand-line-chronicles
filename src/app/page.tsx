@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import GlobalSearch from '@/components/GlobalSearch'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -117,6 +118,7 @@ export default function Home() {
             >{label}</a>
           ))}
         </div>
+        <GlobalSearch />
         <a href="/dashboard" style={{
           background: 'linear-gradient(135deg, #d4a017, #b8860b)',
           color: '#050d1a', border: 'none', borderRadius: 8,

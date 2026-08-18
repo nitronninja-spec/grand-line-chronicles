@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import GlobalSearch from '@/components/GlobalSearch'
 
 interface LoreArticle {
   id: string
@@ -35,12 +36,17 @@ export default function LorePage() {
   const [articles, setArticles] = useState<LoreArticle[]>([])
   const [selected, setSelected] = useState<LoreArticle|null>(null)
   const [catFilter, setCatFilter] = useState('')
+  const [search, setSearch] = useState('')
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<Partial<LoreArticle>>({ titre:'', categorie:'divers', contenu:'', emoji:'📄', tags:'' })
   const [saving, setSaving] = useState(false)
   const [saveTimer, setSaveTimer] = useState<ReturnType<typeof setTimeout>|null>(null)
 
-  useEffect(() => { fetchArticles() }, [])
+  useEffect(() => {
+    fetchArticles()
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) setSearch(q)
+  }, [])
 
   async function fetchArticles() {
     const { data } = await supabase.from('lore').select('*').order('modifie', { ascending: false })
@@ -83,7 +89,16 @@ export default function LorePage() {
     setSelected(null); setEditing(false); fetchArticles()
   }
 
-  const filtered = catFilter ? articles.filter(a => a.categorie === catFilter) : articles
+  async function duplicateArticle(a: LoreArticle) {
+    const { id, ...rest } = a
+    void id
+    const data = { ...rest, titre: rest.titre + ' (copie)', modifie: new Date().toISOString() }
+    await supabase.from('lore').insert([data])
+    fetchArticles()
+  }
+
+  let filtered = catFilter ? articles.filter(a => a.categorie === catFilter) : articles
+  if (search) filtered = filtered.filter(a => a.titre.toLowerCase().includes(search.toLowerCase()))
   const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
 
   return (
@@ -94,6 +109,7 @@ export default function LorePage() {
         <div style={{flex:1,display:'flex',gap:'.3rem',overflowX:'auto',scrollbarWidth:'none'}}>
           {navLinks.map(([l,h]) => <a key={h} href={h} style={{fontFamily:"'Cinzel',serif",fontSize:'.6rem',letterSpacing:'.06em',textTransform:'uppercase',color:h==='/lore'?'#f0c040':'#7a9ab8',textDecoration:'none',padding:'.38rem .6rem',borderRadius:6,whiteSpace:'nowrap',background:h==='/lore'?'rgba(212,160,23,.15)':'none'}}>{l}</a>)}
         </div>
+        <GlobalSearch />
         <a href="/dashboard" style={{...S.btnGold,padding:'.38rem .85rem',textDecoration:'none',fontSize:'.62rem'}}>⚓ MJ</a>
       </nav>
 
@@ -102,6 +118,10 @@ export default function LorePage() {
         <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:'1rem',flexWrap:'wrap',marginBottom:'1.25rem'}}>
           <h1 style={{fontFamily:"'Cinzel Decorative',serif",fontSize:'clamp(1.8rem,3.5vw,3rem)',fontWeight:700,background:'linear-gradient(135deg,#fff,#f0c040)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>📖 Lore & Encyclopédie</h1>
           <button style={S.btnGold} onClick={newArticle}>＋ Nouvel article</button>
+        </div>
+        <div style={{position:'relative',marginBottom:'1rem'}}>
+          <span style={{position:'absolute',left:'.75rem',top:'50%',transform:'translateY(-50%)',color:'#4a6880'}}>🔍</span>
+          <input style={{...S.input,paddingLeft:'2.5rem'}} placeholder="Rechercher un article..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',marginBottom:'1.25rem'}}>
           <button onClick={()=>setCatFilter('')} style={{background:catFilter===''?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${catFilter===''?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:catFilter===''?'#f0c040':'#7a9ab8',cursor:'pointer'}}>Tous</button>
@@ -147,6 +167,7 @@ export default function LorePage() {
                   {CATS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </select>
                 <button style={{...S.btnGold,padding:'.4rem .9rem',fontSize:'.62rem'}} onClick={saveArticle}>{saving?'⏳':'💾'} Sauvegarder</button>
+                {selected && <button title="Dupliquer" style={{background:'rgba(160,96,255,.1)',border:'1px solid rgba(160,96,255,.25)',borderRadius:8,padding:'.4rem .75rem',color:'#a060ff',fontFamily:"'Cinzel',serif",fontSize:'.62rem',cursor:'pointer'}} onClick={()=>duplicateArticle(selected)}>⧉</button>}
                 {selected && <button style={{background:'rgba(224,48,48,.12)',color:'#ff6060',border:'1px solid rgba(224,48,48,.3)',borderRadius:8,padding:'.4rem .75rem',fontFamily:"'Cinzel',serif",fontSize:'.62rem',cursor:'pointer'}} onClick={()=>deleteArticle(selected.id)}>🗑</button>}
               </div>
               <textarea

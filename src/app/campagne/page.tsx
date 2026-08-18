@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import GlobalSearch from '@/components/GlobalSearch'
 
 interface Session {
   id: string
@@ -27,11 +28,18 @@ const S = {
 
 export default function CampagnePage() {
   const [sessions, setSessions] = useState<Session[]>([])
+  const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string|null>(null)
   const [form, setForm] = useState<Partial<Session>>({ num:1, titre:'', date:'', lieu:'', resume:'', gdoc:'', miro:'' })
 
-  useEffect(() => { fetchSessions() }, [])
+  const filtered = search ? sessions.filter(s => s.titre.toLowerCase().includes(search.toLowerCase())) : sessions
+
+  useEffect(() => {
+    fetchSessions()
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) setSearch(q)
+  }, [])
 
   async function fetchSessions() {
     const { data } = await supabase.from('sessions').select('*').order('num', { ascending: true })
@@ -56,6 +64,13 @@ export default function CampagnePage() {
     await supabase.from('sessions').delete().eq('id', id); fetchSessions()
   }
 
+  async function duplicateSession(s: Session) {
+    const { id, ...rest } = s
+    void id
+    await supabase.from('sessions').insert([{ ...rest, titre: rest.titre + ' (copie)', num: sessions.length + 1 }])
+    fetchSessions()
+  }
+
   function formatDate(d?: string) {
     if (!d) return ''
     const dt = new Date(d)
@@ -72,6 +87,7 @@ export default function CampagnePage() {
         <div style={{flex:1,display:'flex',gap:'.3rem',overflowX:'auto',scrollbarWidth:'none'}}>
           {navLinks.map(([l,h]) => <a key={h} href={h} style={{fontFamily:"'Cinzel',serif",fontSize:'.6rem',letterSpacing:'.06em',textTransform:'uppercase',color:h==='/campagne'?'#f0c040':'#7a9ab8',textDecoration:'none',padding:'.38rem .6rem',borderRadius:6,whiteSpace:'nowrap',background:h==='/campagne'?'rgba(212,160,23,.15)':'none'}}>{l}</a>)}
         </div>
+        <GlobalSearch />
         <a href="/dashboard" style={{...S.btnGold,padding:'.38rem .85rem',textDecoration:'none',fontSize:'.62rem'}}>⚓ MJ</a>
       </nav>
 
@@ -85,18 +101,22 @@ export default function CampagnePage() {
           <div><div style={{fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.11em',textTransform:'uppercase',color:'#4a6880',marginBottom:'.25rem'}}>Campagne</div><div style={{fontFamily:"'Cinzel',serif",fontSize:'.95rem',fontWeight:700,color:'#f0c040'}}>La Route du One Piece</div></div>
           <div><div style={{fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.11em',textTransform:'uppercase',color:'#4a6880',marginBottom:'.25rem'}}>Sessions</div><div style={{fontFamily:"'Cinzel Decorative',serif",fontSize:'1.4rem',fontWeight:900,color:'#f0c040'}}>{sessions.length}</div></div>
         </div>
+        <div style={{position:'relative',marginBottom:'0'}}>
+          <span style={{position:'absolute',left:'.75rem',top:'50%',transform:'translateY(-50%)',color:'#4a6880'}}>🔍</span>
+          <input style={{...S.input,paddingLeft:'2.5rem'}} placeholder="Rechercher une session..." value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
       </div>
 
       <div style={{maxWidth:900,margin:'0 auto',padding:'0 2rem 4rem',position:'relative'}}>
         <div style={{position:'absolute',left:'calc(2rem + 21px)',top:0,bottom:0,width:2,background:'linear-gradient(to bottom,#d4a017,#00c8ff,transparent)',opacity:.25}} />
-        {sessions.length === 0 && (
+        {filtered.length === 0 && (
           <div style={{textAlign:'center',padding:'5rem 2rem',color:'#4a6880'}}>
             <div style={{fontSize:'4rem',marginBottom:'1rem',opacity:.4}}>📜</div>
-            <div style={{fontFamily:"'Cinzel',serif",fontSize:'.72rem',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:'1.5rem'}}>Aucune session</div>
-            <button style={S.btnGold} onClick={() => openForm()}>＋ Créer la première session</button>
+            <div style={{fontFamily:"'Cinzel',serif",fontSize:'.72rem',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:'1.5rem'}}>{sessions.length === 0 ? 'Aucune session' : 'Aucun résultat'}</div>
+            {sessions.length === 0 && <button style={S.btnGold} onClick={() => openForm()}>＋ Créer la première session</button>}
           </div>
         )}
-        {sessions.map(s => (
+        {filtered.map(s => (
           <div key={s.id} style={{display:'flex',gap:'1.25rem',marginBottom:'1.75rem',position:'relative'}}>
             <div style={{width:42,height:42,borderRadius:'50%',background:'#0d2040',border:'2px solid #d4a017',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Cinzel Decorative',serif",fontSize:'.85rem',fontWeight:700,color:'#f0c040',flexShrink:0,boxShadow:'0 0 14px rgba(212,160,23,.2)',zIndex:1}}>{s.num||'?'}</div>
             <div style={{flex:1,background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:12,padding:'1.1rem',transition:'all .2s'}}
@@ -109,6 +129,7 @@ export default function CampagnePage() {
                 {s.gdoc && <a href={s.gdoc} target="_blank" rel="noopener" style={{background:'rgba(66,133,244,.12)',color:'#6aabff',border:'1px solid rgba(66,133,244,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>📄 Google Doc</a>}
                 {s.miro && <a href={s.miro} target="_blank" rel="noopener" style={{background:'rgba(255,196,0,.1)',color:'#ffc400',border:'1px solid rgba(255,196,0,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>🗒 Miro</a>}
                 <div style={{marginLeft:'auto',display:'flex',gap:'.3rem'}}>
+                  <button onClick={() => duplicateSession(s)} title="Dupliquer" style={{background:'rgba(160,96,255,.1)',border:'1px solid rgba(160,96,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#a060ff',cursor:'pointer',fontSize:'.7rem'}}>⧉</button>
                   <button onClick={() => openForm(s)} style={{background:'rgba(0,200,255,.1)',border:'1px solid rgba(0,200,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#00c8ff',cursor:'pointer',fontSize:'.7rem'}}>✏️</button>
                   <button onClick={() => deleteSession(s.id)} style={{background:'rgba(224,48,48,.1)',border:'1px solid rgba(224,48,48,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#ff6060',cursor:'pointer',fontSize:'.7rem'}}>🗑</button>
                 </div>

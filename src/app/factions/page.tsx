@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import GlobalSearch from '@/components/GlobalSearch'
 
 interface Faction {
   id: string
@@ -12,8 +13,13 @@ interface Faction {
   miro?: string
 }
 
+interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; faction?: string }
+interface LinkedIle { id: string; nom: string; emoji?: string; faction?: string }
+
 const TYPES = ['Pirates', 'Marine', 'Gouvernement', 'Révolutionnaire', 'Neutre', 'Autre']
 const TYPE_COLORS: Record<string,string> = { Pirates:'#d4a017', Marine:'#00c8ff', Gouvernement:'#4488ff', 'Révolutionnaire':'#e03030', Neutre:'#7a9ab8', Autre:'#a060ff' }
+const MEMBER_TYPE_COLORS: Record<string, string> = { pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', 'allié': '#40d060' }
+const MEMBER_TYPE_LABELS: Record<string, string> = { pj: 'Joueurs', pnj: 'PNJ', antagoniste: 'Antagonistes', 'allié': 'Alliés' }
 
 const S = {
   page: { minHeight:'100vh', background:'#050d1a', color:'#e8eef5', fontFamily:"'Crimson Pro',Georgia,serif", paddingTop:60 } as React.CSSProperties,
@@ -30,15 +36,33 @@ const S = {
 export default function FactionsPage() {
   const [list, setList] = useState<Faction[]>([])
   const [typeFilter, setTypeFilter] = useState('')
+  const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string|null>(null)
   const [form, setForm] = useState<Partial<Faction>>({ nom:'', emoji:'⚔️', type:'Pirates', description:'', gdoc:'', miro:'' })
+  const [members, setMembers] = useState<Member[]>([])
+  const [linkedIles, setLinkedIles] = useState<LinkedIle[]>([])
+  const [rosterFaction, setRosterFaction] = useState<Faction | null>(null)
 
-  useEffect(() => { fetchList() }, [])
+  useEffect(() => {
+    fetchList(); fetchMembers(); fetchIlesList()
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) setSearch(q)
+  }, [])
 
   async function fetchList() {
     const { data } = await supabase.from('factions').select('*').order('created_at', { ascending: false })
     setList(data || [])
+  }
+
+  async function fetchMembers() {
+    const { data } = await supabase.from('personnages').select('id, nom, emoji, type, photos, faction')
+    setMembers(data || [])
+  }
+
+  async function fetchIlesList() {
+    const { data } = await supabase.from('iles').select('id, nom, emoji, faction')
+    setLinkedIles(data || [])
   }
 
   function openForm(f?: Faction) {
@@ -59,8 +83,16 @@ export default function FactionsPage() {
     await supabase.from('factions').delete().eq('id', id); fetchList()
   }
 
+  async function duplicateFaction(f: Faction) {
+    const { id, ...rest } = f
+    void id
+    await supabase.from('factions').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
+    fetchList()
+  }
+
   const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
-  const filtered = typeFilter ? list.filter(f => f.type === typeFilter) : list
+  let filtered = typeFilter ? list.filter(f => f.type === typeFilter) : list
+  if (search) filtered = filtered.filter(f => f.nom.toLowerCase().includes(search.toLowerCase()))
 
   return (
     <div style={S.page}>
@@ -70,6 +102,7 @@ export default function FactionsPage() {
         <div style={{flex:1,display:'flex',gap:'.3rem',overflowX:'auto',scrollbarWidth:'none'}}>
           {navLinks.map(([l,h]) => <a key={h} href={h} style={{fontFamily:"'Cinzel',serif",fontSize:'.6rem',letterSpacing:'.06em',textTransform:'uppercase',color:h==='/factions'?'#f0c040':'#7a9ab8',textDecoration:'none',padding:'.38rem .6rem',borderRadius:6,whiteSpace:'nowrap',background:h==='/factions'?'rgba(212,160,23,.15)':'none'}}>{l}</a>)}
         </div>
+        <GlobalSearch />
         <a href="/dashboard" style={{...S.btnGold,padding:'.38rem .85rem',textDecoration:'none',fontSize:'.62rem'}}>⚓ MJ</a>
       </nav>
 
@@ -78,6 +111,12 @@ export default function FactionsPage() {
         <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:'1rem',flexWrap:'wrap',marginBottom:'1.5rem'}}>
           <h1 style={{fontFamily:"'Cinzel Decorative',serif",fontSize:'clamp(1.8rem,3.5vw,3rem)',fontWeight:700,background:'linear-gradient(135deg,#fff,#f0c040)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Factions</h1>
           <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter une faction</button>
+        </div>
+        <div style={{display:'flex',gap:'.65rem',marginBottom:'1rem',flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:220,position:'relative'}}>
+            <span style={{position:'absolute',left:'.75rem',top:'50%',transform:'translateY(-50%)',color:'#4a6880'}}>🔍</span>
+            <input style={{...S.input,paddingLeft:'2.5rem'}} placeholder="Rechercher une faction..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
         </div>
         <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',marginBottom:'1.25rem'}}>
           <button onClick={() => setTypeFilter('')} style={{background:typeFilter===''?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${typeFilter===''?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:typeFilter===''?'#f0c040':'#7a9ab8',cursor:'pointer'}}>Toutes</button>
@@ -93,14 +132,17 @@ export default function FactionsPage() {
             <div key={f.id} style={{background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:14,padding:'1.35rem',transition:'all .3s',display:'flex',flexDirection:'column',gap:'.6rem'}}
               onMouseEnter={e=>{const el=e.currentTarget;el.style.transform='translateY(-5px)';el.style.borderColor=tc;el.style.boxShadow='0 18px 36px rgba(0,0,0,.4)'}}
               onMouseLeave={e=>{const el=e.currentTarget;el.style.transform='none';el.style.borderColor='rgba(30,120,200,.2)';el.style.boxShadow='none'}}>
-              <div style={{fontSize:'2.5rem'}}>{f.emoji||'⚔️'}</div>
-              <div style={{fontFamily:"'Cinzel',serif",fontSize:'1rem',fontWeight:700,color:'#e8eef5'}}>{f.nom}</div>
+              <div style={{fontSize:'2.5rem',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.emoji||'⚔️'}</div>
+              <div style={{fontFamily:"'Cinzel',serif",fontSize:'1rem',fontWeight:700,color:'#e8eef5',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.nom}</div>
               <div style={{display:'inline-block',background:`${tc}22`,color:tc,border:`1px solid ${tc}44`,borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.09em',textTransform:'uppercase',width:'fit-content'}}>{f.type}</div>
               {f.description && <div style={{fontSize:'.88rem',color:'#7a9ab8',lineHeight:1.6,fontStyle:'italic',flex:1}}>{f.description}</div>}
+              <div style={{fontSize:'.78rem',color:'#4a6880'}}>👥 {members.filter(m => m.faction === f.nom).length} membre(s)</div>
               <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center'}}>
                 {f.gdoc && <a href={f.gdoc} target="_blank" rel="noopener" style={{background:'rgba(66,133,244,.12)',color:'#6aabff',border:'1px solid rgba(66,133,244,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>📄 Doc</a>}
                 {f.miro && <a href={f.miro} target="_blank" rel="noopener" style={{background:'rgba(255,196,0,.1)',color:'#ffc400',border:'1px solid rgba(255,196,0,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>🗒 Miro</a>}
                 <div style={{marginLeft:'auto',display:'flex',gap:'.3rem'}}>
+                  <button onClick={() => setRosterFaction(f)} title="Voir l'organigramme" style={{background:'rgba(64,208,96,.1)',border:'1px solid rgba(64,208,96,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#40d060',cursor:'pointer',fontSize:'.7rem'}}>👁</button>
+                  <button onClick={() => duplicateFaction(f)} title="Dupliquer" style={{background:'rgba(160,96,255,.1)',border:'1px solid rgba(160,96,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#a060ff',cursor:'pointer',fontSize:'.7rem'}}>⧉</button>
                   <button onClick={() => openForm(f)} style={{background:'rgba(0,200,255,.1)',border:'1px solid rgba(0,200,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#00c8ff',cursor:'pointer',fontSize:'.7rem'}}>✏️</button>
                   <button onClick={() => deleteFaction(f.id)} style={{background:'rgba(224,48,48,.1)',border:'1px solid rgba(224,48,48,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#ff6060',cursor:'pointer',fontSize:'.7rem'}}>🗑</button>
                 </div>
@@ -137,6 +179,78 @@ export default function FactionsPage() {
             <div style={{padding:'1.1rem 1.75rem',borderTop:'1px solid rgba(30,120,200,.2)',display:'flex',gap:'.65rem',justifyContent:'flex-end',position:'sticky',bottom:0,background:'#0a1829',borderRadius:'0 0 18px 18px'}}>
               <button style={S.btnCyan} onClick={()=>setShowForm(false)}>Annuler</button>
               <button style={S.btnGold} onClick={saveForm}>💾 Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== ROSTER / ORGANIGRAMME ===== */}
+      {rosterFaction && (
+        <div style={S.overlay} onClick={e=>{if(e.target===e.currentTarget)setRosterFaction(null)}}>
+          <div style={{...S.modal, maxWidth:820}}>
+            <div style={{padding:'1.35rem 1.75rem',borderBottom:'1px solid rgba(30,120,200,.2)',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,background:'#0a1829',borderRadius:'18px 18px 0 0',zIndex:5}}>
+              <div style={{display:'flex',alignItems:'center',gap:'.65rem'}}>
+                <span style={{fontSize:'1.5rem'}}>{rosterFaction.emoji||'⚔️'}</span>
+                <div style={{fontFamily:"'Cinzel Decorative',serif",fontSize:'1.15rem',color:'#f0c040'}}>{rosterFaction.nom}</div>
+              </div>
+              <button onClick={()=>setRosterFaction(null)} style={{background:'rgba(5,13,26,.75)',border:'1px solid rgba(30,120,200,.2)',color:'#7a9ab8',borderRadius:'50%',width:34,height:34,cursor:'pointer',fontSize:'.9rem'}}>✕</button>
+            </div>
+            <div style={{padding:'1.75rem'}}>
+              {rosterFaction.description && <p style={{fontSize:'.95rem',color:'#7a9ab8',lineHeight:1.7,fontStyle:'italic',marginBottom:'1.5rem'}}>{rosterFaction.description}</p>}
+
+              <div style={{fontFamily:"'Cinzel',serif",fontSize:'.7rem',letterSpacing:'.14em',textTransform:'uppercase',color:'#00c8ff',marginBottom:'1rem',display:'flex',alignItems:'center',gap:'.5rem',flexWrap:'wrap'}}>
+                🧬 Organigramme <div style={{flex:1,height:1,background:'rgba(30,120,200,.2)'}} />
+                <a href={`/personnages?newFaction=${encodeURIComponent(rosterFaction.nom)}`} style={{...S.btnGold, padding:'.35rem .8rem', fontSize:'.58rem', textDecoration:'none'}}>＋ Ajouter un personnage</a>
+              </div>
+
+              {(() => {
+                const factionMembers = members.filter(m => m.faction === rosterFaction.nom)
+                if (factionMembers.length === 0) return <div style={{textAlign:'center',padding:'2rem',color:'#4a6880',fontStyle:'italic',fontSize:'.88rem',marginBottom:'1.5rem'}}>Aucun membre pour l&apos;instant.</div>
+                const groups = ['pj','pnj','allié','antagoniste'].map(t => ({ t, items: factionMembers.filter(m => m.type === t) })).filter(g => g.items.length > 0)
+                const tc = TYPE_COLORS[rosterFaction.type||''] || '#a060ff'
+                return (
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:0,marginBottom:'2rem'}}>
+                    <div style={{background:`${tc}22`,border:`1px solid ${tc}66`,borderRadius:12,padding:'.75rem 1.5rem',fontFamily:"'Cinzel',serif",fontSize:'.85rem',fontWeight:700,color:tc,marginBottom:'0'}}>{rosterFaction.emoji} {rosterFaction.nom}</div>
+                    <div style={{width:2,height:20,background:'rgba(30,120,200,.3)'}} />
+                    {groups.map((g, gi) => (
+                      <div key={g.t} style={{width:'100%'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:'.5rem',margin:'0 0 .6rem'}}>
+                          <div style={{flex:1,height:1,background:'rgba(30,120,200,.15)'}} />
+                          <span style={{fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.1em',textTransform:'uppercase',color:MEMBER_TYPE_COLORS[g.t]}}>{MEMBER_TYPE_LABELS[g.t]}</span>
+                          <div style={{flex:1,height:1,background:'rgba(30,120,200,.15)'}} />
+                        </div>
+                        <div style={{display:'flex',gap:'.75rem',flexWrap:'wrap',justifyContent:'center',marginBottom: gi < groups.length-1 ? '1.25rem' : 0}}>
+                          {g.items.map(m => (
+                            <a key={m.id} href={`/personnages?open=${m.id}`} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'.4rem',textDecoration:'none',width:84}}>
+                              <div style={{width:56,height:56,borderRadius:'50%',overflow:'hidden',background:'#0d2040',border:`2px solid ${MEMBER_TYPE_COLORS[m.type]||'#7a9ab8'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1.6rem'}}>
+                                {m.photos && m.photos[0] ? <img src={m.photos[0]} style={{width:'100%',height:'100%',objectFit:'cover'}} /> : (m.emoji||'👤')}
+                              </div>
+                              <span style={{fontSize:'.68rem',color:'#c8d8e8',textAlign:'center',lineHeight:1.2}}>{m.nom}</span>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+
+              {(() => {
+                const factionIles = linkedIles.filter(i => i.faction === rosterFaction.nom)
+                if (factionIles.length === 0) return null
+                return (
+                  <>
+                    <div style={{fontFamily:"'Cinzel',serif",fontSize:'.7rem',letterSpacing:'.14em',textTransform:'uppercase',color:'#00c8ff',marginBottom:'.65rem',display:'flex',alignItems:'center',gap:'.5rem'}}>🏝️ Îles contrôlées <div style={{flex:1,height:1,background:'rgba(30,120,200,.2)'}} /></div>
+                    <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap'}}>
+                      {factionIles.map(i => (
+                        <a key={i.id} href={`/iles?q=${encodeURIComponent(i.nom)}`} style={{display:'inline-flex',alignItems:'center',gap:'.4rem',background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:100,padding:'.4rem .85rem',color:'#c8d8e8',textDecoration:'none',fontSize:'.82rem'}}>
+                          <span>{i.emoji||'🏝️'}</span>{i.nom}
+                        </a>
+                      ))}
+                    </div>
+                  </>
+                )
+              })()}
             </div>
           </div>
         </div>

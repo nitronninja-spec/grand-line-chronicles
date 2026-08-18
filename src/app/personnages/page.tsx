@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
+import GlobalSearch from '@/components/GlobalSearch'
 
 interface Personnage {
   id: string
@@ -14,6 +15,7 @@ interface Personnage {
   prime?: string
   origine?: string
   ile?: string
+  faction?: string
   statut?: string
   fruit?: string
   tags?: string
@@ -24,6 +26,8 @@ interface Personnage {
   miro?: string
   fav?: boolean
 }
+
+interface LinkedItem { id: string; nom: string; proprietaire?: string }
 
 const TYPE_COLORS: Record<string, string> = {
   pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', allié: '#40d060'
@@ -58,27 +62,74 @@ export default function PersonnagesPage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [iles, setIles] = useState<{ id: string; nom: string }[]>([])
+  const [factions, setFactions] = useState<{ id: string; nom: string }[]>([])
+  const [fruits, setFruits] = useState<LinkedItem[]>([])
+  const [despas, setDespas] = useState<LinkedItem[]>([])
+  const [lames, setLames] = useState<LinkedItem[]>([])
+  const [cristaux, setCristaux] = useState<LinkedItem[]>([])
+  const [factionFilter, setFactionFilter] = useState('')
   const [form, setForm] = useState<Partial<Personnage>>({
     nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant',
-    prime: '0', origine: '', ile: '', equipage: '', fruit: 'Aucun',
+    prime: '0', origine: '', ile: '', faction: '', equipage: '', fruit: 'Aucun',
     tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: ''
   })
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
+  const autoOpenedRef = useRef(false)
 
-  useEffect(() => { fetchList(); fetchIles() }, [])
+  useEffect(() => {
+    fetchList(); fetchIles(); fetchFactions(); fetchLinkedCatalogs()
+    const params = new URLSearchParams(window.location.search)
+    const q = params.get('q')
+    if (q) setSearch(q)
+    const newFaction = params.get('newFaction')
+    if (newFaction) {
+      openForm()
+      setForm(f => ({ ...f, faction: newFaction }))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (autoOpenedRef.current || list.length === 0) return
+    const params = new URLSearchParams(window.location.search)
+    const openId = params.get('open')
+    if (openId) {
+      const p = list.find(x => x.id === openId)
+      if (p) { setSelected(p); setShowView(true) }
+    }
+    autoOpenedRef.current = true
+  }, [list])
 
   async function fetchIles() {
     const { data } = await supabase.from('iles').select('id, nom').order('nom', { ascending: true })
     setIles(data || [])
   }
 
+  async function fetchFactions() {
+    const { data } = await supabase.from('factions').select('id, nom').order('nom', { ascending: true })
+    setFactions(data || [])
+  }
+
+  async function fetchLinkedCatalogs() {
+    const [fr, d, l, c] = await Promise.all([
+      supabase.from('fruits').select('id, nom, proprietaire'),
+      supabase.from('despas').select('id, nom, proprietaire'),
+      supabase.from('lames').select('id, nom, proprietaire'),
+      supabase.from('cristaux_primordiaux').select('id, nom, proprietaire'),
+    ])
+    setFruits(fr.data || [])
+    setDespas(d.data || [])
+    setLames(l.data || [])
+    setCristaux(c.data || [])
+  }
+
   useEffect(() => {
     let l = list
     if (search) l = l.filter(p => p.nom.toLowerCase().includes(search.toLowerCase()) || (p.surnom||'').toLowerCase().includes(search.toLowerCase()))
     if (typeFilter) l = l.filter(p => p.type === typeFilter)
+    if (factionFilter) l = l.filter(p => p.faction === factionFilter)
     setFiltered(l)
-  }, [list, search, typeFilter])
+  }, [list, search, typeFilter, factionFilter])
 
   async function fetchList() {
     const { data } = await supabase.from('personnages').select('*').order('created_at', { ascending: false })
@@ -91,7 +142,7 @@ export default function PersonnagesPage() {
       setEditId(p.id)
       setPhotoPreviews(p.photos || [])
     } else {
-      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', origine: '', ile: '', equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
+      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', origine: '', ile: '', faction: '', equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
       setEditId(null)
       setPhotoPreviews([])
     }
@@ -133,6 +184,13 @@ export default function PersonnagesPage() {
     fetchList()
   }
 
+  async function duplicatePerso(p: Personnage) {
+    const { id, ...rest } = p
+    void id
+    await supabase.from('personnages').insert([{ ...rest, nom: rest.nom + ' (copie)', fav: false }])
+    fetchList()
+  }
+
   async function toggleFav(p: Personnage) {
     await supabase.from('personnages').update({ fav: !p.fav }).eq('id', p.id)
     fetchList()
@@ -165,6 +223,7 @@ export default function PersonnagesPage() {
             <a key={h} href={h} style={{ fontFamily:"'Cinzel',serif", fontSize:'.6rem', letterSpacing:'.06em', textTransform:'uppercase', color: h==='/personnages'?'#f0c040':'#7a9ab8', textDecoration:'none', padding:'.38rem .6rem', borderRadius:6, whiteSpace:'nowrap', background: h==='/personnages'?'rgba(212,160,23,.15)':'none' }}>{l}</a>
           ))}
         </div>
+        <GlobalSearch />
         <a href="/dashboard" style={{ ...S.btnGold, padding:'.38rem .85rem', textDecoration:'none', fontSize:'.62rem' }}>⚓ MJ</a>
       </nav>
 
@@ -189,13 +248,24 @@ export default function PersonnagesPage() {
         </div>
 
         {/* Chips */}
-        <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap', marginBottom:'1.25rem' }}>
+        <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap', marginBottom:'.75rem' }}>
           {['', 'pj', 'pnj', 'antagoniste', 'allié'].map(t => (
             <button key={t} onClick={() => setTypeFilter(t)} style={{ background: typeFilter===t ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${typeFilter===t ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.3rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.07em', textTransform:'uppercase', color: typeFilter===t ? '#f0c040' : '#7a9ab8', cursor:'pointer' }}>
               {t || 'Tous'}
             </button>
           ))}
         </div>
+
+        {/* Filtre par faction */}
+        {factions.length > 0 && (
+          <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap', alignItems:'center', marginBottom:'1.25rem' }}>
+            <span style={{ fontFamily:"'Cinzel',serif", fontSize:'.56rem', letterSpacing:'.1em', textTransform:'uppercase', color:'#4a6880', marginRight:'.2rem' }}>Filtrer par faction :</span>
+            <button onClick={() => setFactionFilter('')} style={{ background: factionFilter==='' ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${factionFilter==='' ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.3rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.07em', textTransform:'uppercase', color: factionFilter==='' ? '#f0c040' : '#7a9ab8', cursor:'pointer' }}>Toutes</button>
+            {factions.map(f => (
+              <button key={f.id} onClick={() => setFactionFilter(f.nom)} style={{ background: factionFilter===f.nom ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${factionFilter===f.nom ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.3rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.07em', textTransform:'uppercase', color: factionFilter===f.nom ? '#f0c040' : '#7a9ab8', cursor:'pointer' }}>{f.nom}</button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* GRID */}
@@ -252,6 +322,7 @@ export default function PersonnagesPage() {
                 {p.miro && <a href={p.miro} target="_blank" rel="noopener" style={{ background:'rgba(255,196,0,.1)', color:'#ffc400', border:'1px solid rgba(255,196,0,.25)', borderRadius:6, padding:'.18rem .5rem', fontFamily:"'Cinzel',serif", fontSize:'.48rem', textDecoration:'none' }}>🗒 Miro</a>}
                 <div style={{ marginLeft:'auto', display:'flex', gap:'.3rem' }}>
                   <button onClick={() => toggleFav(p)} style={{ background:'none', border:'1px solid rgba(30,120,200,.2)', borderRadius:'50%', width:28, height:28, color: p.fav?'#d4a017':'#4a6880', cursor:'pointer', fontSize:'.8rem' }}>{p.fav?'♥':'♡'}</button>
+                  <button onClick={() => duplicatePerso(p)} title="Dupliquer" style={{ background:'rgba(160,96,255,.1)', border:'1px solid rgba(160,96,255,.25)', borderRadius:8, padding:'.2rem .5rem', color:'#a060ff', cursor:'pointer', fontSize:'.7rem', fontFamily:"'Cinzel',serif" }}>⧉</button>
                   <button onClick={() => openForm(p)} style={{ background:'rgba(0,200,255,.1)', border:'1px solid rgba(0,200,255,.25)', borderRadius:8, padding:'.2rem .5rem', color:'#00c8ff', cursor:'pointer', fontSize:'.7rem', fontFamily:"'Cinzel',serif" }}>✏️</button>
                   <button onClick={() => deletePerso(p.id)} style={{ background:'rgba(224,48,48,.1)', border:'1px solid rgba(224,48,48,.25)', borderRadius:8, padding:'.2rem .5rem', color:'#ff6060', cursor:'pointer', fontSize:'.7rem', fontFamily:"'Cinzel',serif" }}>🗑</button>
                 </div>
@@ -342,13 +413,22 @@ export default function PersonnagesPage() {
                 </div>
               </div>
 
-              {/* Île liée */}
-              <div>
-                <label style={S.label}>🏝️ Île liée</label>
-                <select style={{ ...S.input }} value={form.ile || ''} onChange={e => setForm(f => ({ ...f, ile: e.target.value }))}>
-                  <option value="">— Aucune —</option>
-                  {iles.map(i => <option key={i.id} value={i.nom}>{i.nom}</option>)}
-                </select>
+              {/* Île + Faction liées */}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'.85rem' }}>
+                <div>
+                  <label style={S.label}>🏝️ Île liée</label>
+                  <select style={{ ...S.input }} value={form.ile || ''} onChange={e => setForm(f => ({ ...f, ile: e.target.value }))}>
+                    <option value="">— Aucune —</option>
+                    {iles.map(i => <option key={i.id} value={i.nom}>{i.nom}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={S.label}>🏴‍☠️ Faction liée</label>
+                  <select style={{ ...S.input }} value={form.faction || ''} onChange={e => setForm(f => ({ ...f, faction: e.target.value }))}>
+                    <option value="">— Aucune —</option>
+                    {factions.map(f => <option key={f.id} value={f.nom}>{f.nom}</option>)}
+                  </select>
+                </div>
               </div>
 
               {/* Equipage + Fruit */}
@@ -452,17 +532,21 @@ export default function PersonnagesPage() {
               {/* Stats */}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.1rem', marginBottom:'1.25rem' }}>
                 {[
-                  { l:'⭐ Prime', v:selected.prime+' 🍖', c:'#f0c040' },
-                  { l:'⚓ Équipage', v:selected.equipage||'—', c:'#00c8ff' },
-                  { l:'📍 Origine', v:selected.origine||'—', c:'#7a9ab8' },
-                  { l:'🏝️ Île', v:selected.ile||'—', c:'#40d060' },
-                  { l:'❤️ Statut', v:selected.statut||'—', c:STATUT_COLORS[selected.statut||''] },
-                ].map(({l,v,c}) => (
-                  <div key={l} style={{ background:'#0d2040', border:'1px solid rgba(30,120,200,.2)', borderRadius:10, padding:'1rem' }}>
-                    <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.14em', textTransform:'uppercase', color:'#4a6880', marginBottom:'.35rem' }}>{l}</div>
-                    <div style={{ fontFamily:"'Cinzel',serif", fontSize:'1.1rem', fontWeight:700, color:c }}>{v}</div>
-                  </div>
-                ))}
+                  { l:'⭐ Prime', v:selected.prime+' 🍖', c:'#f0c040', href:null },
+                  { l:'⚓ Équipage', v:selected.equipage||'—', c:'#00c8ff', href:null },
+                  { l:'📍 Origine', v:selected.origine||'—', c:'#7a9ab8', href:null },
+                  { l:'🏝️ Île', v:selected.ile||'—', c:'#40d060', href: selected.ile ? `/iles?q=${encodeURIComponent(selected.ile)}` : null },
+                  { l:'🏴‍☠️ Faction', v:selected.faction||'—', c:'#ff8c40', href: selected.faction ? `/factions?q=${encodeURIComponent(selected.faction)}` : null },
+                  { l:'❤️ Statut', v:selected.statut||'—', c:STATUT_COLORS[selected.statut||''] , href:null},
+                ].map(({l,v,c,href}) => {
+                  const tile = (
+                    <div style={{ background:'#0d2040', border:'1px solid rgba(30,120,200,.2)', borderRadius:10, padding:'1rem', cursor: href?'pointer':'default', transition:'border-color .2s' }}>
+                      <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.14em', textTransform:'uppercase', color:'#4a6880', marginBottom:'.35rem' }}>{l}</div>
+                      <div style={{ fontFamily:"'Cinzel',serif", fontSize:'1.1rem', fontWeight:700, color:c }}>{v}</div>
+                    </div>
+                  )
+                  return href ? <a key={l} href={href} style={{ textDecoration:'none' }}>{tile}</a> : <div key={l}>{tile}</div>
+                })}
               </div>
 
               {/* Galerie photos */}
@@ -516,6 +600,37 @@ export default function PersonnagesPage() {
                 <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.7rem', letterSpacing:'.14em', textTransform:'uppercase', color:'#00c8ff', marginBottom:'.65rem', display:'flex', alignItems:'center', gap:'.5rem' }}>📜 Historique <div style={{ flex:1, height:1, background:'rgba(30,120,200,.2)' }} /></div>
                 <p style={{ fontSize:'1rem', color:'#7a9ab8', lineHeight:1.8, marginBottom:'1.25rem', fontStyle:'italic' }}>{selected.historique}</p>
               </>}
+
+              {/* Fiches liées */}
+              {(() => {
+                const linkedFruits = fruits.filter(fr => fr.proprietaire === selected.nom)
+                const linkedDespas = despas.filter(d => d.proprietaire === selected.nom)
+                const linkedLames = lames.filter(l => l.proprietaire === selected.nom)
+                const linkedCristaux = cristaux.filter(c => c.proprietaire === selected.nom)
+                const chips: { icon: string; label: string; href: string }[] = []
+                if (selected.fruit && selected.fruit !== 'Aucun' && !linkedFruits.some(fr => fr.nom === selected.fruit)) {
+                  chips.push({ icon:'🍎', label: selected.fruit, href:`/fruits?q=${encodeURIComponent(selected.fruit)}` })
+                }
+                linkedFruits.forEach(fr => chips.push({ icon:'🍎', label: fr.nom, href:`/fruits?q=${encodeURIComponent(fr.nom)}` }))
+                linkedDespas.forEach(d => chips.push({ icon:'🦾', label: d.nom, href:`/despas?q=${encodeURIComponent(d.nom)}` }))
+                linkedLames.forEach(l => chips.push({ icon:'⚔️', label: l.nom, href:`/lames?q=${encodeURIComponent(l.nom)}` }))
+                linkedCristaux.forEach(c => chips.push({ icon:'💎', label: c.nom, href:`/cristaux?q=${encodeURIComponent(c.nom)}` }))
+                if (selected.ile) chips.push({ icon:'🏝️', label: selected.ile, href:`/iles?q=${encodeURIComponent(selected.ile)}` })
+                if (selected.faction) chips.push({ icon:'🏴‍☠️', label: selected.faction, href:`/factions?q=${encodeURIComponent(selected.faction)}` })
+                if (chips.length === 0) return null
+                return (
+                  <>
+                    <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.7rem', letterSpacing:'.14em', textTransform:'uppercase', color:'#00c8ff', marginBottom:'.65rem', display:'flex', alignItems:'center', gap:'.5rem' }}>🔗 Fiches liées <div style={{ flex:1, height:1, background:'rgba(30,120,200,.2)' }} /></div>
+                    <div style={{ display:'flex', gap:'.5rem', flexWrap:'wrap', marginBottom:'1.25rem' }}>
+                      {chips.map((c,i) => (
+                        <a key={i} href={c.href} style={{ display:'inline-flex', alignItems:'center', gap:'.4rem', background:'#0d2040', border:'1px solid rgba(30,120,200,.2)', borderRadius:100, padding:'.4rem .85rem', color:'#c8d8e8', textDecoration:'none', fontSize:'.82rem' }}>
+                          <span>{c.icon}</span>{c.label}
+                        </a>
+                      ))}
+                    </div>
+                  </>
+                )
+              })()}
 
               {/* Actions */}
               <div style={{ display:'flex', gap:'.65rem', justifyContent:'flex-end', marginTop:'1.25rem', paddingTop:'1.1rem', borderTop:'1px solid rgba(30,120,200,.2)' }}>

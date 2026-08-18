@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import GlobalSearch from '@/components/GlobalSearch'
 
 interface Stats {
   personnages: number
@@ -100,6 +101,7 @@ export default function DashboardPage() {
             <a key={h} href={h} style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.06em', textTransform: 'uppercase', color: h === '/dashboard' ? '#f0c040' : '#7a9ab8', textDecoration: 'none', padding: '.38rem .6rem', borderRadius: 6, whiteSpace: 'nowrap', background: h === '/dashboard' ? 'rgba(212,160,23,.15)' : 'none' }}>{l}</a>
           ))}
         </div>
+        <GlobalSearch />
         {/* Horloge */}
         <div style={{ fontFamily: "'Cinzel', serif", fontSize: '.65rem', letterSpacing: '.08em', color: '#d4a017', whiteSpace: 'nowrap' }}>
           {time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}

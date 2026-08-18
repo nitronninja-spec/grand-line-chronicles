@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
+import GlobalSearch from '@/components/GlobalSearch'
 
 interface Lame {
   id: string
@@ -46,23 +47,38 @@ export default function LamesPage() {
   const [list, setList] = useState<Lame[]>([])
   const [filtered, setFiltered] = useState<Lame[]>([])
   const [rangFilter, setRangFilter] = useState('')
+  const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState('')
+  const [personnages, setPersonnages] = useState<{ id: string; nom: string }[]>([])
   const [form, setForm] = useState<Partial<Lame>>({
     nom: '', jp: '', rang: 'Lame de qualité', puissance: 5, emoji: '⚔️', description: '', proprietaire: '', particularites: '', color: '#7a9ab8'
   })
 
-  useEffect(() => { fetchList() }, [])
+  const personnageMap = new Map(personnages.map(p => [p.nom, p.id]))
+
   useEffect(() => {
-    setFiltered(rangFilter ? list.filter(l => l.rang === rangFilter) : list)
-  }, [list, rangFilter])
+    fetchList(); fetchPersonnages()
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) setSearch(q)
+  }, [])
+  useEffect(() => {
+    let l = rangFilter ? list.filter(l2 => l2.rang === rangFilter) : list
+    if (search) l = l.filter(l2 => l2.nom.toLowerCase().includes(search.toLowerCase()))
+    setFiltered(l)
+  }, [list, rangFilter, search])
 
   async function fetchList() {
     const { data } = await supabase.from('lames').select('*').order('created_at', { ascending: false })
     setList(data || [])
+  }
+
+  async function fetchPersonnages() {
+    const { data } = await supabase.from('personnages').select('id, nom').order('nom', { ascending: true })
+    setPersonnages(data || [])
   }
 
   function openForm(l?: Lame) {
@@ -98,6 +114,13 @@ export default function LamesPage() {
     fetchList()
   }
 
+  async function duplicateLame(l: Lame) {
+    const { id, ...rest } = l
+    void id
+    await supabase.from('lames').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
+    fetchList()
+  }
+
   return (
     <div style={S.page}>
       <style>{`
@@ -117,6 +140,7 @@ export default function LamesPage() {
             <a key={h} href={h} style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.06em', textTransform: 'uppercase', color: h === '/lames' ? '#f0c040' : '#7a9ab8', textDecoration: 'none', padding: '.38rem .6rem', borderRadius: 6, whiteSpace: 'nowrap', background: h === '/lames' ? 'rgba(212,160,23,.15)' : 'none' }}>{l}</a>
           ))}
         </div>
+        <GlobalSearch />
         <a href="/dashboard" style={{ ...S.btnGold, padding: '.38rem .85rem', textDecoration: 'none', fontSize: '.62rem' }}>⚓ MJ</a>
       </nav>
 
@@ -125,6 +149,12 @@ export default function LamesPage() {
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
           <h1 style={{ fontFamily: "'Cinzel Decorative',serif", fontSize: 'clamp(1.8rem,3.5vw,3rem)', fontWeight: 700, background: 'linear-gradient(135deg,#fff,#f0c040)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Lames</h1>
           <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter une lame</button>
+        </div>
+        <div style={{ display: 'flex', gap: '.65rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 220, position: 'relative' }}>
+            <span style={{ position: 'absolute', left: '.75rem', top: '50%', transform: 'translateY(-50%)', color: '#4a6880' }}>🔍</span>
+            <input style={{ ...S.input, paddingLeft: '2.5rem' }} placeholder="Rechercher une lame..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
           {['', ...RANGS].map(r => (
@@ -160,7 +190,13 @@ export default function LamesPage() {
                 {l.jp && <div style={{ fontSize: '.78rem', color: '#4a6880', marginBottom: '.65rem' }}>{l.jp}</div>}
                 {l.description && <div style={{ fontSize: '.88rem', color: '#7a9ab8', lineHeight: 1.6, fontStyle: 'italic', marginBottom: '.85rem' }}>{l.description}</div>}
                 {l.particularites && <div style={{ fontSize: '.8rem', color: '#4a6880', marginBottom: '.65rem' }}>✨ {l.particularites}</div>}
-                {l.proprietaire && <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>Propriétaire : <span style={{ color: '#7a9ab8' }}>{l.proprietaire}</span></div>}
+                {l.proprietaire && (
+                  <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>
+                    Propriétaire : {personnageMap.has(l.proprietaire)
+                      ? <a href={`/personnages?open=${personnageMap.get(l.proprietaire)}`} style={{ color: '#00c8ff', textDecoration: 'none' }}>{l.proprietaire}</a>
+                      : <span style={{ color: '#7a9ab8' }}>{l.proprietaire}</span>}
+                  </div>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem', marginBottom: '.85rem' }}>
                   <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', width: 48, flexShrink: 0 }}>Puissance</div>
                   <div style={{ flex: 1, height: 4, background: '#0a1829', borderRadius: 2, overflow: 'hidden' }}>
@@ -169,6 +205,7 @@ export default function LamesPage() {
                   <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.72rem', color: rc, fontWeight: 700, width: 18, textAlign: 'right' }}>{l.puissance || 5}</div>
                 </div>
                 <div style={{ display: 'flex', gap: '.4rem', justifyContent: 'flex-end' }}>
+                  <button onClick={() => duplicateLame(l)} title="Dupliquer" style={{ background: 'rgba(160,96,255,.1)', border: '1px solid rgba(160,96,255,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#a060ff', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>⧉</button>
                   <button onClick={() => openForm(l)} style={{ background: 'rgba(0,200,255,.1)', border: '1px solid rgba(0,200,255,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#00c8ff', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>✏️</button>
                   <button onClick={() => deleteLame(l.id)} style={{ background: 'rgba(224,48,48,.1)', border: '1px solid rgba(224,48,48,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#ff6060', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>🗑</button>
                 </div>
@@ -218,7 +255,12 @@ export default function LamesPage() {
                 <div><label style={S.label}>Emoji</label><input style={{ ...S.input, width: 70, fontSize: '1.4rem', textAlign: 'center' }} value={form.emoji || '⚔️'} onChange={e => setForm(f => ({ ...f, emoji: e.target.value }))} /></div>
                 <div><label style={S.label}>Couleur accent</label><input type="color" style={{ ...S.input, height: 42, padding: '.3rem' }} value={form.color || '#7a9ab8'} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} /></div>
               </div>
-              <div><label style={S.label}>Propriétaire</label><input style={S.input} value={form.proprietaire || ''} onChange={e => setForm(f => ({ ...f, proprietaire: e.target.value }))} placeholder="Nom du personnage ou Non attribuée" /></div>
+              <div><label style={S.label}>Propriétaire</label>
+                <input style={S.input} list="lame-personnages" value={form.proprietaire || ''} onChange={e => setForm(f => ({ ...f, proprietaire: e.target.value }))} placeholder="Nom du personnage ou Non attribuée" />
+                <datalist id="lame-personnages">
+                  {personnages.map(p => <option key={p.id} value={p.nom} />)}
+                </datalist>
+              </div>
               <div><label style={S.label}>Description / Histoire</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Cette lame a été forgée..." /></div>
               <div><label style={S.label}>Particularités</label><textarea style={{ ...S.input, minHeight: 70, resize: 'vertical', lineHeight: 1.7 }} value={form.particularites || ''} onChange={e => setForm(f => ({ ...f, particularites: e.target.value }))} placeholder="Capacités spéciales, résistance, malédiction..." /></div>
             </div>

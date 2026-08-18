@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
+import GlobalSearch from '@/components/GlobalSearch'
 
 interface Ile {
   id: string
@@ -52,7 +53,11 @@ export default function IlesPage() {
     nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', faction: '', description: '', gdoc: '', miro: ''
   })
 
-  useEffect(() => { fetchList(); fetchFactions() }, [])
+  useEffect(() => {
+    fetchList(); fetchFactions()
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) setSearch(q)
+  }, [])
   useEffect(() => {
     let l = list
     if (search) l = l.filter(i => i.nom.toLowerCase().includes(search.toLowerCase()))
@@ -104,6 +109,13 @@ export default function IlesPage() {
     fetchList()
   }
 
+  async function duplicateIle(ile: Ile) {
+    const { id, ...rest } = ile
+    void id
+    await supabase.from('iles').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
+    fetchList()
+  }
+
   const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
 
   return (
@@ -125,6 +137,7 @@ export default function IlesPage() {
             <a key={h} href={h} style={{fontFamily:"'Cinzel',serif",fontSize:'.6rem',letterSpacing:'.06em',textTransform:'uppercase',color:h==='/iles'?'#f0c040':'#7a9ab8',textDecoration:'none',padding:'.38rem .6rem',borderRadius:6,whiteSpace:'nowrap',background:h==='/iles'?'rgba(212,160,23,.15)':'none'}}>{l}</a>
           ))}
         </div>
+        <GlobalSearch />
         <a href="/dashboard" style={{...S.btnGold,padding:'.38rem .85rem',textDecoration:'none',fontSize:'.62rem'}}>⚓ MJ</a>
       </nav>
 
@@ -181,12 +194,13 @@ export default function IlesPage() {
               <div style={{padding:'1.1rem'}}>
                 <div style={{fontFamily:"'Cinzel',serif",fontSize:'1.08rem',fontWeight:700,color:'#e8eef5',marginBottom:'.2rem'}}>{ile.nom}</div>
                 {ile.climat && <div style={{fontSize:'.78rem',color:'#4a6880',marginBottom:'.6rem'}}>🌤 {ile.climat}</div>}
-                {ile.faction && <div style={{fontSize:'.78rem',color:'#f0c040',marginBottom:'.6rem'}}>⚔️ {ile.faction}</div>}
+                {ile.faction && <a href={`/factions?q=${encodeURIComponent(ile.faction)}`} style={{display:'block',fontSize:'.78rem',color:'#f0c040',marginBottom:'.6rem',textDecoration:'none'}}>⚔️ {ile.faction}</a>}
                 {ile.description && <div style={{fontSize:'.88rem',color:'#7a9ab8',lineHeight:1.6,fontStyle:'italic',marginBottom:'.75rem'}}>{ile.description}</div>}
                 <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center'}}>
                   {ile.gdoc && <a href={ile.gdoc} target="_blank" rel="noopener" style={{background:'rgba(66,133,244,.12)',color:'#6aabff',border:'1px solid rgba(66,133,244,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>📄 Doc</a>}
                   {ile.miro && <a href={ile.miro} target="_blank" rel="noopener" style={{background:'rgba(255,196,0,.1)',color:'#ffc400',border:'1px solid rgba(255,196,0,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>🗒 Miro</a>}
                   <div style={{marginLeft:'auto',display:'flex',gap:'.3rem'}}>
+                    <button onClick={() => duplicateIle(ile)} title="Dupliquer" style={{background:'rgba(160,96,255,.1)',border:'1px solid rgba(160,96,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#a060ff',cursor:'pointer',fontSize:'.7rem',fontFamily:"'Cinzel',serif"}}>⧉</button>
                     <button onClick={() => openForm(ile)} style={{background:'rgba(0,200,255,.1)',border:'1px solid rgba(0,200,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#00c8ff',cursor:'pointer',fontSize:'.7rem',fontFamily:"'Cinzel',serif"}}>✏️</button>
                     <button onClick={() => deleteIle(ile.id)} style={{background:'rgba(224,48,48,.1)',border:'1px solid rgba(224,48,48,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#ff6060',cursor:'pointer',fontSize:'.7rem',fontFamily:"'Cinzel',serif"}}>🗑</button>
                   </div>

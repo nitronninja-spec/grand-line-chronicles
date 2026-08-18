@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
+import GlobalSearch from '@/components/GlobalSearch'
 
 interface Fruit {
   id: string
@@ -219,24 +220,39 @@ export default function FruitsPage() {
   const [list, setList] = useState<Fruit[]>([])
   const [filtered, setFiltered] = useState<Fruit[]>([])
   const [typeFilter, setTypeFilter] = useState('')
+  const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string>('')
+  const [personnages, setPersonnages] = useState<{ id: string; nom: string }[]>([])
   const [form, setForm] = useState<Partial<Fruit>>({
     nom: '', jp: '', type: 'Paramecia', puissance: 5,
     emoji: '🍎', description: '', proprietaire: '', color: '#40d060', faiblesses: ''
   })
 
-  useEffect(() => { fetchList() }, [])
+  const personnageMap = new Map(personnages.map(p => [p.nom, p.id]))
+
   useEffect(() => {
-    setFiltered(typeFilter ? list.filter(f => f.type === typeFilter) : list)
-  }, [list, typeFilter])
+    fetchList(); fetchPersonnages()
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) setSearch(q)
+  }, [])
+  useEffect(() => {
+    let l = typeFilter ? list.filter(f => f.type === typeFilter) : list
+    if (search) l = l.filter(f => f.nom.toLowerCase().includes(search.toLowerCase()))
+    setFiltered(l)
+  }, [list, typeFilter, search])
 
   async function fetchList() {
     const { data } = await supabase.from('fruits').select('*').order('created_at', { ascending: false })
     setList(data || [])
+  }
+
+  async function fetchPersonnages() {
+    const { data } = await supabase.from('personnages').select('id, nom').order('nom', { ascending: true })
+    setPersonnages(data || [])
   }
 
   function openForm(f?: Fruit) {
@@ -277,6 +293,13 @@ export default function FruitsPage() {
     fetchList()
   }
 
+  async function duplicateFruit(f: Fruit) {
+    const { id, ...rest } = f
+    void id
+    await supabase.from('fruits').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
+    fetchList()
+  }
+
   const navLinks = [['Accueil', '/'], ['Personnages', '/personnages'], ['Fruits', '/fruits'], ['Despas', '/despas'], ['Lames', '/lames'], ['Cristaux', '/cristaux'], ['Îles', '/iles'], ['Factions', '/factions'], ['Campagne', '/campagne'], ['Lore', '/lore'], ['Dashboard', '/dashboard']]
 
   return (
@@ -298,6 +321,7 @@ export default function FruitsPage() {
             <a key={h} href={h} style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.06em', textTransform: 'uppercase', color: h === '/fruits' ? '#f0c040' : '#7a9ab8', textDecoration: 'none', padding: '.38rem .6rem', borderRadius: 6, whiteSpace: 'nowrap', background: h === '/fruits' ? 'rgba(212,160,23,.15)' : 'none' }}>{l}</a>
           ))}
         </div>
+        <GlobalSearch />
         <a href="/dashboard" style={{ ...S.btnGold, padding: '.38rem .85rem', textDecoration: 'none', fontSize: '.62rem' }}>⚓ MJ</a>
       </nav>
 
@@ -306,6 +330,12 @@ export default function FruitsPage() {
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
           <h1 style={{ fontFamily: "'Cinzel Decorative',serif", fontSize: 'clamp(1.8rem,3.5vw,3rem)', fontWeight: 700, background: 'linear-gradient(135deg,#fff,#f0c040)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Fruits du Démon</h1>
           <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter un fruit</button>
+        </div>
+        <div style={{ display: 'flex', gap: '.65rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 220, position: 'relative' }}>
+            <span style={{ position: 'absolute', left: '.75rem', top: '50%', transform: 'translateY(-50%)', color: '#4a6880' }}>🔍</span>
+            <input style={{ ...S.input, paddingLeft: '2.5rem' }} placeholder="Rechercher un fruit..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
           {['', 'Paramecia', 'Logia', 'Zoan', 'Mythical'].map(t => (
@@ -340,7 +370,13 @@ export default function FruitsPage() {
                 <div style={{ fontFamily: "'Cinzel',serif", fontSize: '1.05rem', fontWeight: 700, color: '#e8eef5', marginBottom: '.12rem' }}>{f.nom}</div>
                 {f.jp && <div style={{ fontSize: '.78rem', color: '#4a6880', marginBottom: '.65rem' }}>{f.jp}</div>}
                 {f.description && <div style={{ fontSize: '.88rem', color: '#7a9ab8', lineHeight: 1.6, fontStyle: 'italic', marginBottom: '.85rem' }}>{f.description}</div>}
-                {f.proprietaire && <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>Propriétaire : <span style={{ color: '#7a9ab8' }}>{f.proprietaire}</span></div>}
+                {f.proprietaire && (
+                  <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>
+                    Propriétaire : {personnageMap.has(f.proprietaire)
+                      ? <a href={`/personnages?open=${personnageMap.get(f.proprietaire)}`} style={{ color: '#00c8ff', textDecoration: 'none' }}>{f.proprietaire}</a>
+                      : <span style={{ color: '#7a9ab8' }}>{f.proprietaire}</span>}
+                  </div>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem', marginBottom: '.85rem' }}>
                   <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', width: 48, flexShrink: 0 }}>Puissance</div>
                   <div style={{ flex: 1, height: 4, background: '#0a1829', borderRadius: 2, overflow: 'hidden' }}>
@@ -349,6 +385,7 @@ export default function FruitsPage() {
                   <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.72rem', color: tc, fontWeight: 700, width: 18, textAlign: 'right' }}>{f.puissance || 5}</div>
                 </div>
                 <div style={{ display: 'flex', gap: '.4rem', justifyContent: 'flex-end' }}>
+                  <button onClick={() => duplicateFruit(f)} title="Dupliquer" style={{ background: 'rgba(160,96,255,.1)', border: '1px solid rgba(160,96,255,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#a060ff', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>⧉</button>
                   <button onClick={() => openForm(f)} style={{ background: 'rgba(0,200,255,.1)', border: '1px solid rgba(0,200,255,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#00c8ff', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>✏️</button>
                   <button onClick={() => deleteFruit(f.id)} style={{ background: 'rgba(224,48,48,.1)', border: '1px solid rgba(224,48,48,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#ff6060', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>🗑</button>
                 </div>
@@ -406,7 +443,12 @@ export default function FruitsPage() {
                 <div><label style={S.label}>Emoji</label><input style={{ ...S.input, width: 70, fontSize: '1.4rem', textAlign: 'center' }} value={form.emoji || '🍎'} onChange={e => setForm(f => ({ ...f, emoji: e.target.value }))} /></div>
                 <div><label style={S.label}>Couleur accent</label><input type="color" style={{ ...S.input, height: 42, padding: '.3rem' }} value={form.color || '#40d060'} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} /></div>
               </div>
-              <div><label style={S.label}>Propriétaire</label><input style={S.input} value={form.proprietaire || ''} onChange={e => setForm(f => ({ ...f, proprietaire: e.target.value }))} placeholder="Nom du personnage ou Non attribué" /></div>
+              <div><label style={S.label}>Propriétaire</label>
+                <input style={S.input} list="fruit-personnages" value={form.proprietaire || ''} onChange={e => setForm(f => ({ ...f, proprietaire: e.target.value }))} placeholder="Nom du personnage ou Non attribué" />
+                <datalist id="fruit-personnages">
+                  {personnages.map(p => <option key={p.id} value={p.nom} />)}
+                </datalist>
+              </div>
               <div><label style={S.label}>Description / Capacités</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Ce fruit permet de..." /></div>
               <div><label style={S.label}>Faiblesses</label><textarea style={{ ...S.input, minHeight: 70, resize: 'vertical', lineHeight: 1.7 }} value={form.faiblesses || ''} onChange={e => setForm(f => ({ ...f, faiblesses: e.target.value }))} placeholder="Faiblesses et limitations..." /></div>
             </div>
