@@ -13,6 +13,7 @@ interface Personnage {
   equipage?: string
   prime?: string
   origine?: string
+  ile?: string
   statut?: string
   fruit?: string
   tags?: string
@@ -56,15 +57,21 @@ export default function PersonnagesPage() {
   const [selected, setSelected] = useState<Personnage | null>(null)
   const [editId, setEditId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [iles, setIles] = useState<{ id: string; nom: string }[]>([])
   const [form, setForm] = useState<Partial<Personnage>>({
     nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant',
-    prime: '0', origine: '', equipage: '', fruit: 'Aucun',
+    prime: '0', origine: '', ile: '', equipage: '', fruit: 'Aucun',
     tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: ''
   })
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
 
-  useEffect(() => { fetchList() }, [])
+  useEffect(() => { fetchList(); fetchIles() }, [])
+
+  async function fetchIles() {
+    const { data } = await supabase.from('iles').select('id, nom').order('nom', { ascending: true })
+    setIles(data || [])
+  }
 
   useEffect(() => {
     let l = list
@@ -84,7 +91,7 @@ export default function PersonnagesPage() {
       setEditId(p.id)
       setPhotoPreviews(p.photos || [])
     } else {
-      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', origine: '', equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
+      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', origine: '', ile: '', equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
       setEditId(null)
       setPhotoPreviews([])
     }
@@ -133,6 +140,7 @@ export default function PersonnagesPage() {
 
   const navLinks = [
     ['Accueil', '/'], ['Personnages', '/personnages'], ['Fruits', '/fruits'],
+    ['Despas', '/despas'], ['Lames', '/lames'], ['Cristaux', '/cristaux'],
     ['Îles', '/iles'], ['Factions', '/factions'], ['Campagne', '/campagne'],
     ['Lore', '/lore'], ['Dashboard', '/dashboard']
   ]
@@ -334,6 +342,15 @@ export default function PersonnagesPage() {
                 </div>
               </div>
 
+              {/* Île liée */}
+              <div>
+                <label style={S.label}>🏝️ Île liée</label>
+                <select style={{ ...S.input }} value={form.ile || ''} onChange={e => setForm(f => ({ ...f, ile: e.target.value }))}>
+                  <option value="">— Aucune —</option>
+                  {iles.map(i => <option key={i.id} value={i.nom}>{i.nom}</option>)}
+                </select>
+              </div>
+
               {/* Equipage + Fruit */}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'.85rem' }}>
                 <div>
@@ -438,6 +455,7 @@ export default function PersonnagesPage() {
                   { l:'⭐ Prime', v:selected.prime+' 🍖', c:'#f0c040' },
                   { l:'⚓ Équipage', v:selected.equipage||'—', c:'#00c8ff' },
                   { l:'📍 Origine', v:selected.origine||'—', c:'#7a9ab8' },
+                  { l:'🏝️ Île', v:selected.ile||'—', c:'#40d060' },
                   { l:'❤️ Statut', v:selected.statut||'—', c:STATUT_COLORS[selected.statut||''] },
                 ].map(({l,v,c}) => (
                   <div key={l} style={{ background:'#0d2040', border:'1px solid rgba(30,120,200,.2)', borderRadius:10, padding:'1rem' }}>

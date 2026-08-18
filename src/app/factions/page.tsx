@@ -59,7 +59,7 @@ export default function FactionsPage() {
     await supabase.from('factions').delete().eq('id', id); fetchList()
   }
 
-  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
+  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
   const filtered = typeFilter ? list.filter(f => f.type === typeFilter) : list
 
   return (

@@ -84,7 +84,7 @@ export default function LorePage() {
   }
 
   const filtered = catFilter ? articles.filter(a => a.categorie === catFilter) : articles
-  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
+  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
 
   return (
     <div style={S.page}>

@@ -11,25 +11,34 @@ const supabase = createClient(
 interface Stats {
   personnages: number
   fruits: number
+  despas: number
+  lames: number
+  cristaux: number
   iles: number
   sessions: number
 }
 
 export default function Home() {
-  const [stats, setStats] = useState<Stats>({ personnages: 0, fruits: 0, iles: 0, sessions: 0 })
+  const [stats, setStats] = useState<Stats>({ personnages: 0, fruits: 0, despas: 0, lames: 0, cristaux: 0, iles: 0, sessions: 0 })
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     async function fetchStats() {
-      const [p, f, i, s] = await Promise.all([
+      const [p, f, d, l, c, i, s] = await Promise.all([
         supabase.from('personnages').select('id', { count: 'exact', head: true }),
         supabase.from('fruits').select('id', { count: 'exact', head: true }),
+        supabase.from('despas').select('id', { count: 'exact', head: true }),
+        supabase.from('lames').select('id', { count: 'exact', head: true }),
+        supabase.from('cristaux_primordiaux').select('id', { count: 'exact', head: true }),
         supabase.from('iles').select('id', { count: 'exact', head: true }),
         supabase.from('sessions').select('id', { count: 'exact', head: true }),
       ])
       setStats({
         personnages: p.count || 0,
         fruits: f.count || 0,
+        despas: d.count || 0,
+        lames: l.count || 0,
+        cristaux: c.count || 0,
         iles: i.count || 0,
         sessions: s.count || 0,
       })
@@ -41,9 +50,11 @@ export default function Home() {
   const categories = [
     { icon: '👥', name: 'Personnages', count: stats.personnages, href: '/personnages', color: '#00c8ff' },
     { icon: '🍎', name: 'Fruits du Démon', count: stats.fruits, href: '/fruits', color: '#d4a017' },
+    { icon: '🦾', name: 'Despas', count: stats.despas, href: '/despas', color: '#00c8ff' },
+    { icon: '⚔️', name: 'Lames', count: stats.lames, href: '/lames', color: '#7a9ab8' },
+    { icon: '💎', name: 'Cristaux Primordiaux', count: stats.cristaux, href: '/cristaux', color: '#e03030' },
     { icon: '🏝️', name: 'Îles & Territoires', count: stats.iles, href: '/iles', color: '#4040ff' },
     { icon: '⚔️', name: 'Factions', count: 0, href: '/factions', color: '#e03030' },
-    { icon: '💎', name: 'Objets & Trésors', count: 0, href: '/objets', color: '#c0a0ff' },
     { icon: '💥', name: 'Techniques', count: 0, href: '/techniques', color: '#80e080' },
     { icon: '📜', name: 'Campagne', count: stats.sessions, href: '/campagne', color: '#ff8c40' },
     { icon: '📖', name: 'Lore & Encyclopédie', count: 0, href: '/lore', color: '#c040ff' },
@@ -84,6 +95,9 @@ export default function Home() {
           {[
             ['Personnages', '/personnages'],
             ['Fruits', '/fruits'],
+            ['Despas', '/despas'],
+            ['Lames', '/lames'],
+            ['Cristaux', '/cristaux'],
             ['Îles', '/iles'],
             ['Factions', '/factions'],
             ['Campagne', '/campagne'],

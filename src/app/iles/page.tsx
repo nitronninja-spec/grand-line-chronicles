@@ -9,6 +9,7 @@ interface Ile {
   emoji?: string
   region?: string
   climat?: string
+  faction?: string
   description?: string
   photo?: string
   gdoc?: string
@@ -39,32 +40,40 @@ export default function IlesPage() {
   const [list, setList] = useState<Ile[]>([])
   const [filtered, setFiltered] = useState<Ile[]>([])
   const [regionFilter, setRegionFilter] = useState('')
+  const [factionFilter, setFactionFilter] = useState('')
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState('')
+  const [factions, setFactions] = useState<{ id: string; nom: string; emoji?: string }[]>([])
   const [form, setForm] = useState<Partial<Ile>>({
-    nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', description: '', gdoc: '', miro: ''
+    nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', faction: '', description: '', gdoc: '', miro: ''
   })
 
-  useEffect(() => { fetchList() }, [])
+  useEffect(() => { fetchList(); fetchFactions() }, [])
   useEffect(() => {
     let l = list
     if (search) l = l.filter(i => i.nom.toLowerCase().includes(search.toLowerCase()))
     if (regionFilter) l = l.filter(i => i.region === regionFilter)
+    if (factionFilter) l = l.filter(i => i.faction === factionFilter)
     setFiltered(l)
-  }, [list, search, regionFilter])
+  }, [list, search, regionFilter, factionFilter])
 
   async function fetchList() {
     const { data } = await supabase.from('iles').select('*').order('created_at', { ascending: false })
     setList(data || [])
   }
 
+  async function fetchFactions() {
+    const { data } = await supabase.from('factions').select('id, nom, emoji').order('nom', { ascending: true })
+    setFactions(data || [])
+  }
+
   function openForm(ile?: Ile) {
     if (ile) { setForm(ile); setEditId(ile.id); setPhotoPreview(ile.photo || '') }
-    else { setForm({ nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', description: '', gdoc: '', miro: '' }); setEditId(null); setPhotoPreview('') }
+    else { setForm({ nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', faction: '', description: '', gdoc: '', miro: '' }); setEditId(null); setPhotoPreview('') }
     setPhotoFile(null)
     setShowForm(true)
   }
@@ -95,7 +104,7 @@ export default function IlesPage() {
     fetchList()
   }
 
-  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
+  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
 
   return (
     <div style={S.page}>
@@ -137,6 +146,15 @@ export default function IlesPage() {
             <button key={r} onClick={() => setRegionFilter(r)} style={{background:regionFilter===r?`${REGION_COLORS[r]}22`:'#0a1829',border:`1px solid ${regionFilter===r?REGION_COLORS[r]:'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:regionFilter===r?REGION_COLORS[r]:'#7a9ab8',cursor:'pointer'}}>{r}</button>
           ))}
         </div>
+        {factions.length > 0 && (
+          <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center',marginBottom:'1.25rem'}}>
+            <span style={{fontFamily:"'Cinzel',serif",fontSize:'.56rem',letterSpacing:'.1em',textTransform:'uppercase',color:'#4a6880',marginRight:'.2rem'}}>Trier par faction :</span>
+            <button onClick={() => setFactionFilter('')} style={{background:factionFilter===''?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${factionFilter===''?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:factionFilter===''?'#f0c040':'#7a9ab8',cursor:'pointer'}}>Toutes</button>
+            {factions.map(f => (
+              <button key={f.id} onClick={() => setFactionFilter(f.nom)} style={{background:factionFilter===f.nom?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${factionFilter===f.nom?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:factionFilter===f.nom?'#f0c040':'#7a9ab8',cursor:'pointer'}}>{f.emoji||'⚔️'} {f.nom}</button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={S.grid}>
@@ -163,6 +181,7 @@ export default function IlesPage() {
               <div style={{padding:'1.1rem'}}>
                 <div style={{fontFamily:"'Cinzel',serif",fontSize:'1.08rem',fontWeight:700,color:'#e8eef5',marginBottom:'.2rem'}}>{ile.nom}</div>
                 {ile.climat && <div style={{fontSize:'.78rem',color:'#4a6880',marginBottom:'.6rem'}}>🌤 {ile.climat}</div>}
+                {ile.faction && <div style={{fontSize:'.78rem',color:'#f0c040',marginBottom:'.6rem'}}>⚔️ {ile.faction}</div>}
                 {ile.description && <div style={{fontSize:'.88rem',color:'#7a9ab8',lineHeight:1.6,fontStyle:'italic',marginBottom:'.75rem'}}>{ile.description}</div>}
                 <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center'}}>
                   {ile.gdoc && <a href={ile.gdoc} target="_blank" rel="noopener" style={{background:'rgba(66,133,244,.12)',color:'#6aabff',border:'1px solid rgba(66,133,244,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>📄 Doc</a>}
@@ -213,6 +232,13 @@ export default function IlesPage() {
                   </select>
                 </div>
                 <div><label style={S.label}>Climat</label><input style={S.input} value={form.climat||''} onChange={e=>setForm(f=>({...f,climat:e.target.value}))} placeholder="Tropical, tempétueux..." /></div>
+              </div>
+              <div>
+                <label style={S.label}>⚔️ Faction liée</label>
+                <select style={{...S.input}} value={form.faction || ''} onChange={e => setForm(f => ({...f, faction: e.target.value}))}>
+                  <option value="">— Aucune —</option>
+                  {factions.map(f => <option key={f.id} value={f.nom}>{f.nom}</option>)}
+                </select>
               </div>
               <div><label style={S.label}>Description</label><textarea style={{...S.input,minHeight:100,resize:'vertical',lineHeight:1.7}} value={form.description||''} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="Description de l'île..." /></div>
               <div style={{background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:10,padding:'1.1rem'}}>
