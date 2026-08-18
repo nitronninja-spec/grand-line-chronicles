@@ -14,6 +14,7 @@ interface Ile {
   chef?: string
   iles_parentes?: string[]
   est_archipel?: boolean
+  est_detruite?: boolean
   description?: string
   photo?: string
   gdoc?: string
@@ -28,7 +29,7 @@ const REGION_COLORS: Record<string, string> = {
   'Région inconnue': '#7a9ab8'
 }
 const PEUPLE = 'Peuple'
-type SortMode = 'mer' | 'az' | 'za'
+type SortMode = 'mer' | 'mer-rev' | 'az' | 'za'
 
 function sortIles(items: Ile[], mode: SortMode) {
   return items.slice().sort((a, b) => {
@@ -36,7 +37,9 @@ function sortIles(items: Ile[], mode: SortMode) {
     if (mode === 'za') return b.nom.localeCompare(a.nom)
     const ai = SEA_ORDER.indexOf(a.region || '')
     const bi = SEA_ORDER.indexOf(b.region || '')
-    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.nom.localeCompare(b.nom)
+    const oa = ai === -1 ? 999 : ai
+    const ob = bi === -1 ? 999 : bi
+    return (mode === 'mer-rev' ? ob - oa : oa - ob) || a.nom.localeCompare(b.nom)
   })
 }
 
@@ -72,7 +75,7 @@ export default function IlesPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [form, setForm] = useState<Partial<Ile>>({
-    nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', factions: [], chef: '', iles_parentes: [], est_archipel: false, description: '', gdoc: '', miro: ''
+    nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', factions: [], chef: '', iles_parentes: [], est_archipel: false, est_detruite: false, description: '', gdoc: '', miro: ''
   })
 
   useEffect(() => {
@@ -106,7 +109,7 @@ export default function IlesPage() {
 
   function openForm(ile?: Ile) {
     if (ile) { setForm({ ...ile, factions: ile.factions || [], iles_parentes: ile.iles_parentes || [] }); setEditId(ile.id); setPhotoPreview(ile.photo || '') }
-    else { setForm({ nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', factions: [], chef: '', iles_parentes: [], est_archipel: false, description: '', gdoc: '', miro: '' }); setEditId(null); setPhotoPreview('') }
+    else { setForm({ nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', factions: [], chef: '', iles_parentes: [], est_archipel: false, est_detruite: false, description: '', gdoc: '', miro: '' }); setEditId(null); setPhotoPreview('') }
     setPhotoFile(null)
     setShowForm(true)
   }
@@ -191,6 +194,7 @@ export default function IlesPage() {
     const nextVisited = new Set(visited); nextVisited.add(ile.id)
     const rc = REGION_COLORS[ile.region || ''] || '#00c8ff'
     const isFolder = !!ile.est_archipel
+    const isDestroyed = !!ile.est_detruite
     const expanded = expandedFolders.has(ile.id)
     const children = isFolder ? childrenOf(ile) : []
     const isDragOver = dragOverId === ile.id
@@ -204,22 +208,23 @@ export default function IlesPage() {
         onDragEnter={isFolder ? () => setDragOverId(ile.id) : undefined}
         onDragLeave={isFolder ? () => setDragOverId(prev => prev === ile.id ? null : prev) : undefined}
         onDrop={isFolder ? e => { e.preventDefault(); e.stopPropagation(); setDragOverId(null); addToFolder(ile, e.dataTransfer.getData('text/plain')) } : undefined}
-        style={{background:'#0d2040',border:`1px solid ${isDragOver?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:14,overflow:'hidden',transition:'all .2s',marginLeft:opts.nested?'1.5rem':0,cursor:'grab'}}
-        onMouseEnter={e=>{const el=e.currentTarget;el.style.borderColor=isDragOver?'#d4a017':rc;if(!opts.nested){el.style.transform='translateY(-5px)';el.style.boxShadow='0 18px 36px rgba(0,0,0,.4)'}}}
-        onMouseLeave={e=>{const el=e.currentTarget;el.style.borderColor=isDragOver?'#d4a017':'rgba(30,120,200,.2)';if(!opts.nested){el.style.transform='none';el.style.boxShadow='none'}}}>
+        style={{background:'#0d2040',border:`1px solid ${isDragOver?'#d4a017':isDestroyed?'rgba(224,48,48,.35)':'rgba(30,120,200,.2)'}`,borderRadius:14,overflow:'hidden',transition:'all .2s',marginLeft:opts.nested?'1.5rem':0,cursor:'grab',opacity:isDestroyed?.7:1}}
+        onMouseEnter={e=>{const el=e.currentTarget;el.style.borderColor=isDragOver?'#d4a017':isDestroyed?'rgba(224,48,48,.6)':rc;if(!opts.nested){el.style.transform='translateY(-5px)';el.style.boxShadow='0 18px 36px rgba(0,0,0,.4)'}}}
+        onMouseLeave={e=>{const el=e.currentTarget;el.style.borderColor=isDragOver?'#d4a017':isDestroyed?'rgba(224,48,48,.35)':'rgba(30,120,200,.2)';if(!opts.nested){el.style.transform='none';el.style.boxShadow='none'}}}>
         {/* Banner */}
-        <div style={{height:opts.nested?90:155,background:'linear-gradient(135deg,#071828,#0d2440)',position:'relative',display:'flex',alignItems:'center',justifyContent:'center',fontSize:opts.nested?'2.4rem':'4.5rem',overflow:'hidden'}}>
+        <div style={{height:opts.nested?90:155,background:isDestroyed?'linear-gradient(135deg,#1a0d0d,#2a1010)':'linear-gradient(135deg,#071828,#0d2440)',position:'relative',display:'flex',alignItems:'center',justifyContent:'center',fontSize:opts.nested?'2.4rem':'4.5rem',overflow:'hidden',filter:isDestroyed?'grayscale(.8)':'none'}}>
           {ile.photo && <img src={ile.photo} alt={ile.nom} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',display:'block',opacity:.55}} />}
-          <span style={{position:'relative',zIndex:1}}>{ile.emoji||'🏝️'}</span>
+          <span style={{position:'relative',zIndex:1,opacity:isDestroyed?.5:1}}>{isDestroyed?'💀':(ile.emoji||'🏝️')}</span>
           <div style={{position:'absolute',top:'.6rem',right:'.6rem',display:'flex',gap:'.35rem'}}>
+            {isDestroyed && <div style={{background:'rgba(224,48,48,.28)',border:'1px solid rgba(224,48,48,.5)',borderRadius:100,padding:'.2rem .6rem',fontFamily:"'Cinzel',serif",fontSize:'.5rem',letterSpacing:'.09em',textTransform:'uppercase',color:'#ff6060',zIndex:1}}>☠️ Détruite</div>}
             {isFolder && <div style={{background:'rgba(212,160,23,.22)',border:'1px solid rgba(212,160,23,.44)',borderRadius:100,padding:'.2rem .6rem',fontFamily:"'Cinzel',serif",fontSize:'.5rem',letterSpacing:'.09em',textTransform:'uppercase',color:'#f0c040',zIndex:1}}>📁 Archipel</div>}
             <div style={{background:`${rc}22`,border:`1px solid ${rc}44`,borderRadius:100,padding:'.2rem .6rem',fontFamily:"'Cinzel',serif",fontSize:'.5rem',letterSpacing:'.09em',textTransform:'uppercase',color:rc,zIndex:1}}>{ile.region}</div>
           </div>
-          <div style={{position:'absolute',bottom:0,left:0,right:0,height:60,background:'linear-gradient(to top,#0d2040,transparent)'}} />
+          <div style={{position:'absolute',bottom:0,left:0,right:0,height:60,background:`linear-gradient(to top,${isDestroyed?'#2a1010':'#0d2040'},transparent)`}} />
         </div>
         <div style={{padding:opts.nested?'.85rem':'1.1rem'}}>
           <div style={{display:'flex',alignItems:'center',gap:'.5rem',marginBottom:'.2rem'}}>
-            <div style={{fontFamily:"'Cinzel',serif",fontSize:opts.nested?'.92rem':'1.08rem',fontWeight:700,color:'#e8eef5',flex:1}}>{ile.nom}</div>
+            <div style={{fontFamily:"'Cinzel',serif",fontSize:opts.nested?'.92rem':'1.08rem',fontWeight:700,color:isDestroyed?'#a06060':'#e8eef5',flex:1,textDecoration:isDestroyed?'line-through':'none'}}>{ile.nom}</div>
             {isFolder && (
               <button onClick={() => toggleFolder(ile.id)} style={{background:'rgba(212,160,23,.1)',border:'1px solid rgba(212,160,23,.25)',borderRadius:8,padding:'.2rem .55rem',color:'#d4a017',cursor:'pointer',fontSize:'.68rem',fontFamily:"'Cinzel',serif",whiteSpace:'nowrap'}}>{expanded?'▾':'▸'} {children.length}</button>
             )}
@@ -303,7 +308,7 @@ export default function IlesPage() {
           </div>
           <div style={{display:'flex',gap:'.3rem',alignItems:'center'}}>
             <span style={{fontFamily:"'Cinzel',serif",fontSize:'.56rem',letterSpacing:'.08em',textTransform:'uppercase',color:'#4a6880'}}>Trier :</span>
-            {([['mer','🌊 Ordre des mers'],['az','A→Z'],['za','Z→A']] as [SortMode,string][]).map(([mode,label]) => (
+            {([['mer','🌊 Ordre des mers'],['mer-rev','🌊 Inversé'],['az','A→Z'],['za','Z→A']] as [SortMode,string][]).map(([mode,label]) => (
               <button key={mode} onClick={() => setSortMode(mode)} style={{background:sortMode===mode?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${sortMode===mode?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .7rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.05em',color:sortMode===mode?'#f0c040':'#7a9ab8',cursor:'pointer',whiteSpace:'nowrap'}}>{label}</button>
             ))}
           </div>
@@ -341,7 +346,25 @@ export default function IlesPage() {
             <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter la première</button>
           </div>
         )}
-        {topLevel.map(ile => renderIleCard(ile))}
+        {(() => {
+          const groupBySea = sortMode === 'mer' || sortMode === 'mer-rev'
+          let lastRegion: string | undefined | null = undefined
+          const nodes: React.ReactNode[] = []
+          topLevel.forEach(ile => {
+            if (groupBySea && ile.region !== lastRegion) {
+              lastRegion = ile.region
+              const rc = REGION_COLORS[ile.region || ''] || '#7a9ab8'
+              nodes.push(
+                <div key={`divider-${ile.region}-${ile.id}`} style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:'.75rem',margin:'.4rem 0'}}>
+                  <div style={{fontFamily:"'Cinzel',serif",fontSize:'.65rem',letterSpacing:'.14em',textTransform:'uppercase',color:rc,whiteSpace:'nowrap'}}>🌊 {ile.region || 'Région inconnue'}</div>
+                  <div style={{flex:1,height:1,background:`${rc}33`}} />
+                </div>
+              )
+            }
+            nodes.push(renderIleCard(ile))
+          })
+          return nodes
+        })()}
       </div>
 
       {showForm && (
@@ -412,6 +435,15 @@ export default function IlesPage() {
                 <div>
                   <div style={{fontFamily:"'Cinzel',serif",fontSize:'.72rem',color:'#e8eef5',fontWeight:700}}>📁 Archipel / Groupe d&apos;îles</div>
                   <div style={{fontSize:'.75rem',color:'#4a6880'}}>Cette île devient un dossier pouvant contenir des sous-îles.</div>
+                </div>
+              </label>
+
+              {/* Détruite toggle */}
+              <label style={{display:'flex',alignItems:'center',gap:'.6rem',background:'#0d2040',border:'1px solid rgba(224,48,48,.2)',borderRadius:10,padding:'.85rem 1.1rem',cursor:'pointer'}}>
+                <input type="checkbox" checked={!!form.est_detruite} onChange={e => setForm(f => ({...f, est_detruite: e.target.checked}))} style={{width:18,height:18,accentColor:'#ff6060',cursor:'pointer'}} />
+                <div>
+                  <div style={{fontFamily:"'Cinzel',serif",fontSize:'.72rem',color:'#ff6060',fontWeight:700}}>☠️ Détruite</div>
+                  <div style={{fontSize:'.75rem',color:'#4a6880'}}>Marque cette île ou cet archipel comme détruit(e).</div>
                 </div>
               </label>
 

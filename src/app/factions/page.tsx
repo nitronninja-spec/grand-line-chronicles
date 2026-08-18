@@ -24,6 +24,16 @@ const TYPE_COLORS: Record<string,string> = { Pirates:'#d4a017', Marine:'#00c8ff'
 const TYPE_EMOJI: Record<string,string> = { Pirates:'🏴‍☠️', Marine:'⚓', Gouvernement:'🏛️', 'Révolutionnaire':'✊', Peuple:'👥', Neutre:'🤝', Autre:'⚔️' }
 const MEMBER_TYPE_COLORS: Record<string, string> = { pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', 'allié': '#40d060' }
 const MEMBER_TYPE_LABELS: Record<string, string> = { pj: 'Joueurs', pnj: 'PNJ', antagoniste: 'Antagonistes', 'allié': 'Alliés' }
+type FactionSortMode = 'categorie' | 'az'
+
+function sortFactions(items: Faction[], mode: FactionSortMode) {
+  return items.slice().sort((a, b) => {
+    if (mode === 'az') return a.nom.localeCompare(b.nom)
+    const ai = TYPES.indexOf(a.type || '')
+    const bi = TYPES.indexOf(b.type || '')
+    return ((ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)) || a.nom.localeCompare(b.nom)
+  })
+}
 
 const S = {
   page: { minHeight:'100vh', background:'#050d1a', color:'#e8eef5', fontFamily:"'Crimson Pro',Georgia,serif", paddingTop:60 } as React.CSSProperties,
@@ -47,6 +57,7 @@ export default function FactionsPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [linkedIles, setLinkedIles] = useState<LinkedIle[]>([])
   const [rosterFaction, setRosterFaction] = useState<Faction | null>(null)
+  const [sortMode, setSortMode] = useState<FactionSortMode>('categorie')
 
   useEffect(() => {
     fetchList(); fetchMembers(); fetchIlesList()
@@ -108,6 +119,7 @@ export default function FactionsPage() {
   const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
   let filtered = typeFilter ? list.filter(f => f.type === typeFilter) : list
   if (search) filtered = filtered.filter(f => f.nom.toLowerCase().includes(search.toLowerCase()))
+  filtered = sortFactions(filtered, sortMode)
 
   return (
     <div style={S.page}>
@@ -132,6 +144,12 @@ export default function FactionsPage() {
             <span style={{position:'absolute',left:'.75rem',top:'50%',transform:'translateY(-50%)',color:'#4a6880'}}>🔍</span>
             <input style={{...S.input,paddingLeft:'2.5rem'}} placeholder="Rechercher une faction..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
+          <div style={{display:'flex',gap:'.3rem',alignItems:'center'}}>
+            <span style={{fontFamily:"'Cinzel',serif",fontSize:'.56rem',letterSpacing:'.08em',textTransform:'uppercase',color:'#4a6880'}}>Trier :</span>
+            {([['categorie','Par catégorie'],['az','A→Z']] as [FactionSortMode,string][]).map(([mode,label]) => (
+              <button key={mode} onClick={() => setSortMode(mode)} style={{background:sortMode===mode?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${sortMode===mode?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .7rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.05em',color:sortMode===mode?'#f0c040':'#7a9ab8',cursor:'pointer',whiteSpace:'nowrap'}}>{label}</button>
+            ))}
+          </div>
         </div>
         <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',marginBottom:'1.25rem'}}>
           <button onClick={() => setTypeFilter('')} style={{background:typeFilter===''?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${typeFilter===''?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:typeFilter===''?'#f0c040':'#7a9ab8',cursor:'pointer'}}>Toutes</button>
@@ -141,30 +159,44 @@ export default function FactionsPage() {
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))',gap:'1.1rem',padding:'0 2rem 4rem',maxWidth:1400,margin:'0 auto'}}>
         {filtered.length === 0 && <div style={{gridColumn:'1/-1',textAlign:'center',padding:'5rem 2rem',color:'#4a6880'}}><div style={{fontSize:'4rem',marginBottom:'1rem',opacity:.4}}>⚔️</div><div style={{fontFamily:"'Cinzel',serif",fontSize:'.72rem',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:'1.5rem'}}>Aucune faction</div><button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter la première</button></div>}
-        {filtered.map(f => {
-          const tc = TYPE_COLORS[f.type||''] || '#a060ff'
-          return (
-            <div key={f.id} style={{background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:14,padding:'1.35rem',transition:'all .3s',display:'flex',flexDirection:'column',gap:'.6rem'}}
-              onMouseEnter={e=>{const el=e.currentTarget;el.style.transform='translateY(-5px)';el.style.borderColor=tc;el.style.boxShadow='0 18px 36px rgba(0,0,0,.4)'}}
-              onMouseLeave={e=>{const el=e.currentTarget;el.style.transform='none';el.style.borderColor='rgba(30,120,200,.2)';el.style.boxShadow='none'}}>
-              <div style={{fontSize:'2.5rem',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.emoji||'⚔️'}</div>
-              <div style={{fontFamily:"'Cinzel',serif",fontSize:'1rem',fontWeight:700,color:'#e8eef5',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.nom}</div>
-              <div style={{display:'inline-block',background:`${tc}22`,color:tc,border:`1px solid ${tc}44`,borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.09em',textTransform:'uppercase',width:'fit-content'}}>{f.type}</div>
-              {f.description && <div style={{fontSize:'.88rem',color:'#7a9ab8',lineHeight:1.6,fontStyle:'italic',flex:1}}>{f.description}</div>}
-              <div style={{fontSize:'.78rem',color:'#4a6880'}}>👥 {members.filter(m => m.factions?.includes(f.nom)).length} membre(s)</div>
-              <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center'}}>
-                {f.gdoc && <a href={f.gdoc} target="_blank" rel="noopener" style={{background:'rgba(66,133,244,.12)',color:'#6aabff',border:'1px solid rgba(66,133,244,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>📄 Doc</a>}
-                {f.miro && <a href={f.miro} target="_blank" rel="noopener" style={{background:'rgba(255,196,0,.1)',color:'#ffc400',border:'1px solid rgba(255,196,0,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>🗒 Miro</a>}
-                <div style={{marginLeft:'auto',display:'flex',gap:'.3rem'}}>
-                  <button onClick={() => setRosterFaction(f)} title="Voir l'organigramme" style={{background:'rgba(64,208,96,.1)',border:'1px solid rgba(64,208,96,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#40d060',cursor:'pointer',fontSize:'.7rem'}}>👁</button>
-                  <button onClick={() => duplicateFaction(f)} title="Dupliquer" style={{background:'rgba(160,96,255,.1)',border:'1px solid rgba(160,96,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#a060ff',cursor:'pointer',fontSize:'.7rem'}}>⧉</button>
-                  <button onClick={() => openForm(f)} style={{background:'rgba(0,200,255,.1)',border:'1px solid rgba(0,200,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#00c8ff',cursor:'pointer',fontSize:'.7rem'}}>✏️</button>
-                  <button onClick={() => deleteFaction(f.id)} style={{background:'rgba(224,48,48,.1)',border:'1px solid rgba(224,48,48,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#ff6060',cursor:'pointer',fontSize:'.7rem'}}>🗑</button>
+        {(() => {
+          let lastType: string | undefined | null = undefined
+          const nodes: React.ReactNode[] = []
+          filtered.forEach(f => {
+            const tc = TYPE_COLORS[f.type||''] || '#a060ff'
+            if (sortMode === 'categorie' && f.type !== lastType) {
+              lastType = f.type
+              nodes.push(
+                <div key={`divider-${f.type}-${f.id}`} style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:'.75rem',margin:'.4rem 0'}}>
+                  <div style={{fontFamily:"'Cinzel',serif",fontSize:'.65rem',letterSpacing:'.14em',textTransform:'uppercase',color:tc,whiteSpace:'nowrap'}}>{TYPE_EMOJI[f.type||''] || '⚔️'} {f.type || 'Autre'}</div>
+                  <div style={{flex:1,height:1,background:`${tc}33`}} />
+                </div>
+              )
+            }
+            nodes.push(
+              <div key={f.id} style={{background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:14,padding:'1.35rem',transition:'all .3s',display:'flex',flexDirection:'column',gap:'.6rem'}}
+                onMouseEnter={e=>{const el=e.currentTarget;el.style.transform='translateY(-5px)';el.style.borderColor=tc;el.style.boxShadow='0 18px 36px rgba(0,0,0,.4)'}}
+                onMouseLeave={e=>{const el=e.currentTarget;el.style.transform='none';el.style.borderColor='rgba(30,120,200,.2)';el.style.boxShadow='none'}}>
+                <div style={{fontSize:'2.5rem',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.emoji||'⚔️'}</div>
+                <div style={{fontFamily:"'Cinzel',serif",fontSize:'1rem',fontWeight:700,color:'#e8eef5',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.nom}</div>
+                <div style={{display:'inline-block',background:`${tc}22`,color:tc,border:`1px solid ${tc}44`,borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.09em',textTransform:'uppercase',width:'fit-content'}}>{f.type}</div>
+                {f.description && <div style={{fontSize:'.88rem',color:'#7a9ab8',lineHeight:1.6,fontStyle:'italic',flex:1}}>{f.description}</div>}
+                <div style={{fontSize:'.78rem',color:'#4a6880'}}>👥 {members.filter(m => m.factions?.includes(f.nom)).length} membre(s)</div>
+                <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center'}}>
+                  {f.gdoc && <a href={f.gdoc} target="_blank" rel="noopener" style={{background:'rgba(66,133,244,.12)',color:'#6aabff',border:'1px solid rgba(66,133,244,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>📄 Doc</a>}
+                  {f.miro && <a href={f.miro} target="_blank" rel="noopener" style={{background:'rgba(255,196,0,.1)',color:'#ffc400',border:'1px solid rgba(255,196,0,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>🗒 Miro</a>}
+                  <div style={{marginLeft:'auto',display:'flex',gap:'.3rem'}}>
+                    <button onClick={() => setRosterFaction(f)} title="Voir l'organigramme" style={{background:'rgba(64,208,96,.1)',border:'1px solid rgba(64,208,96,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#40d060',cursor:'pointer',fontSize:'.7rem'}}>👁</button>
+                    <button onClick={() => duplicateFaction(f)} title="Dupliquer" style={{background:'rgba(160,96,255,.1)',border:'1px solid rgba(160,96,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#a060ff',cursor:'pointer',fontSize:'.7rem'}}>⧉</button>
+                    <button onClick={() => openForm(f)} style={{background:'rgba(0,200,255,.1)',border:'1px solid rgba(0,200,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#00c8ff',cursor:'pointer',fontSize:'.7rem'}}>✏️</button>
+                    <button onClick={() => deleteFaction(f.id)} style={{background:'rgba(224,48,48,.1)',border:'1px solid rgba(224,48,48,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#ff6060',cursor:'pointer',fontSize:'.7rem'}}>🗑</button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })
+          return nodes
+        })()}
       </div>
 
       {showForm && (

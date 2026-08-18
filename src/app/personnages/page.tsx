@@ -28,7 +28,8 @@ interface Personnage {
   fav?: boolean
 }
 
-interface LinkedItem { id: string; nom: string; proprietaire?: string }
+interface LinkedItem { id: string; nom: string; proprietaire?: string; type?: string }
+const FRUIT_TYPE_ORDER = ['Paramecia', 'Logia', 'Zoan', 'Mythical']
 interface FactionRef { id: string; nom: string; rangs?: { nom: string; ordre: number }[] }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -63,7 +64,7 @@ export default function PersonnagesPage() {
   const [selected, setSelected] = useState<Personnage | null>(null)
   const [editId, setEditId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [iles, setIles] = useState<{ id: string; nom: string }[]>([])
+  const [iles, setIles] = useState<{ id: string; nom: string; region?: string }[]>([])
   const [factions, setFactions] = useState<FactionRef[]>([])
   const [fruits, setFruits] = useState<LinkedItem[]>([])
   const [despas, setDespas] = useState<LinkedItem[]>([])
@@ -103,7 +104,7 @@ export default function PersonnagesPage() {
   }, [list])
 
   async function fetchIles() {
-    const { data } = await supabase.from('iles').select('id, nom').order('nom', { ascending: true })
+    const { data } = await supabase.from('iles').select('id, nom, region').order('nom', { ascending: true })
     setIles(data || [])
   }
 
@@ -114,7 +115,7 @@ export default function PersonnagesPage() {
 
   async function fetchLinkedCatalogs() {
     const [fr, d, l, c] = await Promise.all([
-      supabase.from('fruits').select('id, nom, proprietaire'),
+      supabase.from('fruits').select('id, nom, proprietaire, type'),
       supabase.from('despas').select('id, nom, proprietaire'),
       supabase.from('lames').select('id, nom, proprietaire'),
       supabase.from('cristaux_primordiaux').select('id, nom, proprietaire'),
@@ -415,10 +416,14 @@ export default function PersonnagesPage() {
                 </div>
               </div>
 
-              {/* Île liée */}
+              {/* Île Natale */}
               <div>
-                <label style={S.label}>🏝️ Île liée</label>
-                <select style={{ ...S.input }} value={form.ile || ''} onChange={e => setForm(f => ({ ...f, ile: e.target.value }))}>
+                <label style={S.label}>🏝️ Île Natale</label>
+                <select style={{ ...S.input }} value={form.ile || ''} onChange={e => {
+                  const nom = e.target.value
+                  const chosen = iles.find(i => i.nom === nom)
+                  setForm(f => ({ ...f, ile: nom, origine: chosen?.region || f.origine }))
+                }}>
                   <option value="">— Aucune —</option>
                   {iles.map(i => <option key={i.id} value={i.nom}>{i.nom}</option>)}
                 </select>
@@ -470,11 +475,34 @@ export default function PersonnagesPage() {
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'.85rem' }}>
                 <div>
                   <label style={S.label}>Équipage</label>
-                  <input style={S.input} value={form.equipage||''} onChange={e => setForm(f => ({...f, equipage:e.target.value}))} placeholder="L'Équipage de l'Étoile du Nord" />
+                  <select style={{ ...S.input }} value={form.equipage || ''} onChange={e => setForm(f => ({...f, equipage:e.target.value}))}>
+                    <option value="">— Aucun —</option>
+                    {factions.map(fac => <option key={fac.id} value={fac.nom}>{fac.nom}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label style={S.label}>Fruit du Démon</label>
-                  <input style={S.input} value={form.fruit||''} onChange={e => setForm(f => ({...f, fruit:e.target.value}))} placeholder="Kaze Kaze no Mi" />
+                  <select style={{ ...S.input }} value={form.fruit || 'Aucun'} onChange={e => setForm(f => ({...f, fruit:e.target.value}))}>
+                    <option value="Aucun">Aucun</option>
+                    {FRUIT_TYPE_ORDER.map(type => {
+                      const inType = fruits.filter(fr => fr.type === type).sort((a,b) => a.nom.localeCompare(b.nom))
+                      if (inType.length === 0) return null
+                      return (
+                        <optgroup key={type} label={type}>
+                          {inType.map(fr => <option key={fr.id} value={fr.nom}>{fr.nom}</option>)}
+                        </optgroup>
+                      )
+                    })}
+                    {(() => {
+                      const other = fruits.filter(fr => !FRUIT_TYPE_ORDER.includes(fr.type || '')).sort((a,b) => a.nom.localeCompare(b.nom))
+                      if (other.length === 0) return null
+                      return (
+                        <optgroup label="Autre">
+                          {other.map(fr => <option key={fr.id} value={fr.nom}>{fr.nom}</option>)}
+                        </optgroup>
+                      )
+                    })()}
+                  </select>
                 </div>
               </div>
 
