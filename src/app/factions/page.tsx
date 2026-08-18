@@ -16,11 +16,12 @@ interface Faction {
   rangs?: Rang[]
 }
 
-interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; faction?: string; rang?: string }
+interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; factions?: string[]; rang?: string }
 interface LinkedIle { id: string; nom: string; emoji?: string; faction?: string }
 
 const TYPES = ['Pirates', 'Marine', 'Gouvernement', 'Révolutionnaire', 'Neutre', 'Autre']
 const TYPE_COLORS: Record<string,string> = { Pirates:'#d4a017', Marine:'#00c8ff', Gouvernement:'#4488ff', 'Révolutionnaire':'#e03030', Neutre:'#7a9ab8', Autre:'#a060ff' }
+const TYPE_EMOJI: Record<string,string> = { Pirates:'🏴‍☠️', Marine:'⚓', Gouvernement:'🏛️', 'Révolutionnaire':'✊', Neutre:'🤝', Autre:'⚔️' }
 const MEMBER_TYPE_COLORS: Record<string, string> = { pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', 'allié': '#40d060' }
 const MEMBER_TYPE_LABELS: Record<string, string> = { pj: 'Joueurs', pnj: 'PNJ', antagoniste: 'Antagonistes', 'allié': 'Alliés' }
 
@@ -59,7 +60,7 @@ export default function FactionsPage() {
   }
 
   async function fetchMembers() {
-    const { data } = await supabase.from('personnages').select('id, nom, emoji, type, photos, faction, rang')
+    const { data } = await supabase.from('personnages').select('id, nom, emoji, type, photos, factions, rang')
     setMembers(data || [])
   }
 
@@ -70,7 +71,7 @@ export default function FactionsPage() {
 
   function openForm(f?: Faction) {
     if (f) { setForm({ ...f, rangs: f.rangs || [] }); setEditId(f.id) }
-    else { setForm({ nom:'', emoji:'⚔️', type:'Pirates', description:'', gdoc:'', miro:'', rangs:[] }); setEditId(null) }
+    else { setForm({ nom:'', emoji:TYPE_EMOJI.Pirates, type:'Pirates', description:'', gdoc:'', miro:'', rangs:[] }); setEditId(null) }
     setShowForm(true)
   }
 
@@ -150,7 +151,7 @@ export default function FactionsPage() {
               <div style={{fontFamily:"'Cinzel',serif",fontSize:'1rem',fontWeight:700,color:'#e8eef5',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.nom}</div>
               <div style={{display:'inline-block',background:`${tc}22`,color:tc,border:`1px solid ${tc}44`,borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.09em',textTransform:'uppercase',width:'fit-content'}}>{f.type}</div>
               {f.description && <div style={{fontSize:'.88rem',color:'#7a9ab8',lineHeight:1.6,fontStyle:'italic',flex:1}}>{f.description}</div>}
-              <div style={{fontSize:'.78rem',color:'#4a6880'}}>👥 {members.filter(m => m.faction === f.nom).length} membre(s)</div>
+              <div style={{fontSize:'.78rem',color:'#4a6880'}}>👥 {members.filter(m => m.factions?.includes(f.nom)).length} membre(s)</div>
               <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center'}}>
                 {f.gdoc && <a href={f.gdoc} target="_blank" rel="noopener" style={{background:'rgba(66,133,244,.12)',color:'#6aabff',border:'1px solid rgba(66,133,244,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>📄 Doc</a>}
                 {f.miro && <a href={f.miro} target="_blank" rel="noopener" style={{background:'rgba(255,196,0,.1)',color:'#ffc400',border:'1px solid rgba(255,196,0,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>🗒 Miro</a>}
@@ -179,7 +180,7 @@ export default function FactionsPage() {
                 <div><label style={S.label}>Emoji</label><input style={{...S.input,width:70,fontSize:'1.4rem',textAlign:'center'}} value={form.emoji||'⚔️'} onChange={e=>setForm(f=>({...f,emoji:e.target.value}))} /></div>
               </div>
               <div><label style={S.label}>Type</label>
-                <select style={{...S.input}} value={form.type||'Pirates'} onChange={e=>setForm(f=>({...f,type:e.target.value}))}>
+                <select style={{...S.input}} value={form.type||'Pirates'} onChange={e=>setForm(f=>({...f,type:e.target.value,emoji:TYPE_EMOJI[e.target.value]||f.emoji}))}>
                   {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
@@ -240,7 +241,7 @@ export default function FactionsPage() {
               </div>
 
               {(() => {
-                const factionMembers = members.filter(m => m.faction === rosterFaction.nom)
+                const factionMembers = members.filter(m => m.factions?.includes(rosterFaction.nom))
                 if (factionMembers.length === 0) return <div style={{textAlign:'center',padding:'2rem',color:'#4a6880',fontStyle:'italic',fontSize:'.88rem',marginBottom:'1.5rem'}}>Aucun membre pour l&apos;instant.</div>
                 const tc = TYPE_COLORS[rosterFaction.type||''] || '#a060ff'
                 const rangs = (rosterFaction.rangs || []).slice().sort((a,b) => a.ordre - b.ordre)

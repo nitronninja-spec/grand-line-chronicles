@@ -15,7 +15,7 @@ interface Personnage {
   prime?: string
   origine?: string
   ile?: string
-  faction?: string
+  factions?: string[]
   rang?: string
   statut?: string
   fruit?: string
@@ -72,7 +72,7 @@ export default function PersonnagesPage() {
   const [factionFilter, setFactionFilter] = useState('')
   const [form, setForm] = useState<Partial<Personnage>>({
     nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant',
-    prime: '0', origine: '', ile: '', faction: '', rang: '', equipage: '', fruit: 'Aucun',
+    prime: '0', origine: '', ile: '', factions: [], rang: '', equipage: '', fruit: 'Aucun',
     tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: ''
   })
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
@@ -87,7 +87,7 @@ export default function PersonnagesPage() {
     const newFaction = params.get('newFaction')
     if (newFaction) {
       openForm()
-      setForm(f => ({ ...f, faction: newFaction }))
+      setForm(f => ({ ...f, factions: [newFaction] }))
     }
   }, [])
 
@@ -129,7 +129,7 @@ export default function PersonnagesPage() {
     let l = list
     if (search) l = l.filter(p => p.nom.toLowerCase().includes(search.toLowerCase()) || (p.surnom||'').toLowerCase().includes(search.toLowerCase()))
     if (typeFilter) l = l.filter(p => p.type === typeFilter)
-    if (factionFilter) l = l.filter(p => p.faction === factionFilter)
+    if (factionFilter) l = l.filter(p => p.factions?.includes(factionFilter))
     setFiltered(l)
   }, [list, search, typeFilter, factionFilter])
 
@@ -144,7 +144,7 @@ export default function PersonnagesPage() {
       setEditId(p.id)
       setPhotoPreviews(p.photos || [])
     } else {
-      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', origine: '', ile: '', faction: '', rang: '', equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
+      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', origine: '', ile: '', factions: [], rang: '', equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
       setEditId(null)
       setPhotoPreviews([])
     }
@@ -415,39 +415,52 @@ export default function PersonnagesPage() {
                 </div>
               </div>
 
-              {/* Île + Faction liées */}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'.85rem' }}>
-                <div>
-                  <label style={S.label}>🏝️ Île liée</label>
-                  <select style={{ ...S.input }} value={form.ile || ''} onChange={e => setForm(f => ({ ...f, ile: e.target.value }))}>
-                    <option value="">— Aucune —</option>
-                    {iles.map(i => <option key={i.id} value={i.nom}>{i.nom}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={S.label}>🏴‍☠️ Faction liée</label>
-                  <select style={{ ...S.input }} value={form.faction || ''} onChange={e => setForm(f => ({ ...f, faction: e.target.value, rang: '' }))}>
-                    <option value="">— Aucune —</option>
-                    {factions.map(f => <option key={f.id} value={f.nom}>{f.nom}</option>)}
-                  </select>
+              {/* Île liée */}
+              <div>
+                <label style={S.label}>🏝️ Île liée</label>
+                <select style={{ ...S.input }} value={form.ile || ''} onChange={e => setForm(f => ({ ...f, ile: e.target.value }))}>
+                  <option value="">— Aucune —</option>
+                  {iles.map(i => <option key={i.id} value={i.nom}>{i.nom}</option>)}
+                </select>
+              </div>
+
+              {/* Factions liées (multi) */}
+              <div>
+                <label style={S.label}>🏴‍☠️ Factions liées</label>
+                {factions.length === 0 && <div style={{ fontSize:'.8rem', color:'#4a6880', fontStyle:'italic' }}>Aucune faction créée pour l&apos;instant.</div>}
+                <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap' }}>
+                  {factions.map(fac => {
+                    const active = (form.factions || []).includes(fac.nom)
+                    return (
+                      <button key={fac.id} type="button" onClick={() => setForm(f => {
+                        const current = f.factions || []
+                        const nextFactions = active ? current.filter(n => n !== fac.nom) : [...current, fac.nom]
+                        // Si le rang actuel n'appartient plus à aucune faction sélectionnée, on le réinitialise
+                        const stillValid = nextFactions.some(fn => factions.find(x => x.nom === fn)?.rangs?.some(r => r.nom === f.rang))
+                        return { ...f, factions: nextFactions, rang: stillValid ? f.rang : '' }
+                      })} style={{ background: active ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${active ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.35rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.62rem', color: active ? '#f0c040' : '#7a9ab8', cursor:'pointer' }}>
+                        {active ? '✓ ' : ''}{fac.nom}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
-              {/* Rang dans la faction */}
+              {/* Rang dans les factions sélectionnées */}
               {(() => {
-                const selectedFaction = factions.find(f => f.nom === form.faction)
-                const rangs = (selectedFaction?.rangs || []).slice().sort((a, b) => a.ordre - b.ordre)
-                if (!form.faction) return null
+                const selectedFactions = factions.filter(f => (form.factions || []).includes(f.nom))
+                const rangOptions = selectedFactions.flatMap(f => (f.rangs || []).slice().sort((a,b) => a.ordre - b.ordre).map(r => ({ faction: f.nom, ...r })))
+                if (selectedFactions.length === 0) return null
                 return (
                   <div>
                     <label style={S.label}>🎖️ Rang</label>
-                    {rangs.length > 0 ? (
+                    {rangOptions.length > 0 ? (
                       <select style={{ ...S.input }} value={form.rang || ''} onChange={e => setForm(f => ({ ...f, rang: e.target.value }))}>
                         <option value="">— Aucun —</option>
-                        {rangs.map(r => <option key={r.nom} value={r.nom}>{r.nom}</option>)}
+                        {rangOptions.map(r => <option key={`${r.faction}-${r.nom}`} value={r.nom}>{selectedFactions.length > 1 ? `${r.faction} — ${r.nom}` : r.nom}</option>)}
                       </select>
                     ) : (
-                      <div style={{ fontSize:'.8rem', color:'#4a6880', fontStyle:'italic' }}>Cette faction n&apos;a aucun rang défini pour l&apos;instant (Factions → Gérer les rangs).</div>
+                      <div style={{ fontSize:'.8rem', color:'#4a6880', fontStyle:'italic' }}>Aucun rang défini pour {selectedFactions.length > 1 ? 'ces factions' : 'cette faction'} (Factions → Gérer les rangs).</div>
                     )}
                   </div>
                 )
@@ -559,7 +572,7 @@ export default function PersonnagesPage() {
                   { l:'⚓ Équipage', v:selected.equipage||'—', c:'#00c8ff', href:null },
                   { l:'📍 Origine', v:selected.origine||'—', c:'#7a9ab8', href:null },
                   { l:'🏝️ Île', v:selected.ile||'—', c:'#40d060', href: selected.ile ? `/iles?q=${encodeURIComponent(selected.ile)}` : null },
-                  { l:'🏴‍☠️ Faction', v:selected.faction||'—', c:'#ff8c40', href: selected.faction ? `/factions?q=${encodeURIComponent(selected.faction)}` : null },
+                  { l:'🏴‍☠️ Factions', v:(selected.factions && selected.factions.length > 0) ? selected.factions.join(', ') : '—', c:'#ff8c40', href: null },
                   { l:'❤️ Statut', v:selected.statut||'—', c:STATUT_COLORS[selected.statut||''] , href:null},
                 ].map(({l,v,c,href}) => {
                   const tile = (
@@ -639,7 +652,7 @@ export default function PersonnagesPage() {
                 linkedLames.forEach(l => chips.push({ icon:'⚔️', label: l.nom, href:`/lames?q=${encodeURIComponent(l.nom)}` }))
                 linkedCristaux.forEach(c => chips.push({ icon:'💎', label: c.nom, href:`/cristaux?q=${encodeURIComponent(c.nom)}` }))
                 if (selected.ile) chips.push({ icon:'🏝️', label: selected.ile, href:`/iles?q=${encodeURIComponent(selected.ile)}` })
-                if (selected.faction) chips.push({ icon:'🏴‍☠️', label: selected.faction, href:`/factions?q=${encodeURIComponent(selected.faction)}` })
+                ;(selected.factions || []).forEach(fn => chips.push({ icon:'🏴‍☠️', label: fn, href:`/factions?q=${encodeURIComponent(fn)}` }))
                 if (chips.length === 0) return null
                 return (
                   <>

@@ -11,17 +11,23 @@ interface Ile {
   region?: string
   climat?: string
   faction?: string
+  chef?: string
+  ile_parente?: string
   description?: string
   photo?: string
   gdoc?: string
   miro?: string
 }
 
-const REGIONS = ['East Blue', 'West Blue', 'North Blue', 'South Blue', 'Grand Line', 'New World', 'Red Line']
+const SEA_ORDER = ['East Blue', 'West Blue', 'North Blue', 'South Blue', 'Grand Line', 'Red Line', 'New World']
+const REGIONS = [...SEA_ORDER, 'Région inconnue']
 const REGION_COLORS: Record<string, string> = {
   'East Blue': '#00c8ff', 'West Blue': '#4488ff', 'North Blue': '#a060ff',
-  'South Blue': '#40d060', 'Grand Line': '#d4a017', 'New World': '#e03030', 'Red Line': '#ff8c40'
+  'South Blue': '#40d060', 'Grand Line': '#d4a017', 'Red Line': '#ff8c40', 'New World': '#e03030',
+  'Région inconnue': '#7a9ab8'
 }
+const PEUPLE = 'Peuple'
+type SortMode = 'mer' | 'az' | 'za'
 
 const S = {
   page: { minHeight: '100vh', background: '#050d1a', color: '#e8eef5', fontFamily: "'Crimson Pro', Georgia, serif", paddingTop: 60 } as React.CSSProperties,
@@ -49,12 +55,14 @@ export default function IlesPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState('')
   const [factions, setFactions] = useState<{ id: string; nom: string; emoji?: string }[]>([])
+  const [personnages, setPersonnages] = useState<{ id: string; nom: string }[]>([])
+  const [sortMode, setSortMode] = useState<SortMode>('mer')
   const [form, setForm] = useState<Partial<Ile>>({
-    nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', faction: '', description: '', gdoc: '', miro: ''
+    nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', faction: '', chef: '', ile_parente: '', description: '', gdoc: '', miro: ''
   })
 
   useEffect(() => {
-    fetchList(); fetchFactions()
+    fetchList(); fetchFactions(); fetchPersonnages()
     const q = new URLSearchParams(window.location.search).get('q')
     if (q) setSearch(q)
   }, [])
@@ -63,8 +71,15 @@ export default function IlesPage() {
     if (search) l = l.filter(i => i.nom.toLowerCase().includes(search.toLowerCase()))
     if (regionFilter) l = l.filter(i => i.region === regionFilter)
     if (factionFilter) l = l.filter(i => i.faction === factionFilter)
+    l = l.slice().sort((a, b) => {
+      if (sortMode === 'az') return a.nom.localeCompare(b.nom)
+      if (sortMode === 'za') return b.nom.localeCompare(a.nom)
+      const ai = SEA_ORDER.indexOf(a.region || '')
+      const bi = SEA_ORDER.indexOf(b.region || '')
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.nom.localeCompare(b.nom)
+    })
     setFiltered(l)
-  }, [list, search, regionFilter, factionFilter])
+  }, [list, search, regionFilter, factionFilter, sortMode])
 
   async function fetchList() {
     const { data } = await supabase.from('iles').select('*').order('created_at', { ascending: false })
@@ -76,9 +91,14 @@ export default function IlesPage() {
     setFactions(data || [])
   }
 
+  async function fetchPersonnages() {
+    const { data } = await supabase.from('personnages').select('id, nom').order('nom', { ascending: true })
+    setPersonnages(data || [])
+  }
+
   function openForm(ile?: Ile) {
     if (ile) { setForm(ile); setEditId(ile.id); setPhotoPreview(ile.photo || '') }
-    else { setForm({ nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', faction: '', description: '', gdoc: '', miro: '' }); setEditId(null); setPhotoPreview('') }
+    else { setForm({ nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', faction: '', chef: '', ile_parente: '', description: '', gdoc: '', miro: '' }); setEditId(null); setPhotoPreview('') }
     setPhotoFile(null)
     setShowForm(true)
   }
@@ -117,6 +137,7 @@ export default function IlesPage() {
   }
 
   const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Campagne','/campagne'],['Lore','/lore'],['Dashboard','/dashboard']]
+  const personnageMap = new Map(personnages.map(p => [p.nom, p.id]))
 
   return (
     <div style={S.page}>
@@ -151,6 +172,12 @@ export default function IlesPage() {
           <div style={{flex:1,minWidth:220,position:'relative'}}>
             <span style={{position:'absolute',left:'.75rem',top:'50%',transform:'translateY(-50%)',color:'#4a6880'}}>🔍</span>
             <input style={{...S.input,paddingLeft:'2.5rem'}} placeholder="Rechercher une île..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <div style={{display:'flex',gap:'.3rem',alignItems:'center'}}>
+            <span style={{fontFamily:"'Cinzel',serif",fontSize:'.56rem',letterSpacing:'.08em',textTransform:'uppercase',color:'#4a6880'}}>Trier :</span>
+            {([['mer','🌊 Ordre des mers'],['az','A→Z'],['za','Z→A']] as [SortMode,string][]).map(([mode,label]) => (
+              <button key={mode} onClick={() => setSortMode(mode)} style={{background:sortMode===mode?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${sortMode===mode?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .7rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.05em',color:sortMode===mode?'#f0c040':'#7a9ab8',cursor:'pointer',whiteSpace:'nowrap'}}>{label}</button>
+            ))}
           </div>
         </div>
         <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',marginBottom:'1.25rem'}}>
@@ -194,7 +221,17 @@ export default function IlesPage() {
               <div style={{padding:'1.1rem'}}>
                 <div style={{fontFamily:"'Cinzel',serif",fontSize:'1.08rem',fontWeight:700,color:'#e8eef5',marginBottom:'.2rem'}}>{ile.nom}</div>
                 {ile.climat && <div style={{fontSize:'.78rem',color:'#4a6880',marginBottom:'.6rem'}}>🌤 {ile.climat}</div>}
-                {ile.faction && <a href={`/factions?q=${encodeURIComponent(ile.faction)}`} style={{display:'block',fontSize:'.78rem',color:'#f0c040',marginBottom:'.6rem',textDecoration:'none'}}>⚔️ {ile.faction}</a>}
+                {ile.ile_parente && <a href={`/iles?q=${encodeURIComponent(ile.ile_parente)}`} style={{display:'block',fontSize:'.78rem',color:'#7a9ab8',marginBottom:'.6rem',textDecoration:'none'}}>↳ Sous-île de {ile.ile_parente}</a>}
+                {ile.faction && (
+                  ile.faction === PEUPLE
+                    ? <div style={{fontSize:'.78rem',color:'#f0c040',marginBottom:'.6rem'}}>👥 Peuple</div>
+                    : <a href={`/factions?q=${encodeURIComponent(ile.faction)}`} style={{display:'block',fontSize:'.78rem',color:'#f0c040',marginBottom:'.6rem',textDecoration:'none'}}>⚔️ {ile.faction}</a>
+                )}
+                {ile.chef && (
+                  personnageMap.has(ile.chef)
+                    ? <a href={`/personnages?open=${personnageMap.get(ile.chef)}`} style={{display:'block',fontSize:'.78rem',color:'#a060ff',marginBottom:'.6rem',textDecoration:'none'}}>👑 {ile.chef}</a>
+                    : <div style={{fontSize:'.78rem',color:'#a060ff',marginBottom:'.6rem'}}>👑 {ile.chef}</div>
+                )}
                 {ile.description && <div style={{fontSize:'.88rem',color:'#7a9ab8',lineHeight:1.6,fontStyle:'italic',marginBottom:'.75rem'}}>{ile.description}</div>}
                 <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center'}}>
                   {ile.gdoc && <a href={ile.gdoc} target="_blank" rel="noopener" style={{background:'rgba(66,133,244,.12)',color:'#6aabff',border:'1px solid rgba(66,133,244,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>📄 Doc</a>}
@@ -247,11 +284,28 @@ export default function IlesPage() {
                 </div>
                 <div><label style={S.label}>Climat</label><input style={S.input} value={form.climat||''} onChange={e=>setForm(f=>({...f,climat:e.target.value}))} placeholder="Tropical, tempétueux..." /></div>
               </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'.85rem'}}>
+                <div>
+                  <label style={S.label}>⚔️ Faction liée</label>
+                  <select style={{...S.input}} value={form.faction || ''} onChange={e => setForm(f => ({...f, faction: e.target.value}))}>
+                    <option value="">— Aucune —</option>
+                    <option value={PEUPLE}>👥 Peuple</option>
+                    {factions.map(f => <option key={f.id} value={f.nom}>{f.nom}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={S.label}>👑 Chef de l&apos;île</label>
+                  <select style={{...S.input}} value={form.chef || ''} onChange={e => setForm(f => ({...f, chef: e.target.value}))}>
+                    <option value="">— Aucun —</option>
+                    {personnages.map(p => <option key={p.id} value={p.nom}>{p.nom}</option>)}
+                  </select>
+                </div>
+              </div>
               <div>
-                <label style={S.label}>⚔️ Faction liée</label>
-                <select style={{...S.input}} value={form.faction || ''} onChange={e => setForm(f => ({...f, faction: e.target.value}))}>
+                <label style={S.label}>↳ Île parente (sous-catégorie de)</label>
+                <select style={{...S.input}} value={form.ile_parente || ''} onChange={e => setForm(f => ({...f, ile_parente: e.target.value}))}>
                   <option value="">— Aucune —</option>
-                  {factions.map(f => <option key={f.id} value={f.nom}>{f.nom}</option>)}
+                  {list.filter(i => i.id !== editId).map(i => <option key={i.id} value={i.nom}>{i.nom}</option>)}
                 </select>
               </div>
               <div><label style={S.label}>Description</label><textarea style={{...S.input,minHeight:100,resize:'vertical',lineHeight:1.7}} value={form.description||''} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="Description de l'île..." /></div>
