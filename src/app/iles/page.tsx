@@ -177,7 +177,7 @@ export default function IlesPage() {
     fetchList()
   }
 
-  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Journaux','/journaux'],['Lore','/lore'],['Dashboard','/dashboard']]
+  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Relations','/relations'],['Journaux','/journaux'],['Lore','/lore'],['Dashboard','/dashboard']]
   const personnageMap = new Map(personnages.map(p => [p.nom, p.id]))
   const byName = new Map(filtered.map(i => [i.nom, i]))
   function hasPresentArchipelParent(ile: Ile) {

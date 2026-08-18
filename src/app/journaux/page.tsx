@@ -137,7 +137,7 @@ export default function JournauxPage() {
     return isNaN(dt.getTime()) ? d : dt.toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' })
   }
 
-  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Journaux','/journaux'],['Lore','/lore'],['Dashboard','/dashboard']]
+  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Relations','/relations'],['Journaux','/journaux'],['Lore','/lore'],['Dashboard','/dashboard']]
 
   return (
     <div style={S.page}>

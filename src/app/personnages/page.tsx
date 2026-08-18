@@ -58,30 +58,53 @@ function personnageRangs(p: Personnage): PersonnageRang[] {
   if (p.rang) return [{ faction: p.equipage || '', rang: p.rang }]
   return []
 }
-function getRangOrdre(p: Personnage, factions: FactionRef[]): number {
-  const rangs = personnageRangs(p)
-  const eqEntry = rangs.find(r => r.faction === p.equipage) || rangs[0]
-  if (eqEntry) {
-    const fac = factions.find(f => f.nom === eqEntry.faction)
-    const match = fac?.rangs?.find(r => r.nom === eqEntry.rang)
-    if (match) return match.ordre
-  }
-  for (const r of rangs) {
-    const match = factions.find(f => f.nom === r.faction)?.rangs?.find(rr => rr.nom === r.rang)
-    if (match) return match.ordre
-  }
-  return Infinity
-}
-function sortPersonnages(items: Personnage[], mode: SortMode, factions: FactionRef[]) {
+function sortPersonnages(items: Personnage[], mode: SortMode) {
   if (mode === 'prime') return items.slice().sort((a, b) => parsePrime(b.prime) - parsePrime(a.prime))
-  if (mode === 'groupe') return items.slice().sort((a, b) => {
-    const g = (a.equipage || 'zzz').localeCompare(b.equipage || 'zzz')
-    if (g !== 0) return g
-    const ro = getRangOrdre(a, factions) - getRangOrdre(b, factions)
-    if (ro !== 0) return ro
-    return a.nom.localeCompare(b.nom)
-  })
   return items
+}
+function personnageGroups(p: Personnage): string[] {
+  const set = new Set<string>()
+  ;(p.factions || []).forEach(f => f && set.add(f))
+  if (p.equipage) set.add(p.equipage)
+  return Array.from(set)
+}
+function getRangOrdreForFaction(p: Personnage, factionNom: string, factions: FactionRef[]): number {
+  const entry = personnageRangs(p).find(r => r.faction === factionNom)
+  if (!entry) return Infinity
+  const match = factions.find(f => f.nom === factionNom)?.rangs?.find(r => r.nom === entry.rang)
+  return match ? match.ordre : Infinity
+}
+interface GroupSection { faction: string; members: Personnage[] }
+function buildGroupSections(items: Personnage[], factions: FactionRef[]): GroupSection[] {
+  const map = new Map<string, Personnage[]>()
+  items.forEach(p => {
+    const groups = personnageGroups(p)
+    const keys = groups.length > 0 ? groups : ['']
+    keys.forEach(g => {
+      if (!map.has(g)) map.set(g, [])
+      map.get(g)!.push(p)
+    })
+  })
+  const names = Array.from(map.keys())
+  const hasEmperor = (g: string) => (map.get(g) || []).some(p => p.titre_mondial === 'Empereur')
+  names.sort((a, b) => {
+    if (a === '' || b === '') return a === '' ? 1 : (b === '' ? -1 : 0)
+    const ea = hasEmperor(a) ? 0 : 1
+    const eb = hasEmperor(b) ? 0 : 1
+    if (ea !== eb) return ea - eb
+    return a.localeCompare(b)
+  })
+  return names.map(g => ({
+    faction: g,
+    members: (map.get(g) || []).slice().sort((a, b) => {
+      const ea = a.titre_mondial === 'Empereur' ? 0 : 1
+      const eb = b.titre_mondial === 'Empereur' ? 0 : 1
+      if (ea !== eb) return ea - eb
+      const ro = getRangOrdreForFaction(a, g, factions) - getRangOrdreForFaction(b, g, factions)
+      if (ro !== 0) return ro
+      return a.nom.localeCompare(b.nom)
+    })
+  }))
 }
 
 const S = {
@@ -290,9 +313,81 @@ export default function PersonnagesPage() {
   const navLinks = [
     ['Accueil', '/'], ['Personnages', '/personnages'], ['Fruits', '/fruits'],
     ['Despas', '/despas'], ['Lames', '/lames'], ['Cristaux', '/cristaux'],
-    ['Îles', '/iles'], ['Factions', '/factions'], ['Journaux', '/journaux'],
+    ['Îles', '/iles'], ['Factions', '/factions'], ['Relations', '/relations'], ['Journaux', '/journaux'],
     ['Lore', '/lore'], ['Dashboard', '/dashboard']
   ]
+
+  function renderCard(p: Personnage, key: string) {
+    const isMort = p.statut === 'mort'
+    const tm = p.titre_mondial ? TITRE_MONDIAL[p.titre_mondial] : null
+    const linkedDespa = despas.find(d => d.proprietaire === p.nom)
+    return (
+      <div key={key} style={{ ...S.card, ...(tm ? { border:`2px solid ${tm.color}`, boxShadow:`0 0 22px ${tm.color}33` } : {}) }}
+        onMouseEnter={e => { const el = e.currentTarget; el.style.transform='translateY(-7px)'; if(!tm) el.style.borderColor='#d4a017'; el.style.boxShadow= tm ? `0 0 30px ${tm.color}55` : '0 20px 40px rgba(0,0,0,.5)' }}
+        onMouseLeave={e => { const el = e.currentTarget; el.style.transform='none'; if(!tm) el.style.borderColor='rgba(30,120,200,.2)'; el.style.boxShadow= tm ? `0 0 22px ${tm.color}33` : 'none' }}
+      >
+        {/* Image */}
+        <div style={{ width:'100%', height:195, overflow:'hidden', background:'linear-gradient(135deg,#0a1829,#050d1a)', position:'relative', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'5rem', cursor:'pointer' }}
+          onClick={() => { setSelected(p); setShowView(true) }}>
+          {p.photos && p.photos[0]
+            ? <img src={p.photos[0]} alt={p.nom} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top', display:'block', position:'absolute', inset:0, filter: isMort ? 'grayscale(1)' : 'none', opacity: isMort ? .5 : 1 }} />
+            : null}
+          <span style={{ position:'relative', zIndex:1, opacity: p.photos && p.photos[0] ? 0 : 1 }}>{p.emoji || '👤'}</span>
+          {isMort && <span style={{ position:'absolute', fontSize:'3.2rem', opacity:.85, zIndex:2, filter:'drop-shadow(0 2px 6px rgba(0,0,0,.8))' }}>☠️</span>}
+          {tm && (
+            <div style={{ position:'absolute', top:8, left:8, zIndex:3, background:`${tm.color}dd`, color:'#050d1a', borderRadius:100, padding:'.2rem .6rem', fontFamily:"'Cinzel',serif", fontSize:'.55rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', display:'flex', alignItems:'center', gap:'.3rem' }}>
+              {tm.icon} {tm.label}
+            </div>
+          )}
+          <div style={{ position:'absolute', bottom:0, left:0, right:0, height:55, background:'linear-gradient(to top,#0d2040,transparent)', pointerEvents:'none' }} />
+        </div>
+
+        <div style={{ padding:'1.1rem' }}>
+          {/* Type badge */}
+          <div style={{ display:'inline-block', borderRadius:100, padding:'.18rem .6rem', fontFamily:"'Cinzel',serif", fontSize:'.52rem', letterSpacing:'.09em', textTransform:'uppercase', marginBottom:'.45rem', background:`${TYPE_COLORS[p.type]}22`, color:TYPE_COLORS[p.type], border:`1px solid ${TYPE_COLORS[p.type]}44` }}>
+            {p.type.toUpperCase()}
+          </div>
+
+          <div style={{ fontFamily:"'Cinzel',serif", fontSize:'1.05rem', fontWeight:700, color: isMort ? '#7a9ab8' : '#e8eef5', textDecoration: isMort ? 'line-through' : 'none', marginBottom:'.12rem', cursor:'pointer' }} onClick={() => { setSelected(p); setShowView(true) }}>
+            {p.nom}
+          </div>
+          {p.surnom && <div style={{ fontStyle:'italic', color:'#7a9ab8', fontSize:'.82rem', marginBottom:'.3rem' }}>"{p.surnom}"</div>}
+          {personnageRangs(p).length > 0 && (
+            <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.68rem', color:'#a060ff', marginBottom:'.5rem' }}>
+              {personnageRangs(p).map(r => `🎖️ ${r.rang}`).join('  ·  ')}
+            </div>
+          )}
+
+          <div style={{ fontSize:'.82rem', color:'#7a9ab8', marginBottom:'.15rem' }}>⭐ <span style={{ color:'#f0c040', fontFamily:"'Cinzel',serif", fontWeight:700 }}>{p.prime} 🍖</span></div>
+          <div style={{ fontSize:'.62rem', color:'#e03030', fontFamily:"'Cinzel',serif", letterSpacing:'.06em', textTransform:'uppercase', marginBottom:'.4rem' }}>{CONDITION_PRIME_LABELS[p.condition_prime||'mort_ou_vif']}</div>
+          {p.equipage && <div style={{ fontSize:'.82rem', color:'#7a9ab8', marginBottom:'.4rem' }}>⚓ {p.equipage}</div>}
+          {p.fruit && p.fruit !== 'Aucun' && <div style={{ fontSize:'.82rem', color:'#7a9ab8' }}>🍎 {p.fruit}</div>}
+          {linkedDespa && <div style={{ fontSize:'.82rem', color:'#7a9ab8' }}>🦾 {linkedDespa.nom}</div>}
+
+          {/* Tags */}
+          {p.tags && (
+            <div style={{ display:'flex', gap:'.3rem', flexWrap:'wrap', marginTop:'.6rem' }}>
+              {p.tags.split(',').map(t => t.trim()).filter(Boolean).map(t => (
+                <span key={t} style={{ background:'rgba(10,30,53,.8)', border:'1px solid rgba(30,120,200,.2)', borderRadius:4, padding:'.12rem .45rem', fontFamily:"'Cinzel',serif", fontSize:'.48rem', letterSpacing:'.05em', textTransform:'uppercase', color:'#4a6880' }}>{t}</span>
+              ))}
+            </div>
+          )}
+
+          {/* Links + actions */}
+          <div style={{ display:'flex', gap:'.4rem', marginTop:'.75rem', flexWrap:'wrap', alignItems:'center' }}>
+            {p.gdoc && <a href={p.gdoc} target="_blank" rel="noopener" style={{ background:'rgba(66,133,244,.12)', color:'#6aabff', border:'1px solid rgba(66,133,244,.25)', borderRadius:6, padding:'.18rem .5rem', fontFamily:"'Cinzel',serif", fontSize:'.48rem', textDecoration:'none' }}>📄 Doc</a>}
+            {p.miro && <a href={p.miro} target="_blank" rel="noopener" style={{ background:'rgba(255,196,0,.1)', color:'#ffc400', border:'1px solid rgba(255,196,0,.25)', borderRadius:6, padding:'.18rem .5rem', fontFamily:"'Cinzel',serif", fontSize:'.48rem', textDecoration:'none' }}>🗒 Miro</a>}
+            <div style={{ marginLeft:'auto', display:'flex', gap:'.3rem' }}>
+              <button onClick={() => toggleFav(p)} style={{ background:'none', border:'1px solid rgba(30,120,200,.2)', borderRadius:'50%', width:28, height:28, color: p.fav?'#d4a017':'#4a6880', cursor:'pointer', fontSize:'.8rem' }}>{p.fav?'♥':'♡'}</button>
+              <button onClick={() => duplicatePerso(p)} title="Dupliquer" style={{ background:'rgba(160,96,255,.1)', border:'1px solid rgba(160,96,255,.25)', borderRadius:8, padding:'.2rem .5rem', color:'#a060ff', cursor:'pointer', fontSize:'.7rem', fontFamily:"'Cinzel',serif" }}>⧉</button>
+              <button onClick={() => openForm(p)} style={{ background:'rgba(0,200,255,.1)', border:'1px solid rgba(0,200,255,.25)', borderRadius:8, padding:'.2rem .5rem', color:'#00c8ff', cursor:'pointer', fontSize:'.7rem', fontFamily:"'Cinzel',serif" }}>✏️</button>
+              <button onClick={() => deletePerso(p.id)} style={{ background:'rgba(224,48,48,.1)', border:'1px solid rgba(224,48,48,.25)', borderRadius:8, padding:'.2rem .5rem', color:'#ff6060', cursor:'pointer', fontSize:'.7rem', fontFamily:"'Cinzel',serif" }}>🗑</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={S.page}>
@@ -376,91 +471,20 @@ export default function PersonnagesPage() {
             <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter le premier</button>
           </div>
         )}
-        {sortPersonnages(filtered, sortMode, factions).flatMap((p, idx, arr) => {
-          const nodes: React.ReactNode[] = []
-          if (sortMode === 'groupe') {
-            const g = p.equipage || 'Sans groupe'
-            const prevG = idx > 0 ? (arr[idx-1].equipage || 'Sans groupe') : null
-            if (g !== prevG) {
-              nodes.push(
-                <div key={`div-${g}-${idx}`} style={{ gridColumn:'1/-1', display:'flex', alignItems:'center', gap:'.75rem', margin: idx===0 ? '0 0 .2rem' : '1.4rem 0 .2rem' }}>
-                  <span style={{ fontFamily:"'Cinzel',serif", fontSize:'.68rem', letterSpacing:'.12em', textTransform:'uppercase', color:'#f0c040' }}>⚓ {g}</span>
+        {sortMode === 'groupe'
+          ? buildGroupSections(filtered, factions).flatMap((section, si) => {
+              const nodes: React.ReactNode[] = [
+                <div key={`div-${section.faction || 'none'}`} style={{ gridColumn:'1/-1', display:'flex', alignItems:'center', gap:'.75rem', margin: si===0 ? '0 0 .2rem' : '1.4rem 0 .2rem' }}>
+                  <span style={{ fontFamily:"'Cinzel',serif", fontSize:'.68rem', letterSpacing:'.12em', textTransform:'uppercase', color:'#f0c040' }}>
+                    {section.members.some(p => p.titre_mondial === 'Empereur') && '👑 '}⚓ {section.faction || 'Sans groupe'}
+                  </span>
                   <div style={{ flex:1, height:1, background:'rgba(212,160,23,.25)' }} />
                 </div>
-              )
-            }
-          }
-          const isMort = p.statut === 'mort'
-          const tm = p.titre_mondial ? TITRE_MONDIAL[p.titre_mondial] : null
-          const linkedDespa = despas.find(d => d.proprietaire === p.nom)
-          nodes.push(
-          <div key={p.id} style={{ ...S.card, ...(tm ? { border:`2px solid ${tm.color}`, boxShadow:`0 0 22px ${tm.color}33` } : {}) }}
-            onMouseEnter={e => { const el = e.currentTarget; el.style.transform='translateY(-7px)'; if(!tm) el.style.borderColor='#d4a017'; el.style.boxShadow= tm ? `0 0 30px ${tm.color}55` : '0 20px 40px rgba(0,0,0,.5)' }}
-            onMouseLeave={e => { const el = e.currentTarget; el.style.transform='none'; if(!tm) el.style.borderColor='rgba(30,120,200,.2)'; el.style.boxShadow= tm ? `0 0 22px ${tm.color}33` : 'none' }}
-          >
-            {/* Image */}
-            <div style={{ width:'100%', height:195, overflow:'hidden', background:'linear-gradient(135deg,#0a1829,#050d1a)', position:'relative', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'5rem', cursor:'pointer' }}
-              onClick={() => { setSelected(p); setShowView(true) }}>
-              {p.photos && p.photos[0]
-                ? <img src={p.photos[0]} alt={p.nom} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top', display:'block', position:'absolute', inset:0, filter: isMort ? 'grayscale(1)' : 'none', opacity: isMort ? .5 : 1 }} />
-                : null}
-              <span style={{ position:'relative', zIndex:1, opacity: p.photos && p.photos[0] ? 0 : 1 }}>{p.emoji || '👤'}</span>
-              {isMort && <span style={{ position:'absolute', fontSize:'3.2rem', opacity:.85, zIndex:2, filter:'drop-shadow(0 2px 6px rgba(0,0,0,.8))' }}>☠️</span>}
-              {tm && (
-                <div style={{ position:'absolute', top:8, left:8, zIndex:3, background:`${tm.color}dd`, color:'#050d1a', borderRadius:100, padding:'.2rem .6rem', fontFamily:"'Cinzel',serif", fontSize:'.55rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', display:'flex', alignItems:'center', gap:'.3rem' }}>
-                  {tm.icon} {tm.label}
-                </div>
-              )}
-              <div style={{ position:'absolute', bottom:0, left:0, right:0, height:55, background:'linear-gradient(to top,#0d2040,transparent)', pointerEvents:'none' }} />
-            </div>
-
-            <div style={{ padding:'1.1rem' }}>
-              {/* Type badge */}
-              <div style={{ display:'inline-block', borderRadius:100, padding:'.18rem .6rem', fontFamily:"'Cinzel',serif", fontSize:'.52rem', letterSpacing:'.09em', textTransform:'uppercase', marginBottom:'.45rem', background:`${TYPE_COLORS[p.type]}22`, color:TYPE_COLORS[p.type], border:`1px solid ${TYPE_COLORS[p.type]}44` }}>
-                {p.type.toUpperCase()}
-              </div>
-
-              <div style={{ fontFamily:"'Cinzel',serif", fontSize:'1.05rem', fontWeight:700, color: isMort ? '#7a9ab8' : '#e8eef5', textDecoration: isMort ? 'line-through' : 'none', marginBottom:'.12rem', cursor:'pointer' }} onClick={() => { setSelected(p); setShowView(true) }}>
-                {p.nom}
-              </div>
-              {p.surnom && <div style={{ fontStyle:'italic', color:'#7a9ab8', fontSize:'.82rem', marginBottom:'.3rem' }}>"{p.surnom}"</div>}
-              {personnageRangs(p).length > 0 && (
-                <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.68rem', color:'#a060ff', marginBottom:'.5rem' }}>
-                  {personnageRangs(p).map(r => `🎖️ ${r.rang}`).join('  ·  ')}
-                </div>
-              )}
-
-              <div style={{ fontSize:'.82rem', color:'#7a9ab8', marginBottom:'.15rem' }}>⭐ <span style={{ color:'#f0c040', fontFamily:"'Cinzel',serif", fontWeight:700 }}>{p.prime} 🍖</span></div>
-              <div style={{ fontSize:'.62rem', color:'#e03030', fontFamily:"'Cinzel',serif", letterSpacing:'.06em', textTransform:'uppercase', marginBottom:'.4rem' }}>{CONDITION_PRIME_LABELS[p.condition_prime||'mort_ou_vif']}</div>
-              {p.equipage && <div style={{ fontSize:'.82rem', color:'#7a9ab8', marginBottom:'.4rem' }}>⚓ {p.equipage}</div>}
-              {p.fruit && p.fruit !== 'Aucun' && <div style={{ fontSize:'.82rem', color:'#7a9ab8' }}>🍎 {p.fruit}</div>}
-              {linkedDespa && <div style={{ fontSize:'.82rem', color:'#7a9ab8' }}>🦾 {linkedDespa.nom}</div>}
-
-              {/* Tags */}
-              {p.tags && (
-                <div style={{ display:'flex', gap:'.3rem', flexWrap:'wrap', marginTop:'.6rem' }}>
-                  {p.tags.split(',').map(t => t.trim()).filter(Boolean).map(t => (
-                    <span key={t} style={{ background:'rgba(10,30,53,.8)', border:'1px solid rgba(30,120,200,.2)', borderRadius:4, padding:'.12rem .45rem', fontFamily:"'Cinzel',serif", fontSize:'.48rem', letterSpacing:'.05em', textTransform:'uppercase', color:'#4a6880' }}>{t}</span>
-                  ))}
-                </div>
-              )}
-
-              {/* Links + actions */}
-              <div style={{ display:'flex', gap:'.4rem', marginTop:'.75rem', flexWrap:'wrap', alignItems:'center' }}>
-                {p.gdoc && <a href={p.gdoc} target="_blank" rel="noopener" style={{ background:'rgba(66,133,244,.12)', color:'#6aabff', border:'1px solid rgba(66,133,244,.25)', borderRadius:6, padding:'.18rem .5rem', fontFamily:"'Cinzel',serif", fontSize:'.48rem', textDecoration:'none' }}>📄 Doc</a>}
-                {p.miro && <a href={p.miro} target="_blank" rel="noopener" style={{ background:'rgba(255,196,0,.1)', color:'#ffc400', border:'1px solid rgba(255,196,0,.25)', borderRadius:6, padding:'.18rem .5rem', fontFamily:"'Cinzel',serif", fontSize:'.48rem', textDecoration:'none' }}>🗒 Miro</a>}
-                <div style={{ marginLeft:'auto', display:'flex', gap:'.3rem' }}>
-                  <button onClick={() => toggleFav(p)} style={{ background:'none', border:'1px solid rgba(30,120,200,.2)', borderRadius:'50%', width:28, height:28, color: p.fav?'#d4a017':'#4a6880', cursor:'pointer', fontSize:'.8rem' }}>{p.fav?'♥':'♡'}</button>
-                  <button onClick={() => duplicatePerso(p)} title="Dupliquer" style={{ background:'rgba(160,96,255,.1)', border:'1px solid rgba(160,96,255,.25)', borderRadius:8, padding:'.2rem .5rem', color:'#a060ff', cursor:'pointer', fontSize:'.7rem', fontFamily:"'Cinzel',serif" }}>⧉</button>
-                  <button onClick={() => openForm(p)} style={{ background:'rgba(0,200,255,.1)', border:'1px solid rgba(0,200,255,.25)', borderRadius:8, padding:'.2rem .5rem', color:'#00c8ff', cursor:'pointer', fontSize:'.7rem', fontFamily:"'Cinzel',serif" }}>✏️</button>
-                  <button onClick={() => deletePerso(p.id)} style={{ background:'rgba(224,48,48,.1)', border:'1px solid rgba(224,48,48,.25)', borderRadius:8, padding:'.2rem .5rem', color:'#ff6060', cursor:'pointer', fontSize:'.7rem', fontFamily:"'Cinzel',serif" }}>🗑</button>
-                </div>
-              </div>
-            </div>
-          </div>
-          )
-          return nodes
-        })}
+              ]
+              section.members.forEach(p => nodes.push(renderCard(p, `${section.faction || 'none'}-${p.id}`)))
+              return nodes
+            })
+          : sortPersonnages(filtered, sortMode).map(p => renderCard(p, p.id))}
       </div>
 
       {/* ===== FORM MODAL ===== */}
