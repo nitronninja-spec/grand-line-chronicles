@@ -79,7 +79,7 @@ export default function DashboardPage() {
   }
 
   const totalEntries = Object.values(stats).reduce((a, b) => a + b, 0)
-  const navLinks = [['Accueil', '/'], ['Personnages', '/personnages'], ['Fruits', '/fruits'], ['Despas', '/despas'], ['Lames', '/lames'], ['Cristaux', '/cristaux'], ['Îles', '/iles'], ['Factions', '/factions'], ['Relations', '/relations'], ['Journaux', '/journaux'], ['Lore', '/lore'], ['Dashboard', '/dashboard']]
+  const navLinks = [['Accueil', '/'], ['Personnages', '/personnages'], ['Fruits', '/fruits'], ['Despas', '/despas'], ['Lames', '/lames'], ['Cristaux', '/cristaux'], ['Îles', '/iles'], ['Factions', '/factions'], ['Journaux', '/journaux'], ['Lore', '/lore'], ['Dashboard', '/dashboard']]
 
   return (
     <div style={{ minHeight: '100vh', background: '#050d1a', color: '#e8eef5', fontFamily: "'Crimson Pro', Georgia, serif", paddingTop: 60 }}>

@@ -313,7 +313,7 @@ export default function PersonnagesPage() {
   const navLinks = [
     ['Accueil', '/'], ['Personnages', '/personnages'], ['Fruits', '/fruits'],
     ['Despas', '/despas'], ['Lames', '/lames'], ['Cristaux', '/cristaux'],
-    ['Îles', '/iles'], ['Factions', '/factions'], ['Relations', '/relations'], ['Journaux', '/journaux'],
+    ['Îles', '/iles'], ['Factions', '/factions'], ['Journaux', '/journaux'],
     ['Lore', '/lore'], ['Dashboard', '/dashboard']
   ]
 
