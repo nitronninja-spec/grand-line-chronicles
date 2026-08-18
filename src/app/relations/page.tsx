@@ -180,13 +180,11 @@ export default function RelationsPage() {
     setRelations(data || [])
   }
 
-  const NEST_THRESHOLD = 8
-
   function onNodePointerDown(e: React.PointerEvent, id: string) {
     if (!canvasRef.current) return
     e.stopPropagation()
     setDragging({ id, rect: canvasRef.current.getBoundingClientRect(), moved: false })
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    try { (e.target as HTMLElement).setPointerCapture(e.pointerId) } catch { /* pointeur déjà relâché, sans conséquence */ }
   }
   function onNodePointerMove(e: React.PointerEvent) {
     if (!dragging) return
@@ -197,15 +195,27 @@ export default function RelationsPage() {
     y = Math.min(94, Math.max(6, y))
     setDragging(d => d && { ...d, moved: true })
     setPositions(p => ({ ...p, [dragging.id]: { x, y } }))
+
+    // Test de collision en pixels réels contre les autres nœuds affichés à l'écran : la
+    // grille logique (0-100) est étirée de façon non uniforme sur un canevas large et bas,
+    // donc comparer des distances dans cet espace logique rendait la cible très difficile à
+    // atteindre verticalement. On compare ici directement les coordonnées écran du pointeur
+    // aux rectangles réels des cercles, avec une marge généreuse pour faciliter le dépôt.
     let nearest: string | null = null
-    let nearestDist = NEST_THRESHOLD
-    factions.forEach(f => {
-      if (f.id === dragging.id) return
-      const p2 = positions[f.id]
-      if (!p2) return
-      const d = Math.hypot(x - p2.x, y - p2.y)
-      if (d < nearestDist) { nearestDist = d; nearest = f.id }
-    })
+    let bestDist = Infinity
+    if (canvasRef.current) {
+      canvasRef.current.querySelectorAll<HTMLElement>('[data-faction-id]').forEach(el => {
+        const fid = el.getAttribute('data-faction-id')
+        if (!fid || fid === dragging.id) return
+        const circle = el.querySelector('.rel-node-circle')
+        if (!circle) return
+        const cr = circle.getBoundingClientRect()
+        const ccx = cr.left + cr.width / 2, ccy = cr.top + cr.height / 2
+        const d = Math.hypot(e.clientX - ccx, e.clientY - ccy)
+        const hitRadius = cr.width / 2 + 40
+        if (d < hitRadius && d < bestDist) { bestDist = d; nearest = fid }
+      })
+    }
     setNestTarget(nearest)
   }
   async function onNodePointerUp() {
@@ -366,6 +376,12 @@ export default function RelationsPage() {
               </div>
             )}
 
+            {dragging && (
+              <div style={{ position:'absolute', top:'.75rem', left:'50%', transform:'translateX(-50%)', zIndex:10, pointerEvents:'none', background: nestTarget ? 'rgba(64,208,96,.18)' : 'rgba(5,13,26,.85)', border:`1px solid ${nestTarget ? '#40d060' : 'rgba(30,120,200,.3)'}`, borderRadius:100, padding:'.4rem 1rem', fontFamily:"'Cinzel',serif", fontSize:'.68rem', color: nestTarget ? '#40d060' : '#7a9ab8', whiteSpace:'nowrap' }}>
+                {nestTarget ? `📁 Relâche pour ranger dans ${factions.find(f => f.id === nestTarget)?.nom}` : 'Glisse sur une faction pour la ranger dedans'}
+              </div>
+            )}
+
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }}>
               {/* Anneau-repère du cercle */}
               <circle cx={CIRCLE_CENTER.x} cy={CIRCLE_CENTER.y} r={CIRCLE_R} fill="none" stroke="rgba(122,154,184,.18)" strokeWidth={0.25} strokeDasharray="0.8 1" />
@@ -420,7 +436,7 @@ export default function RelationsPage() {
               const size = isNested ? 50 : 66
               const childCount = f.est_dossier ? factions.filter(c => c.id !== f.id && (c.factions_parentes || []).includes(f.nom)).length : 0
               return (
-                <div key={f.id} className="rel-node"
+                <div key={f.id} className="rel-node" data-faction-id={f.id}
                   onPointerDown={e => onNodePointerDown(e, f.id)}
                   onPointerMove={onNodePointerMove}
                   onPointerUp={onNodePointerUp}
