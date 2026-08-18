@@ -180,6 +180,7 @@ export default function RelationsPage() {
   const [dragging, setDragging] = useState<{ id: string; rect: DOMRect; moved: boolean } | null>(null)
   const [nestTarget, setNestTarget] = useState<string | null>(null)
   const [highlight, setHighlight] = useState<string | null>(null)
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [showRelForm, setShowRelForm] = useState(false)
   const [relEditId, setRelEditId] = useState<string | null>(null)
   const [relForm, setRelForm] = useState<Partial<Relation>>({ faction_a: '', faction_b: '', type: 'alliance', note: '' })
@@ -197,6 +198,14 @@ export default function RelationsPage() {
   async function fetchRelations() {
     const { data } = await supabase.from('faction_relations').select('*').order('created_at', { ascending: true })
     setRelations(data || [])
+  }
+
+  function toggleFolder(id: string) {
+    setExpandedFolders(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
   }
 
   function onNodePointerDown(e: React.PointerEvent, id: string) {
@@ -258,9 +267,10 @@ export default function RelationsPage() {
         await supabase.from('factions').update({ rel_x: pos.x, rel_y: pos.y }).eq('id', id)
       } else {
         // Déposée sur une autre faction : celle-ci devient (ou reste) un dossier, et la
-        // faction déplacée y est rangée.
+        // faction déplacée y est rangée. On déplie le dossier pour montrer le résultat.
         if (!target.est_dossier) await supabase.from('factions').update({ est_dossier: true }).eq('id', target.id)
         await supabase.from('factions').update({ factions_parentes: [target.nom], rel_x: pos.x, rel_y: pos.y }).eq('id', id)
+        setExpandedFolders(prev => new Set(prev).add(target!.id))
       }
     } else if (currentParentNom) {
       // Éloignée de son dossier : elle en ressort.
@@ -343,7 +353,7 @@ export default function RelationsPage() {
             <h1 style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'clamp(1.8rem,3.5vw,3rem)', fontWeight:700, background:'linear-gradient(135deg,#fff,#f0c040)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
               Relations entre factions
             </h1>
-            <p style={{ color:'#7a9ab8', fontSize:'.9rem', marginTop:'.3rem' }}>Glisse une faction sur une autre pour la ranger dedans (elle devient un dossier 📁) · clique un nœud pour surligner ses liens · clique un lien pour le modifier.</p>
+            <p style={{ color:'#7a9ab8', fontSize:'.9rem', marginTop:'.3rem' }}>Glisse une faction sur une autre pour la ranger dedans (elle devient un dossier 📁, replié par défaut — clique le badge ▸ pour déplier) · clique un nœud pour surligner ses liens · clique un lien pour le modifier.</p>
           </div>
           <div style={{ display:'flex', gap:'.6rem' }}>
             <button style={S.btnCyan} onClick={applyOptimalLayout} title="Cercle régulier, factions groupées par type, aucun chevauchement">✨ Disposition optimale</button>
@@ -374,6 +384,19 @@ export default function RelationsPage() {
           ))}
         </div>
 
+        {(() => {
+          // Une faction rangée dans un dossier n'apparaît sur le schéma que si ce dossier
+          // est déplié — replié par défaut, comme un menu déroulant.
+          function isVisible(f: Faction): boolean {
+            const parentNom = f.factions_parentes?.[0]
+            if (!parentNom) return true
+            const parent = factions.find(x => x.nom === parentNom && x.est_dossier)
+            if (!parent) return true
+            return expandedFolders.has(parent.id)
+          }
+          const visibleFactions = factions.filter(isVisible)
+          return (
+        <>
         {/* Canvas */}
         {factions.length === 0 ? (
           <div style={{ textAlign:'center', padding:'5rem 2rem', color:'#4a6880', border:'1px dashed rgba(30,120,200,.25)', borderRadius:16 }}>
@@ -409,8 +432,8 @@ export default function RelationsPage() {
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }}>
               {/* Anneau-repère du cercle */}
               <circle cx={CIRCLE_CENTER.x} cy={CIRCLE_CENTER.y} r={CIRCLE_R} fill="none" stroke="rgba(122,154,184,.18)" strokeWidth={0.25} strokeDasharray="0.8 1" />
-              {/* Halo regroupant visuellement un dossier et les factions rangées dedans */}
-              {factions.filter(f => f.est_dossier).map(parent => {
+              {/* Halo regroupant visuellement un dossier déplié et les factions rangées dedans */}
+              {factions.filter(f => f.est_dossier && expandedFolders.has(f.id)).map(parent => {
                 const pp = positions[parent.id]
                 const m = childrenOf(parent, factions).length
                 if (!pp || m === 0) return null
@@ -419,7 +442,7 @@ export default function RelationsPage() {
               {relations.map(r => {
                 const fa = factions.find(f => f.nom === r.faction_a)
                 const fb = factions.find(f => f.nom === r.faction_b)
-                if (!fa || !fb) return null
+                if (!fa || !fb || !isVisible(fa) || !isVisible(fb)) return null
                 const pa = positions[fa.id]; const pb = positions[fb.id]
                 if (!pa || !pb) return null
                 const ctrl = controlPoint(pa, pb)
@@ -432,7 +455,7 @@ export default function RelationsPage() {
             {relations.map(r => {
               const fa = factions.find(f => f.nom === r.faction_a)
               const fb = factions.find(f => f.nom === r.faction_b)
-              if (!fa || !fb) return null
+              if (!fa || !fb || !isVisible(fa) || !isVisible(fb)) return null
               const pa = positions[fa.id]; const pb = positions[fb.id]
               if (!pa || !pb) return null
               const rt = REL_TYPES[r.type] || REL_TYPES.neutre
@@ -447,7 +470,7 @@ export default function RelationsPage() {
               )
             })}
 
-            {factions.map(f => {
+            {visibleFactions.map(f => {
               const pos = positions[f.id] || { x:50, y:50 }
               const active = highlight === f.id
               const dim = highlight && !active
@@ -456,19 +479,26 @@ export default function RelationsPage() {
               const isNestTarget = nestTarget === f.id
               const size = isNested ? 50 : 66
               const childCount = f.est_dossier ? factions.filter(c => c.id !== f.id && (c.factions_parentes || []).includes(f.nom)).length : 0
+              const expanded = expandedFolders.has(f.id)
               return (
                 <div key={f.id} className="rel-node" data-faction-id={f.id}
                   onPointerDown={e => onNodePointerDown(e, f.id)}
                   onPointerMove={onNodePointerMove}
                   onPointerUp={onNodePointerUp}
                   onClick={e => { e.stopPropagation(); setHighlight(h => h === f.id ? null : f.id) }}
-                  title={isNested ? `Rangée dans 📁 ${f.factions_parentes![0]}` : (f.est_dossier ? `Dossier — glisse une faction dessus pour la ranger dedans` : undefined)}
+                  title={isNested ? `Rangée dans 📁 ${f.factions_parentes![0]}` : (f.est_dossier ? `Dossier — clique le badge pour déplier, glisse une faction dessus pour la ranger dedans` : undefined)}
                   style={{ position:'absolute', left:`${pos.x}%`, top:`${pos.y}%`, transform:'translate(-50%,-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:'.35rem', cursor:'grab', touchAction:'none', zIndex: active || isNestTarget ? 5 : 3, opacity: dim ? 0.4 : 1 }}
                 >
                   <div className="rel-node-circle" style={{ position:'relative', width:size, height:size, borderRadius:'50%', background:'linear-gradient(160deg,#132a4d,#0a1829)', border:`2.5px solid ${isNestTarget ? '#40d060' : active ? '#f0c040' : ring}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize: isNested ? '1.3rem' : '1.7rem', boxShadow: isNestTarget ? '0 0 22px rgba(64,208,96,.75)' : active ? '0 0 20px rgba(240,192,64,.65)' : `0 4px 14px rgba(0,0,0,.4)` }}>
                     {f.emoji || '⚔️'}
                     {f.est_dossier && (
-                      <span style={{ position:'absolute', bottom:-7, left:'50%', transform:'translateX(-50%)', background:'rgba(212,160,23,.22)', border:'1.5px solid #d4a017', color:'#f0c040', borderRadius:100, minWidth:22, height:20, padding:'0 6px', display:'flex', alignItems:'center', justifyContent:'center', gap:2, fontSize:'.6rem', fontWeight:700, whiteSpace:'nowrap' }}>📁{childCount > 0 && childCount}</span>
+                      <span
+                        onPointerDown={e => e.stopPropagation()}
+                        onClick={e => { e.stopPropagation(); toggleFolder(f.id) }}
+                        title={expanded ? 'Replier le dossier' : 'Déplier le dossier'}
+                        style={{ position:'absolute', bottom:-8, left:'50%', transform:'translateX(-50%)', cursor:'pointer', background: expanded ? 'rgba(212,160,23,.32)' : 'rgba(212,160,23,.22)', border:'1.5px solid #d4a017', color:'#f0c040', borderRadius:100, minWidth:26, height:20, padding:'0 6px', display:'flex', alignItems:'center', justifyContent:'center', gap:2, fontSize:'.58rem', fontWeight:700, whiteSpace:'nowrap' }}>
+                        {expanded ? '▾' : '▸'} 📁{childCount > 0 && childCount}
+                      </span>
                     )}
                   </div>
                   <span style={{ fontSize: isNested ? '.56rem' : '.62rem', color: active ? '#f0c040' : '#c8d8e8', fontFamily:"'Cinzel',serif", fontWeight: active ? 700 : 400, whiteSpace:'normal', maxWidth: isNested ? 80 : 100, textAlign:'center', lineHeight:1.2, background:'rgba(5,13,26,.85)', padding:'.18rem .5rem', borderRadius:5, border:'1px solid rgba(30,120,200,.2)' }}>{f.nom}</span>
@@ -477,6 +507,9 @@ export default function RelationsPage() {
             })}
           </div>
         )}
+        </>
+          )
+        })()}
 
         {/* Alliances, divisées en blocs (camps) */}
         {counts.alliance > 0 && (() => {
