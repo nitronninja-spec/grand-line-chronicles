@@ -43,6 +43,94 @@ function computeInitialPositions(list: Faction[]): Record<string, Pos> {
   return pos
 }
 
+// Disposition optimale : simulation à forces (Fruchterman-Reingold) où les alliances
+// rapprochent les factions, les relations ennemies les repoussent davantage, et le
+// voisinage neutre garde une distance intermédiaire — pour un schéma qui reflète la politique.
+function computeForceLayout(factions: Faction[], relations: Relation[], seed: Record<string, Pos>): Record<string, Pos> {
+  const ids = factions.map(f => f.id)
+  const n = ids.length
+  if (n === 0) return {}
+  if (n === 1) return { [ids[0]]: { x: 50, y: 50 } }
+
+  const pos: Record<string, Pos> = {}
+  ids.forEach((id, i) => {
+    const s = seed[id]
+    const angle = (i / n) * Math.PI * 2
+    pos[id] = s ? { x: s.x, y: s.y } : { x: 50 + 30 * Math.cos(angle), y: 50 + 30 * Math.sin(angle) }
+  })
+
+  const nameToId: Record<string, string> = {}
+  factions.forEach(f => { nameToId[f.nom] = f.id })
+  const edges = relations
+    .map(r => ({ a: nameToId[r.faction_a], b: nameToId[r.faction_b], type: r.type }))
+    .filter(e => e.a && e.b && e.a !== e.b)
+
+  const k = Math.sqrt((100 * 100) / n) * 0.9
+  let temp = 12
+
+  for (let iter = 0; iter < 260; iter++) {
+    const disp: Record<string, Pos> = {}
+    ids.forEach(id => { disp[id] = { x: 0, y: 0 } })
+
+    // Direction unitaire entre deux points ; si les points coïncident (dist ~ 0), la direction
+    // dx/dist dégénère à (0,0) et aucune force ne s'applique — on tire alors une direction
+    // aléatoire pour casser l'égalité et éviter que deux nœuds restent superposés indéfiniment.
+    function unitDir(dx: number, dy: number): { ux: number; uy: number; dist: number } {
+      const dist = Math.hypot(dx, dy)
+      if (dist < 0.02) {
+        const a = Math.random() * Math.PI * 2
+        return { ux: Math.cos(a), uy: Math.sin(a), dist: 0.02 }
+      }
+      return { ux: dx / dist, uy: dy / dist, dist }
+    }
+
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const a = ids[i], b = ids[j]
+        const { ux, uy, dist } = unitDir(pos[a].x - pos[b].x, pos[a].y - pos[b].y)
+        const force = (k * k) / dist
+        disp[a].x += ux * force; disp[a].y += uy * force
+        disp[b].x -= ux * force; disp[b].y -= uy * force
+      }
+    }
+
+    edges.forEach(e => {
+      const a = pos[e.a], b = pos[e.b]
+      const { ux, uy, dist } = unitDir(a.x - b.x, a.y - b.y)
+      const mult = e.type === 'alliance' ? 1.7 : e.type === 'ennemie' ? -1.4 : 0.6
+      const force = (dist * dist / k) * mult
+      disp[e.a].x -= ux * force; disp[e.a].y -= uy * force
+      disp[e.b].x += ux * force; disp[e.b].y += uy * force
+    })
+
+    ids.forEach(id => {
+      const d = disp[id]
+      const len = Math.hypot(d.x, d.y) || 0.01
+      const lim = Math.min(len, temp)
+      pos[id].x += (d.x / len) * lim
+      pos[id].y += (d.y / len) * lim
+      pos[id].x = Math.min(94, Math.max(6, pos[id].x))
+      pos[id].y = Math.min(92, Math.max(8, pos[id].y))
+    })
+
+    temp *= 0.985
+  }
+
+  const xs = ids.map(id => pos[id].x), ys = ids.map(id => pos[id].y)
+  const minX = Math.min(...xs), maxX = Math.max(...xs)
+  const minY = Math.min(...ys), maxY = Math.max(...ys)
+  const spanX = Math.max(maxX - minX, 1), spanY = Math.max(maxY - minY, 1)
+  const [tMinX, tMaxX, tMinY, tMaxY] = [8, 92, 10, 90]
+  ids.forEach(id => {
+    pos[id] = {
+      x: tMinX + ((pos[id].x - minX) / spanX) * (tMaxX - tMinX),
+      y: tMinY + ((pos[id].y - minY) / spanY) * (tMaxY - tMinY),
+    }
+  })
+
+  return pos
+}
+
 // Point médian d'une courbe quadratique à t=0.5, pour placer le badge de relation sur l'arc
 function curveMid(p1: Pos, p2: Pos, ctrl: Pos): Pos {
   return { x: 0.25 * p1.x + 0.5 * ctrl.x + 0.25 * p2.x, y: 0.25 * p1.y + 0.5 * ctrl.y + 0.25 * p2.y }
@@ -123,6 +211,15 @@ export default function RelationsPage() {
     fetchFactions()
   }
 
+  async function applyOptimalLayout() {
+    const optimized = computeForceLayout(factions, relations, positions)
+    setPositions(optimized)
+    await Promise.all(factions.map(f => {
+      const p = optimized[f.id]
+      return p ? supabase.from('factions').update({ rel_x: p.x, rel_y: p.y }).eq('id', f.id) : null
+    }))
+  }
+
   function openRelForm(r?: Relation) {
     if (r) { setRelForm(r); setRelEditId(r.id) }
     else { setRelForm({ faction_a: '', faction_b: '', type: 'alliance', note: '' }); setRelEditId(null) }
@@ -188,7 +285,8 @@ export default function RelationsPage() {
             <p style={{ color:'#7a9ab8', fontSize:'.9rem', marginTop:'.3rem' }}>Glisse une faction pour organiser le schéma · clique un nœud pour surligner ses liens · clique un lien pour le modifier.</p>
           </div>
           <div style={{ display:'flex', gap:'.6rem' }}>
-            <button style={S.btnCyan} onClick={resetLayout}>↺ Réorganiser</button>
+            <button style={S.btnCyan} onClick={resetLayout} title="Remet toutes les factions en cercle régulier">↺ Cercle</button>
+            <button style={S.btnCyan} onClick={applyOptimalLayout} title="Rapproche les alliés, éloigne les ennemis, répartit le reste">✨ Disposition optimale</button>
             <button style={S.btnGold} onClick={() => openRelForm()}>＋ Nouvelle relation</button>
           </div>
         </div>
