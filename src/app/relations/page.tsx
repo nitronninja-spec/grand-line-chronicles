@@ -11,6 +11,8 @@ interface Faction {
   type?: string
   rel_x?: number | null
   rel_y?: number | null
+  est_dossier?: boolean
+  factions_parentes?: string[]
 }
 interface Relation {
   id: string
@@ -35,16 +37,34 @@ function factionZoneType(f: Faction): string {
   return TYPES.includes(f.type || '') ? (f.type as string) : 'Autre'
 }
 
+// Une faction "dossier" contient d'autres factions (glissées-déposées dessus sur le schéma).
+// parentOf ne considère un parent valide que s'il est toujours marqué dossier et présent.
+function parentOf(f: Faction, byName: Map<string, Faction>): Faction | undefined {
+  const pname = (f.factions_parentes || [])[0]
+  if (!pname) return undefined
+  const p = byName.get(pname)
+  return p && p.est_dossier ? p : undefined
+}
+function childrenOf(dossier: Faction, factions: Faction[]): Faction[] {
+  return factions.filter(f => f.id !== dossier.id && (f.factions_parentes || []).includes(dossier.nom)).sort((a, b) => a.nom.localeCompare(b.nom))
+}
+
 const CIRCLE_CENTER: Pos = { x: 50, y: 50 }
 const CIRCLE_R = 40
+const SATELLITE_R = 10
 
-// Disposition en cercle : chaque faction occupe un emplacement fixe et régulièrement espacé
-// sur un cercle — aucune superposition possible, contrairement à une simulation à forces qui
-// peut faire converger des nœuds au même endroit. Les factions sont ordonnées par type puis
-// alphabétiquement, donc les factions d'un même type (équipages, marine...) se retrouvent
-// naturellement groupées sur un même arc, sans qu'aucune case ne soit nécessaire.
+function clampPos(p: Pos): Pos {
+  return { x: Math.min(96, Math.max(4, p.x)), y: Math.min(96, Math.max(4, p.y)) }
+}
+
+// Disposition en cercle : chaque faction de premier niveau occupe un emplacement fixe et
+// régulièrement espacé sur un grand cercle — aucune superposition possible. Les factions
+// rangées dans un dossier sont placées en petit satellite autour de leur parent, ce qui les
+// regroupe visuellement sans avoir besoin de "cases" en arrière-plan.
 function computeCircularLayout(factions: Faction[]): Record<string, Pos> {
-  const ordered = factions.slice().sort((a, b) => {
+  const byName = new Map(factions.map(f => [f.nom, f]))
+  const topLevel = factions.filter(f => !parentOf(f, byName))
+  const ordered = topLevel.slice().sort((a, b) => {
     const ta = TYPES.indexOf(factionZoneType(a))
     const tb = TYPES.indexOf(factionZoneType(b))
     return ta !== tb ? ta - tb : a.nom.localeCompare(b.nom)
@@ -52,10 +72,23 @@ function computeCircularLayout(factions: Faction[]): Record<string, Pos> {
   const n = ordered.length
   const pos: Record<string, Pos> = {}
   if (n === 0) return pos
-  if (n === 1) { pos[ordered[0].id] = { ...CIRCLE_CENTER }; return pos }
-  ordered.forEach((f, i) => {
-    const angle = -Math.PI / 2 + (i / n) * Math.PI * 2
-    pos[f.id] = { x: CIRCLE_CENTER.x + CIRCLE_R * Math.cos(angle), y: CIRCLE_CENTER.y + CIRCLE_R * Math.sin(angle) }
+  if (n === 1) { pos[ordered[0].id] = { ...CIRCLE_CENTER } }
+  else {
+    ordered.forEach((f, i) => {
+      const angle = -Math.PI / 2 + (i / n) * Math.PI * 2
+      pos[f.id] = { x: CIRCLE_CENTER.x + CIRCLE_R * Math.cos(angle), y: CIRCLE_CENTER.y + CIRCLE_R * Math.sin(angle) }
+    })
+  }
+  ordered.forEach(parent => {
+    if (!parent.est_dossier) return
+    const children = childrenOf(parent, factions)
+    const m = children.length
+    if (m === 0) return
+    const base = pos[parent.id]
+    children.forEach((c, j) => {
+      const angle = (j / m) * Math.PI * 2
+      pos[c.id] = clampPos({ x: base.x + SATELLITE_R * Math.cos(angle), y: base.y + SATELLITE_R * Math.sin(angle) })
+    })
   })
   return pos
 }
@@ -126,6 +159,7 @@ export default function RelationsPage() {
   const [relations, setRelations] = useState<Relation[]>([])
   const [positions, setPositions] = useState<Record<string, Pos>>({})
   const [dragging, setDragging] = useState<{ id: string; rect: DOMRect; moved: boolean } | null>(null)
+  const [nestTarget, setNestTarget] = useState<string | null>(null)
   const [highlight, setHighlight] = useState<string | null>(null)
   const [showRelForm, setShowRelForm] = useState(false)
   const [relEditId, setRelEditId] = useState<string | null>(null)
@@ -135,7 +169,7 @@ export default function RelationsPage() {
   useEffect(() => { fetchFactions(); fetchRelations() }, [])
 
   async function fetchFactions() {
-    const { data } = await supabase.from('factions').select('id, nom, emoji, type, rel_x, rel_y').order('nom', { ascending: true })
+    const { data } = await supabase.from('factions').select('id, nom, emoji, type, rel_x, rel_y, est_dossier, factions_parentes').order('nom', { ascending: true })
     const list = data || []
     setFactions(list)
     setPositions(computeInitialPositions(list))
@@ -145,6 +179,8 @@ export default function RelationsPage() {
     const { data } = await supabase.from('faction_relations').select('*').order('created_at', { ascending: true })
     setRelations(data || [])
   }
+
+  const NEST_THRESHOLD = 8
 
   function onNodePointerDown(e: React.PointerEvent, id: string) {
     if (!canvasRef.current) return
@@ -161,14 +197,48 @@ export default function RelationsPage() {
     y = Math.min(94, Math.max(6, y))
     setDragging(d => d && { ...d, moved: true })
     setPositions(p => ({ ...p, [dragging.id]: { x, y } }))
+    let nearest: string | null = null
+    let nearestDist = NEST_THRESHOLD
+    factions.forEach(f => {
+      if (f.id === dragging.id) return
+      const p2 = positions[f.id]
+      if (!p2) return
+      const d = Math.hypot(x - p2.x, y - p2.y)
+      if (d < nearestDist) { nearestDist = d; nearest = f.id }
+    })
+    setNestTarget(nearest)
   }
   async function onNodePointerUp() {
     if (!dragging) return
     const pos = positions[dragging.id]
     const id = dragging.id
     const moved = dragging.moved
+    const targetId = nestTarget
     setDragging(null)
-    if (moved && pos) await supabase.from('factions').update({ rel_x: pos.x, rel_y: pos.y }).eq('id', id)
+    setNestTarget(null)
+    if (!moved || !pos) return
+
+    const dragged = factions.find(f => f.id === id)
+    const target = targetId ? factions.find(f => f.id === targetId) : null
+    const currentParentNom = dragged?.factions_parentes?.[0]
+
+    if (target) {
+      if (target.nom === currentParentNom) {
+        // Toujours rangée dans le même dossier : juste repositionnée à l'intérieur.
+        await supabase.from('factions').update({ rel_x: pos.x, rel_y: pos.y }).eq('id', id)
+      } else {
+        // Déposée sur une autre faction : celle-ci devient (ou reste) un dossier, et la
+        // faction déplacée y est rangée.
+        if (!target.est_dossier) await supabase.from('factions').update({ est_dossier: true }).eq('id', target.id)
+        await supabase.from('factions').update({ factions_parentes: [target.nom], rel_x: pos.x, rel_y: pos.y }).eq('id', id)
+      }
+    } else if (currentParentNom) {
+      // Éloignée de son dossier : elle en ressort.
+      await supabase.from('factions').update({ factions_parentes: [], rel_x: pos.x, rel_y: pos.y }).eq('id', id)
+    } else {
+      await supabase.from('factions').update({ rel_x: pos.x, rel_y: pos.y }).eq('id', id)
+    }
+    fetchFactions()
   }
 
   async function applyOptimalLayout() {
@@ -243,7 +313,7 @@ export default function RelationsPage() {
             <h1 style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'clamp(1.8rem,3.5vw,3rem)', fontWeight:700, background:'linear-gradient(135deg,#fff,#f0c040)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
               Relations entre factions
             </h1>
-            <p style={{ color:'#7a9ab8', fontSize:'.9rem', marginTop:'.3rem' }}>Glisse une faction pour l&apos;ajuster · clique un nœud pour surligner ses liens · clique un lien pour le modifier. Les factions sont ordonnées par type autour du cercle.</p>
+            <p style={{ color:'#7a9ab8', fontSize:'.9rem', marginTop:'.3rem' }}>Glisse une faction sur une autre pour la ranger dedans (elle devient un dossier 📁) · clique un nœud pour surligner ses liens · clique un lien pour le modifier.</p>
           </div>
           <div style={{ display:'flex', gap:'.6rem' }}>
             <button style={S.btnCyan} onClick={applyOptimalLayout} title="Cercle régulier, factions groupées par type, aucun chevauchement">✨ Disposition optimale</button>
@@ -299,6 +369,16 @@ export default function RelationsPage() {
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }}>
               {/* Anneau-repère du cercle */}
               <circle cx={CIRCLE_CENTER.x} cy={CIRCLE_CENTER.y} r={CIRCLE_R} fill="none" stroke="rgba(122,154,184,.18)" strokeWidth={0.25} strokeDasharray="0.8 1" />
+              {/* Liens structurels dossier → factions rangées dedans */}
+              {factions.filter(f => f.est_dossier).map(parent => {
+                const pp = positions[parent.id]
+                if (!pp) return null
+                return factions.filter(c => c.id !== parent.id && (c.factions_parentes || []).includes(parent.nom)).map(child => {
+                  const cp = positions[child.id]
+                  if (!cp) return null
+                  return <line key={`${parent.id}-${child.id}`} x1={pp.x} y1={pp.y} x2={cp.x} y2={cp.y} stroke="rgba(212,160,23,.35)" strokeWidth={0.2} strokeDasharray="0.6 0.6" />
+                })
+              })}
               {relations.map(r => {
                 const fa = factions.find(f => f.nom === r.faction_a)
                 const fb = factions.find(f => f.nom === r.faction_b)
@@ -335,18 +415,26 @@ export default function RelationsPage() {
               const active = highlight === f.id
               const dim = highlight && !active
               const ring = TYPE_COLORS[f.type || ''] || 'rgba(30,120,200,.5)'
+              const isNested = !!f.factions_parentes?.length
+              const isNestTarget = nestTarget === f.id
+              const size = isNested ? 50 : 66
+              const childCount = f.est_dossier ? factions.filter(c => c.id !== f.id && (c.factions_parentes || []).includes(f.nom)).length : 0
               return (
                 <div key={f.id} className="rel-node"
                   onPointerDown={e => onNodePointerDown(e, f.id)}
                   onPointerMove={onNodePointerMove}
                   onPointerUp={onNodePointerUp}
                   onClick={e => { e.stopPropagation(); setHighlight(h => h === f.id ? null : f.id) }}
-                  style={{ position:'absolute', left:`${pos.x}%`, top:`${pos.y}%`, transform:'translate(-50%,-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:'.35rem', cursor:'grab', touchAction:'none', zIndex: active ? 5 : 3, opacity: dim ? 0.4 : 1 }}
+                  title={isNested ? `Rangée dans 📁 ${f.factions_parentes![0]}` : (f.est_dossier ? `Dossier — glisse une faction dessus pour la ranger dedans` : undefined)}
+                  style={{ position:'absolute', left:`${pos.x}%`, top:`${pos.y}%`, transform:'translate(-50%,-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:'.35rem', cursor:'grab', touchAction:'none', zIndex: active || isNestTarget ? 5 : 3, opacity: dim ? 0.4 : 1 }}
                 >
-                  <div className="rel-node-circle" style={{ width:66, height:66, borderRadius:'50%', background:'linear-gradient(160deg,#132a4d,#0a1829)', border:`2.5px solid ${active ? '#f0c040' : ring}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.7rem', boxShadow: active ? '0 0 20px rgba(240,192,64,.65)' : `0 4px 14px rgba(0,0,0,.4)` }}>
+                  <div className="rel-node-circle" style={{ position:'relative', width:size, height:size, borderRadius:'50%', background:'linear-gradient(160deg,#132a4d,#0a1829)', border:`2.5px solid ${isNestTarget ? '#40d060' : active ? '#f0c040' : ring}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize: isNested ? '1.3rem' : '1.7rem', boxShadow: isNestTarget ? '0 0 22px rgba(64,208,96,.75)' : active ? '0 0 20px rgba(240,192,64,.65)' : `0 4px 14px rgba(0,0,0,.4)` }}>
                     {f.emoji || '⚔️'}
+                    {f.est_dossier && (
+                      <span style={{ position:'absolute', bottom:-4, right:-4, background:'#d4a017', color:'#050d1a', borderRadius:100, width:20, height:20, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'.6rem', border:'2px solid #050d1a' }}>📁{childCount > 0 && <span style={{ marginLeft:1 }}>{childCount}</span>}</span>
+                    )}
                   </div>
-                  <span style={{ fontSize:'.62rem', color: active ? '#f0c040' : '#c8d8e8', fontFamily:"'Cinzel',serif", fontWeight: active ? 700 : 400, whiteSpace:'normal', maxWidth:100, textAlign:'center', lineHeight:1.2, background:'rgba(5,13,26,.85)', padding:'.18rem .5rem', borderRadius:5, border:'1px solid rgba(30,120,200,.2)' }}>{f.nom}</span>
+                  <span style={{ fontSize: isNested ? '.56rem' : '.62rem', color: active ? '#f0c040' : '#c8d8e8', fontFamily:"'Cinzel',serif", fontWeight: active ? 700 : 400, whiteSpace:'normal', maxWidth: isNested ? 80 : 100, textAlign:'center', lineHeight:1.2, background:'rgba(5,13,26,.85)', padding:'.18rem .5rem', borderRadius:5, border:'1px solid rgba(30,120,200,.2)' }}>{f.nom}</span>
                 </div>
               )
             })}

@@ -14,8 +14,6 @@ interface Faction {
   gdoc?: string
   miro?: string
   rangs?: Rang[]
-  est_dossier?: boolean
-  factions_parentes?: string[]
 }
 
 interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; factions?: string[]; rang?: string; rangs?: { faction: string; rang: string }[] }
@@ -60,14 +58,11 @@ export default function FactionsPage() {
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string|null>(null)
-  const [form, setForm] = useState<Partial<Faction>>({ nom:'', emoji:'⚔️', type:'Pirates', description:'', gdoc:'', miro:'', est_dossier:false, factions_parentes:[] })
+  const [form, setForm] = useState<Partial<Faction>>({ nom:'', emoji:'⚔️', type:'Pirates', description:'', gdoc:'', miro:'' })
   const [members, setMembers] = useState<Member[]>([])
   const [linkedIles, setLinkedIles] = useState<LinkedIle[]>([])
   const [rosterFaction, setRosterFaction] = useState<Faction | null>(null)
   const [sortMode, setSortMode] = useState<FactionSortMode>('categorie')
-  const [draggingId, setDraggingId] = useState<string | null>(null)
-  const [dragOverId, setDragOverId] = useState<string | null>(null)
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetchList(); fetchMembers(); fetchIlesList()
@@ -91,39 +86,9 @@ export default function FactionsPage() {
   }
 
   function openForm(f?: Faction) {
-    if (f) { setForm({ ...f, rangs: f.rangs || [], factions_parentes: f.factions_parentes || [] }); setEditId(f.id) }
-    else { setForm({ nom:'', emoji:TYPE_EMOJI.Pirates, type:'Pirates', description:'', gdoc:'', miro:'', rangs:[], est_dossier:false, factions_parentes:[] }); setEditId(null) }
+    if (f) { setForm({ ...f, rangs: f.rangs || [] }); setEditId(f.id) }
+    else { setForm({ nom:'', emoji:TYPE_EMOJI.Pirates, type:'Pirates', description:'', gdoc:'', miro:'', rangs:[] }); setEditId(null) }
     setShowForm(true)
-  }
-
-  function toggleFolder(id: string) {
-    setExpandedFolders(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-  }
-
-  async function addToFolder(folder: Faction, draggedId: string) {
-    if (draggedId === folder.id) return
-    const dragged = list.find(f => f.id === draggedId)
-    if (!dragged) return
-    const current = dragged.factions_parentes || []
-    if (current.includes(folder.nom)) return
-    await supabase.from('factions').update({ factions_parentes: [...current, folder.nom] }).eq('id', dragged.id)
-    setExpandedFolders(prev => new Set(prev).add(folder.id))
-    fetchList()
-  }
-
-  async function removeFromFolder(f: Faction, folderNom: string) {
-    const next = (f.factions_parentes || []).filter(n => n !== folderNom)
-    await supabase.from('factions').update({ factions_parentes: next }).eq('id', f.id)
-    fetchList()
-  }
-
-  async function removeFromAllFolders(factionId: string) {
-    await supabase.from('factions').update({ factions_parentes: [] }).eq('id', factionId)
-    fetchList()
   }
 
   function addRang() {
@@ -163,77 +128,6 @@ export default function FactionsPage() {
   if (search) filtered = filtered.filter(f => f.nom.toLowerCase().includes(search.toLowerCase()))
   filtered = sortFactions(filtered, sortMode)
 
-  const byName = new Map(filtered.map(f => [f.nom, f]))
-  function hasPresentDossierParent(f: Faction) {
-    return (f.factions_parentes || []).some(pname => { const p = byName.get(pname); return p && p.est_dossier })
-  }
-  const topLevel = filtered.filter(f => !hasPresentDossierParent(f))
-  function childrenOf(dossier: Faction) {
-    return filtered.filter(f => f.id !== dossier.id && (f.factions_parentes || []).includes(dossier.nom))
-  }
-
-  function renderFactionCard(f: Faction, opts: { nested?: boolean; parentNom?: string; visited?: Set<string> } = {}): React.ReactNode {
-    const visited = opts.visited || new Set<string>()
-    if (visited.has(f.id)) return null
-    const nextVisited = new Set(visited); nextVisited.add(f.id)
-    const tc = TYPE_COLORS[f.type||''] || '#a060ff'
-    const isFolder = !!f.est_dossier
-    const expanded = expandedFolders.has(f.id)
-    const children = isFolder ? childrenOf(f) : []
-    const isDragOver = dragOverId === f.id
-    return (
-      <div key={f.id}
-        draggable
-        onDragStart={e => { setDraggingId(f.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', f.id) }}
-        onDragEnd={() => { setDraggingId(null); setDragOverId(null) }}
-        onDragOver={isFolder ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
-        onDragEnter={isFolder ? () => setDragOverId(f.id) : undefined}
-        onDragLeave={isFolder ? () => setDragOverId(prev => prev === f.id ? null : prev) : undefined}
-        onDrop={isFolder ? e => { e.preventDefault(); e.stopPropagation(); setDragOverId(null); addToFolder(f, e.dataTransfer.getData('text/plain')) } : undefined}
-        style={{background:'#0d2040',border:`1px solid ${isDragOver?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:14,padding:opts.nested?'1.05rem':'1.35rem',transition:'all .2s',display:'flex',flexDirection:'column',gap:'.6rem',marginLeft:opts.nested?'1.5rem':0,cursor:'grab'}}
-        onMouseEnter={e=>{const el=e.currentTarget;el.style.borderColor=isDragOver?'#d4a017':tc;if(!opts.nested){el.style.transform='translateY(-5px)';el.style.boxShadow='0 18px 36px rgba(0,0,0,.4)'}}}
-        onMouseLeave={e=>{const el=e.currentTarget;el.style.borderColor=isDragOver?'#d4a017':'rgba(30,120,200,.2)';if(!opts.nested){el.style.transform='none';el.style.boxShadow='none'}}}>
-        <div style={{display:'flex',alignItems:'center',gap:'.6rem'}}>
-          <div style={{fontSize:opts.nested?'1.9rem':'2.5rem',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.emoji||'⚔️'}</div>
-          {isFolder && (
-            <button onClick={() => toggleFolder(f.id)} style={{marginLeft:'auto',background:'rgba(212,160,23,.1)',border:'1px solid rgba(212,160,23,.25)',borderRadius:8,padding:'.2rem .55rem',color:'#d4a017',cursor:'pointer',fontSize:'.68rem',fontFamily:"'Cinzel',serif",whiteSpace:'nowrap'}}>{expanded?'▾':'▸'} {children.length}</button>
-          )}
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:'.5rem'}}>
-          <div style={{fontFamily:"'Cinzel',serif",fontSize:opts.nested?'.92rem':'1rem',fontWeight:700,color:'#e8eef5',cursor:'pointer',flex:1}} onClick={() => setRosterFaction(f)}>{f.nom}</div>
-          {isFolder && <span title="Dossier" style={{fontSize:'.85rem'}}>📁</span>}
-        </div>
-        <div style={{display:'inline-block',background:`${tc}22`,color:tc,border:`1px solid ${tc}44`,borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.09em',textTransform:'uppercase',width:'fit-content'}}>{f.type}</div>
-        {!opts.nested && (f.factions_parentes || []).length > 0 && (
-          <div style={{display:'flex',flexWrap:'wrap',gap:'.3rem'}}>
-            {(f.factions_parentes || []).map(pn => <a key={pn} href={`/factions?q=${encodeURIComponent(pn)}`} style={{fontSize:'.72rem',color:'#7a9ab8',textDecoration:'none'}}>↳ 📁 {pn}</a>)}
-          </div>
-        )}
-        {opts.nested && opts.parentNom && (
-          <button onClick={() => removeFromFolder(f, opts.parentNom!)} style={{background:'none',border:'1px solid rgba(224,48,48,.25)',borderRadius:8,padding:'.15rem .5rem',color:'#ff6060',cursor:'pointer',fontSize:'.65rem',fontFamily:"'Cinzel',serif",width:'fit-content'}}>✕ Retirer de {opts.parentNom}</button>
-        )}
-        {f.description && <div style={{fontSize:'.88rem',color:'#7a9ab8',lineHeight:1.6,fontStyle:'italic',flex:1}}>{f.description}</div>}
-        <div style={{fontSize:'.78rem',color:'#4a6880'}}>👥 {members.filter(m => m.factions?.includes(f.nom)).length} membre(s)</div>
-        <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center'}}>
-          {f.gdoc && <a href={f.gdoc} target="_blank" rel="noopener" style={{background:'rgba(66,133,244,.12)',color:'#6aabff',border:'1px solid rgba(66,133,244,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>📄 Doc</a>}
-          {f.miro && <a href={f.miro} target="_blank" rel="noopener" style={{background:'rgba(255,196,0,.1)',color:'#ffc400',border:'1px solid rgba(255,196,0,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>🗒 Miro</a>}
-          <div style={{marginLeft:'auto',display:'flex',gap:'.3rem'}}>
-            <button onClick={() => setRosterFaction(f)} title="Voir l'organigramme" style={{background:'rgba(64,208,96,.1)',border:'1px solid rgba(64,208,96,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#40d060',cursor:'pointer',fontSize:'.7rem'}}>👁</button>
-            <button onClick={() => duplicateFaction(f)} title="Dupliquer" style={{background:'rgba(160,96,255,.1)',border:'1px solid rgba(160,96,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#a060ff',cursor:'pointer',fontSize:'.7rem'}}>⧉</button>
-            <button onClick={() => openForm(f)} style={{background:'rgba(0,200,255,.1)',border:'1px solid rgba(0,200,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#00c8ff',cursor:'pointer',fontSize:'.7rem'}}>✏️</button>
-            <button onClick={() => deleteFaction(f.id)} style={{background:'rgba(224,48,48,.1)',border:'1px solid rgba(224,48,48,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#ff6060',cursor:'pointer',fontSize:'.7rem'}}>🗑</button>
-          </div>
-        </div>
-        {isFolder && expanded && (
-          <div style={{display:'flex',flexDirection:'column',gap:'.75rem',marginTop:'.4rem'}}>
-            {children.length === 0 && <div style={{fontSize:'.72rem',color:'#4a6880',fontStyle:'italic',border:'2px dashed rgba(30,120,200,.2)',borderRadius:10,padding:'.85rem',textAlign:'center'}}>Glisse une faction ici pour la ranger dans ce dossier.</div>}
-            {children.map(child => renderFactionCard(child, { nested:true, parentNom: f.nom, visited: nextVisited }))}
-          </div>
-        )}
-      </div>
-    )
-  }
-
   return (
     <div style={S.page}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,400;1,400&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#d4a017;border-radius:3px}`}</style>
@@ -270,20 +164,12 @@ export default function FactionsPage() {
         </div>
       </div>
 
-      {draggingId && (
-        <div
-          onDragOver={e => e.preventDefault()}
-          onDrop={e => { e.preventDefault(); removeFromAllFolders(draggingId); setDraggingId(null) }}
-          style={{margin:'0 2rem 1.25rem',maxWidth:1400,marginLeft:'auto',marginRight:'auto',border:'2px dashed rgba(224,48,48,.4)',borderRadius:12,padding:'.85rem 1.25rem',textAlign:'center',color:'#ff6060',fontFamily:"'Cinzel',serif",fontSize:'.62rem',letterSpacing:'.08em',textTransform:'uppercase',background:'rgba(224,48,48,.06)'}}
-        >📤 Déposer ici pour retirer cette faction de tous ses dossiers</div>
-      )}
-
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))',gap:'1.1rem',padding:'0 2rem 4rem',maxWidth:1400,margin:'0 auto'}}>
         {filtered.length === 0 && <div style={{gridColumn:'1/-1',textAlign:'center',padding:'5rem 2rem',color:'#4a6880'}}><div style={{fontSize:'4rem',marginBottom:'1rem',opacity:.4}}>⚔️</div><div style={{fontFamily:"'Cinzel',serif",fontSize:'.72rem',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:'1.5rem'}}>Aucune faction</div><button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter la première</button></div>}
         {(() => {
           let lastType: string | undefined | null = undefined
           const nodes: React.ReactNode[] = []
-          topLevel.forEach(f => {
+          filtered.forEach(f => {
             const tc = TYPE_COLORS[f.type||''] || '#a060ff'
             if (sortMode === 'categorie' && f.type !== lastType) {
               lastType = f.type
@@ -294,7 +180,27 @@ export default function FactionsPage() {
                 </div>
               )
             }
-            nodes.push(renderFactionCard(f))
+            nodes.push(
+              <div key={f.id} style={{background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:14,padding:'1.35rem',transition:'all .3s',display:'flex',flexDirection:'column',gap:'.6rem'}}
+                onMouseEnter={e=>{const el=e.currentTarget;el.style.transform='translateY(-5px)';el.style.borderColor=tc;el.style.boxShadow='0 18px 36px rgba(0,0,0,.4)'}}
+                onMouseLeave={e=>{const el=e.currentTarget;el.style.transform='none';el.style.borderColor='rgba(30,120,200,.2)';el.style.boxShadow='none'}}>
+                <div style={{fontSize:'2.5rem',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.emoji||'⚔️'}</div>
+                <div style={{fontFamily:"'Cinzel',serif",fontSize:'1rem',fontWeight:700,color:'#e8eef5',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.nom}</div>
+                <div style={{display:'inline-block',background:`${tc}22`,color:tc,border:`1px solid ${tc}44`,borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.09em',textTransform:'uppercase',width:'fit-content'}}>{f.type}</div>
+                {f.description && <div style={{fontSize:'.88rem',color:'#7a9ab8',lineHeight:1.6,fontStyle:'italic',flex:1}}>{f.description}</div>}
+                <div style={{fontSize:'.78rem',color:'#4a6880'}}>👥 {members.filter(m => m.factions?.includes(f.nom)).length} membre(s)</div>
+                <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center'}}>
+                  {f.gdoc && <a href={f.gdoc} target="_blank" rel="noopener" style={{background:'rgba(66,133,244,.12)',color:'#6aabff',border:'1px solid rgba(66,133,244,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>📄 Doc</a>}
+                  {f.miro && <a href={f.miro} target="_blank" rel="noopener" style={{background:'rgba(255,196,0,.1)',color:'#ffc400',border:'1px solid rgba(255,196,0,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>🗒 Miro</a>}
+                  <div style={{marginLeft:'auto',display:'flex',gap:'.3rem'}}>
+                    <button onClick={() => setRosterFaction(f)} title="Voir l'organigramme" style={{background:'rgba(64,208,96,.1)',border:'1px solid rgba(64,208,96,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#40d060',cursor:'pointer',fontSize:'.7rem'}}>👁</button>
+                    <button onClick={() => duplicateFaction(f)} title="Dupliquer" style={{background:'rgba(160,96,255,.1)',border:'1px solid rgba(160,96,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#a060ff',cursor:'pointer',fontSize:'.7rem'}}>⧉</button>
+                    <button onClick={() => openForm(f)} style={{background:'rgba(0,200,255,.1)',border:'1px solid rgba(0,200,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#00c8ff',cursor:'pointer',fontSize:'.7rem'}}>✏️</button>
+                    <button onClick={() => deleteFaction(f.id)} style={{background:'rgba(224,48,48,.1)',border:'1px solid rgba(224,48,48,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#ff6060',cursor:'pointer',fontSize:'.7rem'}}>🗑</button>
+                  </div>
+                </div>
+              </div>
+            )
           })
           return nodes
         })()}
@@ -337,36 +243,6 @@ export default function FactionsPage() {
                 {(form.rangs || []).length > 0 && (
                   <div style={{fontSize:'.72rem',color:'#4a6880',fontStyle:'italic',marginTop:'.3rem'}}>Niveau 1 = rang le plus haut dans l&apos;organigramme.</div>
                 )}
-              </div>
-
-              {/* Dossier toggle */}
-              <label style={{display:'flex',alignItems:'center',gap:'.6rem',background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:10,padding:'.85rem 1.1rem',cursor:'pointer'}}>
-                <input type="checkbox" checked={!!form.est_dossier} onChange={e => setForm(f => ({...f, est_dossier: e.target.checked}))} style={{width:18,height:18,accentColor:'#d4a017',cursor:'pointer'}} />
-                <div>
-                  <div style={{fontFamily:"'Cinzel',serif",fontSize:'.72rem',color:'#e8eef5',fontWeight:700}}>📁 Dossier</div>
-                  <div style={{fontSize:'.75rem',color:'#4a6880'}}>Cette faction devient un dossier pouvant contenir d&apos;autres factions.</div>
-                </div>
-              </label>
-
-              {/* Factions parentes (multi) */}
-              <div>
-                <label style={S.label}>↳ Factions parentes (sous-catégorie de)</label>
-                {list.filter(f => f.id !== editId && f.est_dossier).length === 0 && (
-                  <div style={{fontSize:'.8rem',color:'#4a6880',fontStyle:'italic'}}>Aucun dossier créé pour l&apos;instant — coche &quot;Dossier&quot; sur une faction pour pouvoir en ranger d&apos;autres dedans.</div>
-                )}
-                <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap'}}>
-                  {list.filter(f => f.id !== editId && f.est_dossier).map(parent => {
-                    const active = (form.factions_parentes || []).includes(parent.nom)
-                    return (
-                      <button key={parent.id} type="button" onClick={() => setForm(f => {
-                        const current = f.factions_parentes || []
-                        return { ...f, factions_parentes: active ? current.filter(n => n !== parent.nom) : [...current, parent.nom] }
-                      })} style={{background:active?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${active?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.35rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.62rem',color:active?'#f0c040':'#7a9ab8',cursor:'pointer'}}>
-                        {active?'✓ ':''}📁 {parent.nom}
-                      </button>
-                    )
-                  })}
-                </div>
               </div>
 
               <div style={{background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:10,padding:'1.1rem'}}>
