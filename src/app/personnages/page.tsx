@@ -5,6 +5,7 @@ import { supabase, uploadImage } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageCropper from '@/components/ImageCropper'
 
+interface PersonnageRang { faction: string; rang: string }
 interface Personnage {
   id: string
   nom: string
@@ -20,6 +21,7 @@ interface Personnage {
   ile?: string
   factions?: string[]
   rang?: string
+  rangs?: PersonnageRang[]
   statut?: string
   fruit?: string
   tags?: string
@@ -42,7 +44,7 @@ const STATUT_COLORS: Record<string, string> = {
   vivant: '#40d060', mort: '#ff6060', disparu: '#ffb060', inconnu: '#a0a0c0'
 }
 const CONDITION_PRIME_LABELS: Record<string, string> = {
-  mort_ou_vif: 'Mort ou Vif', mort_uniquement: 'Mort uniquement', vif_uniquement: 'Vif uniquement'
+  mort_ou_vif: 'Mort ou Vif', mort_uniquement: 'Mort uniquement', vif_uniquement: 'Vif uniquement', non_recherche: 'Non recherché'
 }
 const TITRE_MONDIAL: Record<string, { label: string; icon: string; color: string }> = {
   'Empereur': { label: 'Empereur', icon: '👑', color: '#e03030' },
@@ -51,13 +53,21 @@ const TITRE_MONDIAL: Record<string, { label: string; icon: string; color: string
 }
 type SortMode = 'defaut' | 'prime' | 'groupe'
 function parsePrime(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
+function personnageRangs(p: Personnage): PersonnageRang[] {
+  if (p.rangs !== undefined) return p.rangs
+  if (p.rang) return [{ faction: p.equipage || '', rang: p.rang }]
+  return []
+}
 function getRangOrdre(p: Personnage, factions: FactionRef[]): number {
-  if (!p.rang) return Infinity
-  const eqFaction = factions.find(f => f.nom === p.equipage)
-  const eqMatch = eqFaction?.rangs?.find(r => r.nom === p.rang)
-  if (eqMatch) return eqMatch.ordre
-  for (const fn of p.factions || []) {
-    const match = factions.find(f => f.nom === fn)?.rangs?.find(r => r.nom === p.rang)
+  const rangs = personnageRangs(p)
+  const eqEntry = rangs.find(r => r.faction === p.equipage) || rangs[0]
+  if (eqEntry) {
+    const fac = factions.find(f => f.nom === eqEntry.faction)
+    const match = fac?.rangs?.find(r => r.nom === eqEntry.rang)
+    if (match) return match.ordre
+  }
+  for (const r of rangs) {
+    const match = factions.find(f => f.nom === r.faction)?.rangs?.find(rr => rr.nom === r.rang)
     if (match) return match.ordre
   }
   return Infinity
@@ -109,7 +119,7 @@ export default function PersonnagesPage() {
   const [sortMode, setSortMode] = useState<SortMode>('defaut')
   const [form, setForm] = useState<Partial<Personnage>>({
     nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant',
-    prime: '0', condition_prime: 'mort_ou_vif', titre_mondial: '', origine: '', ile: '', factions: [], rang: '', equipage: '', fruit: 'Aucun',
+    prime: '0', condition_prime: 'mort_ou_vif', titre_mondial: '', origine: '', ile: '', factions: [], rangs: [], equipage: '', fruit: 'Aucun',
     tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: ''
   })
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
@@ -180,10 +190,10 @@ export default function PersonnagesPage() {
 
   function openForm(p?: Personnage) {
     if (p) {
-      setForm(p)
+      setForm({ ...p, rangs: personnageRangs(p) })
       setEditId(p.id)
     } else {
-      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', condition_prime: 'mort_ou_vif', titre_mondial: '', origine: '', ile: '', factions: [], rang: '', equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
+      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', condition_prime: 'mort_ou_vif', titre_mondial: '', origine: '', ile: '', factions: [], rangs: [], equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
       setEditId(null)
     }
     setPhotoFiles([])
@@ -249,12 +259,11 @@ export default function PersonnagesPage() {
       if (url) photos = [...photos, url]
     }
     const data = { ...form, photos }
-    if (editId) {
-      await supabase.from('personnages').update(data).eq('id', editId)
-    } else {
-      await supabase.from('personnages').insert([data])
-    }
+    const { error } = editId
+      ? await supabase.from('personnages').update(data).eq('id', editId)
+      : await supabase.from('personnages').insert([data])
     setUploading(false)
+    if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
     setShowForm(false)
     fetchList()
   }
@@ -415,7 +424,11 @@ export default function PersonnagesPage() {
                 {p.nom}
               </div>
               {p.surnom && <div style={{ fontStyle:'italic', color:'#7a9ab8', fontSize:'.82rem', marginBottom:'.3rem' }}>"{p.surnom}"</div>}
-              {p.rang && <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.68rem', color:'#a060ff', marginBottom:'.5rem' }}>🎖️ {p.rang}</div>}
+              {personnageRangs(p).length > 0 && (
+                <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.68rem', color:'#a060ff', marginBottom:'.5rem' }}>
+                  {personnageRangs(p).map(r => `🎖️ ${r.rang}`).join('  ·  ')}
+                </div>
+              )}
 
               <div style={{ fontSize:'.82rem', color:'#7a9ab8', marginBottom:'.15rem' }}>⭐ <span style={{ color:'#f0c040', fontFamily:"'Cinzel',serif", fontWeight:700 }}>{p.prime} 🍖</span></div>
               <div style={{ fontSize:'.62rem', color:'#e03030', fontFamily:"'Cinzel',serif", letterSpacing:'.06em', textTransform:'uppercase', marginBottom:'.4rem' }}>{CONDITION_PRIME_LABELS[p.condition_prime||'mort_ou_vif']}</div>
@@ -549,6 +562,7 @@ export default function PersonnagesPage() {
                     <option value="mort_ou_vif">Mort ou Vif</option>
                     <option value="mort_uniquement">Mort uniquement</option>
                     <option value="vif_uniquement">Vif uniquement</option>
+                    <option value="non_recherche">Non recherché</option>
                   </select>
                 </div>
               </div>
@@ -594,9 +608,9 @@ export default function PersonnagesPage() {
                       <button key={fac.id} type="button" onClick={() => setForm(f => {
                         const current = f.factions || []
                         const nextFactions = active ? current.filter(n => n !== fac.nom) : [...current, fac.nom]
-                        // Si le rang actuel n'appartient plus à aucune faction sélectionnée, on le réinitialise
-                        const stillValid = nextFactions.some(fn => factions.find(x => x.nom === fn)?.rangs?.some(r => r.nom === f.rang))
-                        return { ...f, factions: nextFactions, rang: stillValid ? f.rang : '' }
+                        // On retire les rangs des factions qui ne sont plus sélectionnées
+                        const nextRangs = (f.rangs || []).filter(r => nextFactions.includes(r.faction))
+                        return { ...f, factions: nextFactions, rangs: nextRangs }
                       })} style={{ background: active ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${active ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.35rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.62rem', color: active ? '#f0c040' : '#7a9ab8', cursor:'pointer' }}>
                         {active ? '✓ ' : ''}{fac.nom}
                       </button>
@@ -605,22 +619,38 @@ export default function PersonnagesPage() {
                 </div>
               </div>
 
-              {/* Rang dans les factions sélectionnées */}
+              {/* Rangs dans les factions sélectionnées (un par faction) */}
               {(() => {
                 const selectedFactions = factions.filter(f => (form.factions || []).includes(f.nom))
-                const rangOptions = selectedFactions.flatMap(f => (f.rangs || []).slice().sort((a,b) => a.ordre - b.ordre).map(r => ({ faction: f.nom, ...r })))
                 if (selectedFactions.length === 0) return null
                 return (
                   <div>
-                    <label style={S.label}>🎖️ Rang</label>
-                    {rangOptions.length > 0 ? (
-                      <select style={{ ...S.input }} value={form.rang || ''} onChange={e => setForm(f => ({ ...f, rang: e.target.value }))}>
-                        <option value="">— Aucun —</option>
-                        {rangOptions.map(r => <option key={`${r.faction}-${r.nom}`} value={r.nom}>{selectedFactions.length > 1 ? `${r.faction} — ${r.nom}` : r.nom}</option>)}
-                      </select>
-                    ) : (
-                      <div style={{ fontSize:'.8rem', color:'#4a6880', fontStyle:'italic' }}>Aucun rang défini pour {selectedFactions.length > 1 ? 'ces factions' : 'cette faction'} (Factions → Gérer les rangs).</div>
-                    )}
+                    <label style={S.label}>🎖️ Rangs (un par faction possible)</label>
+                    <div style={{ display:'flex', flexDirection:'column', gap:'.5rem' }}>
+                      {selectedFactions.map(fac => {
+                        const rangOptions = (fac.rangs || []).slice().sort((a,b) => a.ordre - b.ordre)
+                        const current = (form.rangs || []).find(r => r.faction === fac.nom)?.rang || ''
+                        return (
+                          <div key={fac.id} style={{ display:'grid', gridTemplateColumns:'150px 1fr', gap:'.6rem', alignItems:'center' }}>
+                            <span style={{ fontSize:'.78rem', color:'#7a9ab8' }}>{fac.nom}</span>
+                            {rangOptions.length > 0 ? (
+                              <select style={{ ...S.input }} value={current} onChange={e => {
+                                const val = e.target.value
+                                setForm(f => {
+                                  const others = (f.rangs || []).filter(r => r.faction !== fac.nom)
+                                  return { ...f, rangs: val ? [...others, { faction: fac.nom, rang: val }] : others }
+                                })
+                              }}>
+                                <option value="">— Aucun —</option>
+                                {rangOptions.map(r => <option key={r.nom} value={r.nom}>{r.nom}</option>)}
+                              </select>
+                            ) : (
+                              <div style={{ fontSize:'.76rem', color:'#4a6880', fontStyle:'italic' }}>Aucun rang défini (Factions → Gérer les rangs)</div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 )
               })()}
@@ -745,7 +775,11 @@ export default function PersonnagesPage() {
                   <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap' }}>
                     <span style={{ background:`${TYPE_COLORS[selected.type]}22`, color:TYPE_COLORS[selected.type], border:`1px solid ${TYPE_COLORS[selected.type]}44`, borderRadius:100, padding:'.15rem .65rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.1em', textTransform:'uppercase' }}>{selected.type.toUpperCase()}</span>
                     {selected.fruit && selected.fruit !== 'Aucun' && <span style={{ background:'rgba(212,160,23,.18)', color:'#f0c040', border:'1px solid rgba(212,160,23,.3)', borderRadius:100, padding:'.15rem .65rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.1em', textTransform:'uppercase' }}>🍎 {selected.fruit}</span>}
-                    {selected.rang && <span style={{ background:'rgba(160,96,255,.18)', color:'#a060ff', border:'1px solid rgba(160,96,255,.3)', borderRadius:100, padding:'.15rem .65rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.1em', textTransform:'uppercase' }}>🎖️ {selected.rang}</span>}
+                    {personnageRangs(selected).map(r => (
+                      <span key={r.faction} style={{ background:'rgba(160,96,255,.18)', color:'#a060ff', border:'1px solid rgba(160,96,255,.3)', borderRadius:100, padding:'.15rem .65rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.1em', textTransform:'uppercase' }}>
+                        🎖️ {r.rang}{personnageRangs(selected).length > 1 && r.faction && ` (${r.faction})`}
+                      </span>
+                    ))}
                   </div>
                 </div>
               </div>

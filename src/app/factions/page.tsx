@@ -16,8 +16,13 @@ interface Faction {
   rangs?: Rang[]
 }
 
-interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; factions?: string[]; rang?: string }
+interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; factions?: string[]; rang?: string; rangs?: { faction: string; rang: string }[] }
 interface LinkedIle { id: string; nom: string; emoji?: string; factions?: string[] }
+
+function memberRangFor(m: Member, factionNom: string): string | undefined {
+  if (m.rangs !== undefined) return m.rangs.find(r => r.faction === factionNom)?.rang
+  return m.rang
+}
 
 const TYPES = ['Pirates', 'Marine', 'Gouvernement', 'Révolutionnaire', 'Peuple', 'Neutre', 'Autre']
 const TYPE_COLORS: Record<string,string> = { Pirates:'#d4a017', Marine:'#00c8ff', Gouvernement:'#4488ff', 'Révolutionnaire':'#e03030', Peuple:'#40e0a0', Neutre:'#7a9ab8', Autre:'#a060ff' }
@@ -71,7 +76,7 @@ export default function FactionsPage() {
   }
 
   async function fetchMembers() {
-    const { data } = await supabase.from('personnages').select('id, nom, emoji, type, photos, factions, rang')
+    const { data } = await supabase.from('personnages').select('id, nom, emoji, type, photos, factions, rang, rangs')
     setMembers(data || [])
   }
 
@@ -279,8 +284,8 @@ export default function FactionsPage() {
                 const rangs = (rosterFaction.rangs || []).slice().sort((a,b) => a.ordre - b.ordre)
                 let groups: { label: string; color: string; items: Member[] }[]
                 if (rangs.length > 0) {
-                  groups = rangs.map(r => ({ label: r.nom, color: '#d4a017', items: factionMembers.filter(m => m.rang === r.nom) })).filter(g => g.items.length > 0)
-                  const sansRang = factionMembers.filter(m => !rangs.some(r => r.nom === m.rang))
+                  groups = rangs.map(r => ({ label: r.nom, color: '#d4a017', items: factionMembers.filter(m => memberRangFor(m, rosterFaction.nom) === r.nom) })).filter(g => g.items.length > 0)
+                  const sansRang = factionMembers.filter(m => !rangs.some(r => r.nom === memberRangFor(m, rosterFaction.nom)))
                   if (sansRang.length > 0) groups.push({ label: 'Sans rang', color: '#7a9ab8', items: sansRang })
                 } else {
                   groups = ['pj','pnj','allié','antagoniste'].map(t => ({ label: MEMBER_TYPE_LABELS[t], color: MEMBER_TYPE_COLORS[t], items: factionMembers.filter(m => m.type === t) })).filter(g => g.items.length > 0)
