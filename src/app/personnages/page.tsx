@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
+import ImageCropper from '@/components/ImageCropper'
 
 interface Personnage {
   id: string
@@ -13,6 +14,8 @@ interface Personnage {
   type: string
   equipage?: string
   prime?: string
+  condition_prime?: string
+  titre_mondial?: string
   origine?: string
   ile?: string
   factions?: string[]
@@ -33,10 +36,25 @@ const FRUIT_TYPE_ORDER = ['Paramecia', 'Logia', 'Zoan', 'Mythical']
 interface FactionRef { id: string; nom: string; rangs?: { nom: string; ordre: number }[] }
 
 const TYPE_COLORS: Record<string, string> = {
-  pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', allié: '#40d060'
+  pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', allié: '#40d060', ambivalent: '#a060ff'
 }
 const STATUT_COLORS: Record<string, string> = {
   vivant: '#40d060', mort: '#ff6060', disparu: '#ffb060', inconnu: '#a0a0c0'
+}
+const CONDITION_PRIME_LABELS: Record<string, string> = {
+  mort_ou_vif: 'Mort ou Vif', mort_uniquement: 'Mort uniquement', vif_uniquement: 'Vif uniquement'
+}
+const TITRE_MONDIAL: Record<string, { label: string; icon: string; color: string }> = {
+  'Empereur': { label: 'Empereur', icon: '👑', color: '#e03030' },
+  'Amiral': { label: 'Amiral', icon: '⚓', color: '#00c8ff' },
+  'Vice-Amiral': { label: 'Vice-Amiral', icon: '🎖️', color: '#4488ff' },
+}
+type SortMode = 'defaut' | 'prime' | 'groupe'
+function parsePrime(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
+function sortPersonnages(items: Personnage[], mode: SortMode) {
+  if (mode === 'prime') return items.slice().sort((a, b) => parsePrime(b.prime) - parsePrime(a.prime))
+  if (mode === 'groupe') return items.slice().sort((a, b) => (a.equipage || 'zzz').localeCompare(b.equipage || 'zzz') || a.nom.localeCompare(b.nom))
+  return items
 }
 
 const S = {
@@ -71,13 +89,17 @@ export default function PersonnagesPage() {
   const [lames, setLames] = useState<LinkedItem[]>([])
   const [cristaux, setCristaux] = useState<LinkedItem[]>([])
   const [factionFilter, setFactionFilter] = useState('')
+  const [sortMode, setSortMode] = useState<SortMode>('defaut')
   const [form, setForm] = useState<Partial<Personnage>>({
     nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant',
-    prime: '0', origine: '', ile: '', factions: [], rang: '', equipage: '', fruit: 'Aucun',
+    prime: '0', condition_prime: 'mort_ou_vif', titre_mondial: '', origine: '', ile: '', factions: [], rang: '', equipage: '', fruit: 'Aucun',
     tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: ''
   })
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
+  const [dragOver, setDragOver] = useState(false)
+  const [cropTarget, setCropTarget] = useState<{ kind: 'new'; index: number; file: File } | { kind: 'existing'; index: number; file: File } | null>(null)
+  const [cropLoading, setCropLoading] = useState<number | null>(null)
   const autoOpenedRef = useRef(false)
 
   useEffect(() => {
@@ -143,27 +165,67 @@ export default function PersonnagesPage() {
     if (p) {
       setForm(p)
       setEditId(p.id)
-      setPhotoPreviews(p.photos || [])
     } else {
-      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', origine: '', ile: '', factions: [], rang: '', equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
+      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', condition_prime: 'mort_ou_vif', titre_mondial: '', origine: '', ile: '', factions: [], rang: '', equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
       setEditId(null)
-      setPhotoPreviews([])
     }
     setPhotoFiles([])
+    setPhotoPreviews([])
     setShowForm(true)
   }
 
+  function addPhotoFiles(files: File[]) {
+    const imgFiles = files.filter(f => f.type.startsWith('image/'))
+    setPhotoFiles(prev => [...prev, ...imgFiles])
+    setPhotoPreviews(prev => [...prev, ...imgFiles.map(f => URL.createObjectURL(f))])
+  }
+
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || [])
-    setPhotoFiles(prev => [...prev, ...files])
-    const previews = files.map(f => URL.createObjectURL(f))
-    setPhotoPreviews(prev => [...prev, ...previews])
+    addPhotoFiles(Array.from(e.target.files || []))
+    e.target.value = ''
+  }
+
+  function removeExistingPhoto(i: number) {
+    setForm(f => ({ ...f, photos: (f.photos || []).filter((_, j) => j !== i) }))
+  }
+  function removeNewPhoto(i: number) {
+    setPhotoPreviews(p => p.filter((_, j) => j !== i))
+    setPhotoFiles(p => p.filter((_, j) => j !== i))
+  }
+
+  async function cropExistingPhoto(i: number) {
+    const url = (form.photos || [])[i]
+    if (!url) return
+    setCropLoading(i)
+    try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const file = new File([blob], 'photo.jpg', { type: blob.type || 'image/jpeg' })
+      setCropTarget({ kind: 'existing', index: i, file })
+    } finally {
+      setCropLoading(null)
+    }
+  }
+
+  async function onCropDone(cropped: File) {
+    if (!cropTarget) return
+    if (cropTarget.kind === 'new') {
+      setPhotoFiles(p => p.map((f, j) => j === cropTarget.index ? cropped : f))
+      setPhotoPreviews(p => p.map((src, j) => j === cropTarget.index ? URL.createObjectURL(cropped) : src))
+    } else {
+      setCropLoading(cropTarget.index)
+      const url = await uploadImage(cropped, 'personnages')
+      setCropLoading(null)
+      if (url) {
+        setForm(f => ({ ...f, photos: (f.photos || []).map((src, j) => j === cropTarget.index ? url : src) }))
+      }
+    }
+    setCropTarget(null)
   }
 
   async function saveForm() {
     if (!form.nom?.trim()) { alert('Le nom est obligatoire !'); return }
     setUploading(true)
-    // Upload new photos
     let photos = form.photos || []
     for (const file of photoFiles) {
       const url = await uploadImage(file, 'personnages')
@@ -250,9 +312,17 @@ export default function PersonnagesPage() {
           </div>
         </div>
 
+        {/* Tri */}
+        <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap', alignItems:'center', marginBottom:'.75rem' }}>
+          <span style={{ fontFamily:"'Cinzel',serif", fontSize:'.56rem', letterSpacing:'.1em', textTransform:'uppercase', color:'#4a6880', marginRight:'.2rem' }}>Trier :</span>
+          {([['defaut','Par défaut'],['prime','Par prime'],['groupe','Par groupe']] as [SortMode,string][]).map(([m,l]) => (
+            <button key={m} onClick={() => setSortMode(m)} style={{ background: sortMode===m ? 'rgba(0,200,255,.15)' : '#0a1829', border: `1px solid ${sortMode===m ? '#00c8ff' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.3rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.07em', textTransform:'uppercase', color: sortMode===m ? '#00c8ff' : '#7a9ab8', cursor:'pointer' }}>{l}</button>
+          ))}
+        </div>
+
         {/* Chips */}
         <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap', marginBottom:'.75rem' }}>
-          {['', 'pj', 'pnj', 'antagoniste', 'allié'].map(t => (
+          {['', 'pj', 'pnj', 'antagoniste', 'allié', 'ambivalent'].map(t => (
             <button key={t} onClick={() => setTypeFilter(t)} style={{ background: typeFilter===t ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${typeFilter===t ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.3rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.07em', textTransform:'uppercase', color: typeFilter===t ? '#f0c040' : '#7a9ab8', cursor:'pointer' }}>
               {t || 'Tous'}
             </button>
@@ -280,18 +350,41 @@ export default function PersonnagesPage() {
             <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter le premier</button>
           </div>
         )}
-        {filtered.map(p => (
-          <div key={p.id} style={S.card}
-            onMouseEnter={e => { const el = e.currentTarget; el.style.transform='translateY(-7px)'; el.style.borderColor='#d4a017'; el.style.boxShadow='0 20px 40px rgba(0,0,0,.5)' }}
-            onMouseLeave={e => { const el = e.currentTarget; el.style.transform='none'; el.style.borderColor='rgba(30,120,200,.2)'; el.style.boxShadow='none' }}
+        {sortPersonnages(filtered, sortMode).flatMap((p, idx, arr) => {
+          const nodes: React.ReactNode[] = []
+          if (sortMode === 'groupe') {
+            const g = p.equipage || 'Sans groupe'
+            const prevG = idx > 0 ? (arr[idx-1].equipage || 'Sans groupe') : null
+            if (g !== prevG) {
+              nodes.push(
+                <div key={`div-${g}-${idx}`} style={{ gridColumn:'1/-1', display:'flex', alignItems:'center', gap:'.75rem', margin: idx===0 ? '0 0 .2rem' : '1.4rem 0 .2rem' }}>
+                  <span style={{ fontFamily:"'Cinzel',serif", fontSize:'.68rem', letterSpacing:'.12em', textTransform:'uppercase', color:'#f0c040' }}>⚓ {g}</span>
+                  <div style={{ flex:1, height:1, background:'rgba(212,160,23,.25)' }} />
+                </div>
+              )
+            }
+          }
+          const isMort = p.statut === 'mort'
+          const tm = p.titre_mondial ? TITRE_MONDIAL[p.titre_mondial] : null
+          const linkedDespa = despas.find(d => d.proprietaire === p.nom)
+          nodes.push(
+          <div key={p.id} style={{ ...S.card, ...(tm ? { border:`2px solid ${tm.color}`, boxShadow:`0 0 22px ${tm.color}33` } : {}) }}
+            onMouseEnter={e => { const el = e.currentTarget; el.style.transform='translateY(-7px)'; if(!tm) el.style.borderColor='#d4a017'; el.style.boxShadow= tm ? `0 0 30px ${tm.color}55` : '0 20px 40px rgba(0,0,0,.5)' }}
+            onMouseLeave={e => { const el = e.currentTarget; el.style.transform='none'; if(!tm) el.style.borderColor='rgba(30,120,200,.2)'; el.style.boxShadow= tm ? `0 0 22px ${tm.color}33` : 'none' }}
           >
             {/* Image */}
             <div style={{ width:'100%', height:195, overflow:'hidden', background:'linear-gradient(135deg,#0a1829,#050d1a)', position:'relative', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'5rem', cursor:'pointer' }}
               onClick={() => { setSelected(p); setShowView(true) }}>
               {p.photos && p.photos[0]
-                ? <img src={p.photos[0]} alt={p.nom} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top', display:'block', position:'absolute', inset:0 }} />
+                ? <img src={p.photos[0]} alt={p.nom} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top', display:'block', position:'absolute', inset:0, filter: isMort ? 'grayscale(1)' : 'none', opacity: isMort ? .5 : 1 }} />
                 : null}
               <span style={{ position:'relative', zIndex:1, opacity: p.photos && p.photos[0] ? 0 : 1 }}>{p.emoji || '👤'}</span>
+              {isMort && <span style={{ position:'absolute', fontSize:'3.2rem', opacity:.85, zIndex:2, filter:'drop-shadow(0 2px 6px rgba(0,0,0,.8))' }}>☠️</span>}
+              {tm && (
+                <div style={{ position:'absolute', top:8, left:8, zIndex:3, background:`${tm.color}dd`, color:'#050d1a', borderRadius:100, padding:'.2rem .6rem', fontFamily:"'Cinzel',serif", fontSize:'.55rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', display:'flex', alignItems:'center', gap:'.3rem' }}>
+                  {tm.icon} {tm.label}
+                </div>
+              )}
               <div style={{ position:'absolute', bottom:0, left:0, right:0, height:55, background:'linear-gradient(to top,#0d2040,transparent)', pointerEvents:'none' }} />
             </div>
 
@@ -301,14 +394,17 @@ export default function PersonnagesPage() {
                 {p.type.toUpperCase()}
               </div>
 
-              <div style={{ fontFamily:"'Cinzel',serif", fontSize:'1.05rem', fontWeight:700, color:'#e8eef5', marginBottom:'.12rem', cursor:'pointer' }} onClick={() => { setSelected(p); setShowView(true) }}>
+              <div style={{ fontFamily:"'Cinzel',serif", fontSize:'1.05rem', fontWeight:700, color: isMort ? '#7a9ab8' : '#e8eef5', textDecoration: isMort ? 'line-through' : 'none', marginBottom:'.12rem', cursor:'pointer' }} onClick={() => { setSelected(p); setShowView(true) }}>
                 {p.nom}
               </div>
-              {p.surnom && <div style={{ fontStyle:'italic', color:'#7a9ab8', fontSize:'.82rem', marginBottom:'.65rem' }}>"{p.surnom}"</div>}
+              {p.surnom && <div style={{ fontStyle:'italic', color:'#7a9ab8', fontSize:'.82rem', marginBottom:'.3rem' }}>"{p.surnom}"</div>}
+              {p.rang && <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.68rem', color:'#a060ff', marginBottom:'.5rem' }}>🎖️ {p.rang}</div>}
 
-              <div style={{ fontSize:'.82rem', color:'#7a9ab8', marginBottom:'.4rem' }}>⭐ <span style={{ color:'#f0c040', fontFamily:"'Cinzel',serif", fontWeight:700 }}>{p.prime} 🍖</span></div>
+              <div style={{ fontSize:'.82rem', color:'#7a9ab8', marginBottom:'.15rem' }}>⭐ <span style={{ color:'#f0c040', fontFamily:"'Cinzel',serif", fontWeight:700 }}>{p.prime} 🍖</span></div>
+              <div style={{ fontSize:'.62rem', color:'#e03030', fontFamily:"'Cinzel',serif", letterSpacing:'.06em', textTransform:'uppercase', marginBottom:'.4rem' }}>{CONDITION_PRIME_LABELS[p.condition_prime||'mort_ou_vif']}</div>
               {p.equipage && <div style={{ fontSize:'.82rem', color:'#7a9ab8', marginBottom:'.4rem' }}>⚓ {p.equipage}</div>}
               {p.fruit && p.fruit !== 'Aucun' && <div style={{ fontSize:'.82rem', color:'#7a9ab8' }}>🍎 {p.fruit}</div>}
+              {linkedDespa && <div style={{ fontSize:'.82rem', color:'#7a9ab8' }}>🦾 {linkedDespa.nom}</div>}
 
               {/* Tags */}
               {p.tags && (
@@ -332,7 +428,9 @@ export default function PersonnagesPage() {
               </div>
             </div>
           </div>
-        ))}
+          )
+          return nodes
+        })}
       </div>
 
       {/* ===== FORM MODAL ===== */}
@@ -352,19 +450,36 @@ export default function PersonnagesPage() {
               <div>
                 <label style={S.label}>📸 Photos du personnage</label>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'.6rem', marginBottom:'.65rem' }}>
-                  {photoPreviews.map((src, i) => (
-                    <div key={i} style={{ aspectRatio:'1', borderRadius:8, overflow:'hidden', position:'relative', border: i===0?'2px solid #d4a017':'2px solid rgba(30,120,200,.2)' }}>
-                      <img src={src} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
-                      <button onClick={() => { setPhotoPreviews(p => p.filter((_,j) => j!==i)); setPhotoFiles(p => p.filter((_,j) => j!==i)) }}
+                  {(form.photos || []).map((src, i) => (
+                    <div key={`existing-${i}`} style={{ aspectRatio:'1', borderRadius:8, overflow:'hidden', position:'relative', border: i===0?'2px solid #d4a017':'2px solid rgba(30,120,200,.2)' }}>
+                      <img src={src} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block', opacity: cropLoading===i?.4:1 }} />
+                      {cropLoading===i && <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.2rem' }}>⏳</div>}
+                      <button onClick={() => cropExistingPhoto(i)} title="Recadrer"
+                        style={{ position:'absolute', top:2, left:2, background:'rgba(0,200,255,.85)', border:'none', borderRadius:'50%', width:20, height:20, color:'#050d1a', fontSize:'.6rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✂️</button>
+                      <button onClick={() => removeExistingPhoto(i)}
                         style={{ position:'absolute', top:2, right:2, background:'rgba(224,48,48,.85)', border:'none', borderRadius:'50%', width:20, height:20, color:'#fff', fontSize:'.6rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
                       {i===0 && <div style={{ position:'absolute', bottom:2, left:2, background:'rgba(212,160,23,.85)', borderRadius:4, fontFamily:"'Cinzel',serif", fontSize:'.45rem', color:'#050d1a', padding:'1px 4px' }}>Principal</div>}
                     </div>
                   ))}
-                  {photoPreviews.length < 8 && (
-                    <label style={{ aspectRatio:'1', borderRadius:8, border:'2px dashed rgba(30,120,200,.3)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', cursor:'pointer', background:'#0d2040', color:'#4a6880', fontSize:'.6rem', fontFamily:"'Cinzel',serif', gap:'.3rem'" }}>
+                  {photoPreviews.map((src, i) => (
+                    <div key={`new-${i}`} style={{ aspectRatio:'1', borderRadius:8, overflow:'hidden', position:'relative', border: ((form.photos||[]).length===0 && i===0) ? '2px solid #d4a017' : '2px solid rgba(30,120,200,.2)' }}>
+                      <img src={src} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+                      <button onClick={() => setCropTarget({ kind:'new', index:i, file:photoFiles[i] })} title="Recadrer"
+                        style={{ position:'absolute', top:2, left:2, background:'rgba(0,200,255,.85)', border:'none', borderRadius:'50%', width:20, height:20, color:'#050d1a', fontSize:'.6rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✂️</button>
+                      <button onClick={() => removeNewPhoto(i)}
+                        style={{ position:'absolute', top:2, right:2, background:'rgba(224,48,48,.85)', border:'none', borderRadius:'50%', width:20, height:20, color:'#fff', fontSize:'.6rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                      {(form.photos||[]).length===0 && i===0 && <div style={{ position:'absolute', bottom:2, left:2, background:'rgba(212,160,23,.85)', borderRadius:4, fontFamily:"'Cinzel',serif", fontSize:'.45rem', color:'#050d1a', padding:'1px 4px' }}>Principal</div>}
+                    </div>
+                  ))}
+                  {((form.photos||[]).length + photoPreviews.length) < 8 && (
+                    <label
+                      onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={e => { e.preventDefault(); setDragOver(false); addPhotoFiles(Array.from(e.dataTransfer.files || [])) }}
+                      style={{ aspectRatio:'1', borderRadius:8, border: dragOver ? '2px dashed #d4a017' : '2px dashed rgba(30,120,200,.3)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', cursor:'pointer', background: dragOver ? 'rgba(212,160,23,.1)' : '#0d2040', color:'#4a6880', fontSize:'.6rem', fontFamily:"'Cinzel',serif", gap:'.3rem', textAlign:'center' }}>
                       <input type="file" accept="image/*,.gif" multiple style={{ display:'none' }} onChange={handlePhotoChange} />
                       <span style={{ fontSize:'1.5rem' }}>➕</span>
-                      <span>Photo</span>
+                      <span>Clique ou glisse</span>
                     </label>
                   )}
                 </div>
@@ -391,6 +506,7 @@ export default function PersonnagesPage() {
                     <option value="pnj">PNJ</option>
                     <option value="antagoniste">Antagoniste</option>
                     <option value="allié">Allié</option>
+                    <option value="ambivalent">Ambivalent</option>
                   </select>
                 </div>
                 <div>
@@ -404,15 +520,36 @@ export default function PersonnagesPage() {
                 </div>
               </div>
 
-              {/* Prime + Origine */}
+              {/* Prime + Condition */}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'.85rem' }}>
                 <div>
                   <label style={S.label}>Prime (beris)</label>
                   <input style={S.input} value={form.prime||''} onChange={e => setForm(f => ({...f, prime:e.target.value}))} placeholder="450,000,000" />
                 </div>
                 <div>
+                  <label style={S.label}>Avis de recherche</label>
+                  <select style={{ ...S.input }} value={form.condition_prime||'mort_ou_vif'} onChange={e => setForm(f => ({...f, condition_prime:e.target.value}))}>
+                    <option value="mort_ou_vif">Mort ou Vif</option>
+                    <option value="mort_uniquement">Mort uniquement</option>
+                    <option value="vif_uniquement">Vif uniquement</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Origine + Titre mondial */}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'.85rem' }}>
+                <div>
                   <label style={S.label}>Origine</label>
                   <input style={S.input} value={form.origine||''} onChange={e => setForm(f => ({...f, origine:e.target.value}))} placeholder="East Blue" />
+                </div>
+                <div>
+                  <label style={S.label}>👑 Titre mondial</label>
+                  <select style={{ ...S.input }} value={form.titre_mondial||''} onChange={e => setForm(f => ({...f, titre_mondial:e.target.value}))}>
+                    <option value="">— Aucun —</option>
+                    <option value="Empereur">👑 Empereur (Yonko)</option>
+                    <option value="Amiral">⚓ Amiral</option>
+                    <option value="Vice-Amiral">🎖️ Vice-Amiral</option>
+                  </select>
                 </div>
               </div>
 
@@ -569,19 +706,24 @@ export default function PersonnagesPage() {
             {/* Header avec photo */}
             <div style={{ position:'relative', height:280, background:'linear-gradient(135deg,#071828,#0d2440)', borderRadius:'18px 18px 0 0', overflow:'hidden', display:'flex', alignItems:'flex-end', padding:'1.75rem' }}>
               {selected.photos && selected.photos[0] && (
-                <img src={selected.photos[0]} style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'top center', opacity:.42, display:'block' }} />
+                <img src={selected.photos[0]} style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'top center', opacity:.42, display:'block', filter: selected.statut==='mort' ? 'grayscale(1)' : 'none' }} />
               )}
               {(!selected.photos || !selected.photos[0]) && (
                 <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13rem', opacity:.07, filter:'blur(2px)' }}>{selected.emoji}</div>
               )}
               <div style={{ position:'absolute', bottom:0, left:0, right:0, height:150, background:'linear-gradient(to top,#0a1829,transparent)' }} />
+              {selected.titre_mondial && TITRE_MONDIAL[selected.titre_mondial] && (
+                <div style={{ position:'absolute', top:'.9rem', left:'.9rem', zIndex:5, background:`${TITRE_MONDIAL[selected.titre_mondial].color}dd`, color:'#050d1a', borderRadius:100, padding:'.3rem .75rem', fontFamily:"'Cinzel',serif", fontSize:'.62rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase' }}>
+                  {TITRE_MONDIAL[selected.titre_mondial].icon} {TITRE_MONDIAL[selected.titre_mondial].label}
+                </div>
+              )}
               <button onClick={() => setShowView(false)} style={{ position:'absolute', top:'.9rem', right:'.9rem', background:'rgba(5,13,26,.75)', border:'1px solid rgba(30,120,200,.2)', color:'#7a9ab8', borderRadius:'50%', width:34, height:34, cursor:'pointer', fontSize:'.9rem', zIndex:5 }}>✕</button>
               <div style={{ position:'relative', zIndex:2, display:'flex', gap:'1.25rem', alignItems:'flex-end' }}>
                 <div style={{ width:86, height:86, borderRadius:14, background:'#0d2040', border:'2px solid #d4a017', overflow:'hidden', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'2.8rem' }}>
-                  {selected.photos && selected.photos[0] ? <img src={selected.photos[0]} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top', display:'block' }} /> : selected.emoji}
+                  {selected.photos && selected.photos[0] ? <img src={selected.photos[0]} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top', display:'block', filter: selected.statut==='mort' ? 'grayscale(1)' : 'none' }} /> : selected.emoji}
                 </div>
                 <div>
-                  <div style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'1.85rem', fontWeight:700, color:'#fff', marginBottom:'.15rem' }}>{selected.nom}</div>
+                  <div style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'1.85rem', fontWeight:700, color:'#fff', textDecoration: selected.statut==='mort' ? 'line-through' : 'none', marginBottom:'.15rem' }}>{selected.statut==='mort' && '☠️ '}{selected.nom}</div>
                   {selected.surnom && <div style={{ fontStyle:'italic', color:'#f0c040', fontSize:'.95rem', marginBottom:'.45rem' }}>"{selected.surnom}"</div>}
                   <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap' }}>
                     <span style={{ background:`${TYPE_COLORS[selected.type]}22`, color:TYPE_COLORS[selected.type], border:`1px solid ${TYPE_COLORS[selected.type]}44`, borderRadius:100, padding:'.15rem .65rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.1em', textTransform:'uppercase' }}>{selected.type.toUpperCase()}</span>
@@ -597,10 +739,12 @@ export default function PersonnagesPage() {
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.1rem', marginBottom:'1.25rem' }}>
                 {[
                   { l:'⭐ Prime', v:selected.prime+' 🍖', c:'#f0c040', href:null },
+                  { l:'📋 Avis de recherche', v:CONDITION_PRIME_LABELS[selected.condition_prime||'mort_ou_vif'], c:'#e03030', href:null },
                   { l:'⚓ Équipage', v:selected.equipage||'—', c:'#00c8ff', href:null },
                   { l:'📍 Origine', v:selected.origine||'—', c:'#7a9ab8', href:null },
                   { l:'🏝️ Île', v:selected.ile||'—', c:'#40d060', href: selected.ile ? `/iles?q=${encodeURIComponent(selected.ile)}` : null },
                   { l:'🏴‍☠️ Factions', v:(selected.factions && selected.factions.length > 0) ? selected.factions.join(', ') : '—', c:'#ff8c40', href: null },
+                  { l:'🦾 Despa', v: despas.find(d => d.proprietaire === selected.nom)?.nom || '—', c:'#4488ff', href: despas.find(d => d.proprietaire === selected.nom) ? `/despas?q=${encodeURIComponent(despas.find(d => d.proprietaire === selected.nom)!.nom)}` : null },
                   { l:'❤️ Statut', v:selected.statut||'—', c:STATUT_COLORS[selected.statut||''] , href:null},
                 ].map(({l,v,c,href}) => {
                   const tile = (
@@ -708,6 +852,8 @@ export default function PersonnagesPage() {
           </div>
         </div>
       )}
+
+      {cropTarget && <ImageCropper file={cropTarget.file} onCancel={() => setCropTarget(null)} onCropped={onCropDone} />}
     </div>
   )
 }
