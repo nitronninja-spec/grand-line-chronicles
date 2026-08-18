@@ -27,7 +27,31 @@ const REL_TYPES: Record<string, { label: string; icon: string; color: string }> 
   neutre: { label: 'Neutre', icon: '➖', color: '#7a9ab8' },
 }
 const TYPE_COLORS: Record<string, string> = { Pirates: '#d4a017', Marine: '#00c8ff', Gouvernement: '#4488ff', 'Révolutionnaire': '#e03030', Peuple: '#40e0a0', Neutre: '#7a9ab8', Autre: '#a060ff' }
+const TYPE_EMOJI: Record<string, string> = { Pirates: '🏴‍☠️', Marine: '⚓', Gouvernement: '🏛️', 'Révolutionnaire': '✊', Peuple: '👥', Neutre: '🤝', Autre: '⚔️' }
+const TYPES = ['Pirates', 'Marine', 'Gouvernement', 'Révolutionnaire', 'Peuple', 'Neutre', 'Autre']
 const REL_ORDER = ['alliance', 'ennemie', 'neutre']
+
+function factionZoneType(f: Faction): string {
+  return TYPES.includes(f.type || '') ? (f.type as string) : 'Autre'
+}
+
+type Zone = { x0: number; y0: number; x1: number; y1: number }
+function computeTypeZones(factions: Faction[]): Record<string, Zone> {
+  const present = TYPES.filter(t => factions.some(f => factionZoneType(f) === t))
+  const zones: Record<string, Zone> = {}
+  const z = present.length
+  if (z === 0) return zones
+  const cols = Math.max(1, Math.ceil(Math.sqrt(z)))
+  const rows = Math.ceil(z / cols)
+  const marginX = 3, marginY = 4
+  const zw = (100 - marginX * 2) / cols
+  const zh = (100 - marginY * 2) / rows
+  present.forEach((t, i) => {
+    const col = i % cols, row = Math.floor(i / cols)
+    zones[t] = { x0: marginX + col * zw, y0: marginY + row * zh, x1: marginX + (col + 1) * zw, y1: marginY + (row + 1) * zh }
+  })
+  return zones
+}
 
 function computeInitialPositions(list: Faction[]): Record<string, Pos> {
   const pos: Record<string, Pos> = {}
@@ -116,16 +140,34 @@ function computeForceLayout(factions: Faction[], relations: Relation[], seed: Re
     temp *= 0.985
   }
 
-  const xs = ids.map(id => pos[id].x), ys = ids.map(id => pos[id].y)
-  const minX = Math.min(...xs), maxX = Math.max(...xs)
-  const minY = Math.min(...ys), maxY = Math.max(...ys)
-  const spanX = Math.max(maxX - minX, 1), spanY = Math.max(maxY - minY, 1)
-  const [tMinX, tMaxX, tMinY, tMaxY] = [8, 92, 10, 90]
-  ids.forEach(id => {
-    pos[id] = {
-      x: tMinX + ((pos[id].x - minX) / spanX) * (tMaxX - tMinX),
-      y: tMinY + ((pos[id].y - minY) / spanY) * (tMaxY - tMinY),
+  // Regroupe ensuite chaque type de faction dans sa propre case du schéma (cf. computeTypeZones),
+  // en conservant l'agencement relatif calculé par la simulation à l'intérieur de chaque groupe —
+  // les alliés d'un même type restent proches entre eux, mais chaque type occupe une zone distincte.
+  const zones = computeTypeZones(factions)
+  const byType: Record<string, string[]> = {}
+  factions.forEach(f => {
+    const t = factionZoneType(f)
+    ;(byType[t] = byType[t] || []).push(f.id)
+  })
+  Object.entries(byType).forEach(([t, groupIds]) => {
+    const zone = zones[t]
+    if (!zone) return
+    const gx0 = zone.x0 + 5, gx1 = zone.x1 - 5
+    const gy0 = zone.y0 + 9, gy1 = zone.y1 - 5
+    if (groupIds.length === 1) {
+      pos[groupIds[0]] = { x: (gx0 + gx1) / 2, y: (gy0 + gy1) / 2 }
+      return
     }
+    const gxs = groupIds.map(id => pos[id].x), gys = groupIds.map(id => pos[id].y)
+    const gMinX = Math.min(...gxs), gMaxX = Math.max(...gxs)
+    const gMinY = Math.min(...gys), gMaxY = Math.max(...gys)
+    const gSpanX = Math.max(gMaxX - gMinX, 1), gSpanY = Math.max(gMaxY - gMinY, 1)
+    groupIds.forEach(id => {
+      pos[id] = {
+        x: gx0 + ((pos[id].x - gMinX) / gSpanX) * (gx1 - gx0),
+        y: gy0 + ((pos[id].y - gMinY) / gSpanY) * (gy1 - gy0),
+      }
+    })
   })
 
   return pos
@@ -141,6 +183,33 @@ function controlPoint(p1: Pos, p2: Pos): Pos {
   const len = Math.hypot(dx, dy) || 1
   const bow = Math.min(len * 0.16, 9)
   return { x: mx + (-dy / len) * bow, y: my + (dx / len) * bow }
+}
+
+// Regroupe les relations d'un type donné en blocs (composantes connexes) : par exemple,
+// toutes les factions alliées entre elles, même indirectement, forment un même bloc —
+// pour afficher la liste des alliances organisée par « camp » plutôt qu'en vrac.
+function computeBlocs(items: Relation[]): string[][] {
+  const adj: Record<string, Set<string>> = {}
+  items.forEach(r => {
+    ;(adj[r.faction_a] = adj[r.faction_a] || new Set()).add(r.faction_b)
+    ;(adj[r.faction_b] = adj[r.faction_b] || new Set()).add(r.faction_a)
+  })
+  const seen = new Set<string>()
+  const blocs: string[][] = []
+  Object.keys(adj).forEach(start => {
+    if (seen.has(start)) return
+    const bloc: string[] = []
+    const stack = [start]
+    while (stack.length) {
+      const cur = stack.pop() as string
+      if (seen.has(cur)) continue
+      seen.add(cur)
+      bloc.push(cur)
+      adj[cur].forEach(next => { if (!seen.has(next)) stack.push(next) })
+    }
+    blocs.push(bloc.sort((a, b) => a.localeCompare(b)))
+  })
+  return blocs.sort((a, b) => b.length - a.length)
 }
 
 const S = {
@@ -282,7 +351,7 @@ export default function RelationsPage() {
             <h1 style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'clamp(1.8rem,3.5vw,3rem)', fontWeight:700, background:'linear-gradient(135deg,#fff,#f0c040)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
               Relations entre factions
             </h1>
-            <p style={{ color:'#7a9ab8', fontSize:'.9rem', marginTop:'.3rem' }}>Glisse une faction pour organiser le schéma · clique un nœud pour surligner ses liens · clique un lien pour le modifier.</p>
+            <p style={{ color:'#7a9ab8', fontSize:'.9rem', marginTop:'.3rem' }}>Glisse une faction pour organiser le schéma · clique un nœud pour surligner ses liens · clique un lien pour le modifier. Les cases en pointillés regroupent les factions par type.</p>
           </div>
           <div style={{ display:'flex', gap:'.6rem' }}>
             <button style={S.btnCyan} onClick={resetLayout} title="Remet toutes les factions en cercle régulier">↺ Cercle</button>
@@ -329,6 +398,18 @@ export default function RelationsPage() {
                 <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.68rem', letterSpacing:'.1em', textTransform:'uppercase' }}>Aucune relation — clique ＋ Nouvelle relation</div>
               </div>
             )}
+
+            {/* Cases par type de faction — repères visuels pour la disposition optimale */}
+            {Object.entries(computeTypeZones(factions)).map(([t, z]) => (
+              <div key={t} style={{
+                position:'absolute', left:`${z.x0}%`, top:`${z.y0}%`, width:`${z.x1 - z.x0}%`, height:`${z.y1 - z.y0}%`,
+                border:`1px dashed ${TYPE_COLORS[t]}4d`, borderRadius:12, background:`${TYPE_COLORS[t]}0a`, pointerEvents:'none', zIndex:0,
+              }}>
+                <div style={{ position:'absolute', top:6, left:10, fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.08em', textTransform:'uppercase', color:`${TYPE_COLORS[t]}` , opacity:.85 }}>
+                  {TYPE_EMOJI[t]} {t} <span style={{ opacity:.7 }}>({factions.filter(f => factionZoneType(f) === t).length})</span>
+                </div>
+              </div>
+            ))}
 
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }}>
               {relations.map(r => {
@@ -385,10 +466,54 @@ export default function RelationsPage() {
           </div>
         )}
 
-        {/* Liste des relations, groupée par type */}
-        {relations.length > 0 && (
+        {/* Alliances, divisées en blocs (camps) */}
+        {counts.alliance > 0 && (() => {
+          const allianceItems = relations.filter(r => r.type === 'alliance')
+          const rt = REL_TYPES.alliance
+          const blocs = computeBlocs(allianceItems)
+          return (
+            <div style={{ marginTop:'2rem' }}>
+              <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.68rem', letterSpacing:'.12em', textTransform:'uppercase', color:rt.color, marginBottom:'.75rem', display:'flex', alignItems:'center', gap:'.5rem' }}>
+                {rt.icon} {rt.label} <span style={{ color:'#4a6880' }}>({allianceItems.length} lien{allianceItems.length>1?'s':''} · {blocs.length} camp{blocs.length>1?'s':''})</span> <div style={{ flex:1, height:1, background:`${rt.color}33` }} />
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(270px, 1fr))', gap:'1rem' }}>
+                {blocs.map((bloc, bi) => {
+                  const blocEdges = allianceItems.filter(r => bloc.includes(r.faction_a) && bloc.includes(r.faction_b))
+                  return (
+                    <div key={bi} style={{ background:'#0a1829', border:`1px solid ${rt.color}33`, borderRadius:12, padding:'.9rem' }}>
+                      <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.56rem', letterSpacing:'.1em', textTransform:'uppercase', color:'#4a6880', marginBottom:'.55rem' }}>
+                        Camp de {bloc.length} faction{bloc.length>1?'s':''}
+                      </div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:'.35rem', marginBottom:'.7rem' }}>
+                        {bloc.map(name => {
+                          const fac = factions.find(f => f.nom === name)
+                          return <span key={name} style={{ background:`${rt.color}18`, color:rt.color, border:`1px solid ${rt.color}44`, borderRadius:100, padding:'.2rem .6rem', fontSize:'.74rem', fontFamily:"'Cinzel',serif", display:'inline-flex', alignItems:'center', gap:'.3rem' }}>{fac?.emoji || '🏴‍☠️'} {name}</span>
+                        })}
+                      </div>
+                      <div style={{ display:'flex', flexDirection:'column', gap:'.4rem' }}>
+                        {blocEdges.map(r => (
+                          <div key={r.id} style={{ display:'flex', alignItems:'center', gap:'.5rem', background:'#0d2040', border:'1px solid rgba(30,120,200,.15)', borderRadius:8, padding:'.45rem .65rem' }}>
+                            <span style={{ flex:1, fontSize:'.78rem', lineHeight:1.35, color:'#c8d8e8' }}>
+                              {r.faction_a} <span style={{ color:'#4a6880' }}>—</span> {r.faction_b}
+                              {r.note && <div style={{ color:'#7a9ab8', fontStyle:'italic', fontSize:'.72rem', marginTop:'.1rem' }}>{r.note}</div>}
+                            </span>
+                            <button onClick={() => openRelForm(r)} style={{ background:'rgba(0,200,255,.1)', border:'1px solid rgba(0,200,255,.25)', borderRadius:7, padding:'.15rem .4rem', color:'#00c8ff', cursor:'pointer', fontSize:'.6rem' }}>✏️</button>
+                            <button onClick={() => deleteRelation(r.id)} style={{ background:'rgba(224,48,48,.1)', border:'1px solid rgba(224,48,48,.25)', borderRadius:7, padding:'.15rem .4rem', color:'#ff6060', cursor:'pointer', fontSize:'.6rem' }}>🗑</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Ennemies / Neutres */}
+        {(counts.ennemie > 0 || counts.neutre > 0) && (
           <div style={{ marginTop:'2rem', display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(300px, 1fr))', gap:'1.25rem' }}>
-            {REL_ORDER.filter(t => counts[t] > 0).map(t => {
+            {REL_ORDER.filter(t => t !== 'alliance' && counts[t] > 0).map(t => {
               const rt = REL_TYPES[t]
               const items = relations.filter(r => r.type === t).slice().sort((a,b) => a.faction_a.localeCompare(b.faction_a))
               return (
