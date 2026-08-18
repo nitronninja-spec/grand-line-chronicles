@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
 
+interface Rang { nom: string; ordre: number }
+
 interface Faction {
   id: string
   nom: string
@@ -11,9 +13,10 @@ interface Faction {
   description?: string
   gdoc?: string
   miro?: string
+  rangs?: Rang[]
 }
 
-interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; faction?: string }
+interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; faction?: string; rang?: string }
 interface LinkedIle { id: string; nom: string; emoji?: string; faction?: string }
 
 const TYPES = ['Pirates', 'Marine', 'Gouvernement', 'Révolutionnaire', 'Neutre', 'Autre']
@@ -56,7 +59,7 @@ export default function FactionsPage() {
   }
 
   async function fetchMembers() {
-    const { data } = await supabase.from('personnages').select('id, nom, emoji, type, photos, faction')
+    const { data } = await supabase.from('personnages').select('id, nom, emoji, type, photos, faction, rang')
     setMembers(data || [])
   }
 
@@ -66,15 +69,26 @@ export default function FactionsPage() {
   }
 
   function openForm(f?: Faction) {
-    if (f) { setForm(f); setEditId(f.id) }
-    else { setForm({ nom:'', emoji:'⚔️', type:'Pirates', description:'', gdoc:'', miro:'' }); setEditId(null) }
+    if (f) { setForm({ ...f, rangs: f.rangs || [] }); setEditId(f.id) }
+    else { setForm({ nom:'', emoji:'⚔️', type:'Pirates', description:'', gdoc:'', miro:'', rangs:[] }); setEditId(null) }
     setShowForm(true)
+  }
+
+  function addRang() {
+    setForm(f => ({ ...f, rangs: [...(f.rangs || []), { nom: '', ordre: (f.rangs?.length || 0) + 1 }] }))
+  }
+  function updateRang(i: number, val: Rang) {
+    setForm(f => ({ ...f, rangs: (f.rangs || []).map((r, idx) => idx === i ? val : r) }))
+  }
+  function removeRang(i: number) {
+    setForm(f => ({ ...f, rangs: (f.rangs || []).filter((_, idx) => idx !== i) }))
   }
 
   async function saveForm() {
     if (!form.nom?.trim()) { alert('Le nom est obligatoire !'); return }
-    if (editId) await supabase.from('factions').update(form).eq('id', editId)
-    else await supabase.from('factions').insert([form])
+    const data = { ...form, rangs: (form.rangs || []).filter(r => r.nom.trim()) }
+    if (editId) await supabase.from('factions').update(data).eq('id', editId)
+    else await supabase.from('factions').insert([data])
     setShowForm(false); fetchList()
   }
 
@@ -170,6 +184,27 @@ export default function FactionsPage() {
                 </select>
               </div>
               <div><label style={S.label}>Description</label><textarea style={{...S.input,minHeight:100,resize:'vertical',lineHeight:1.7}} value={form.description||''} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="Rôle, objectifs, territoire..." /></div>
+
+              <div style={{background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:10,padding:'1.1rem'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'.75rem'}}>
+                  <div style={S.label}>🎖️ Rangs hiérarchiques</div>
+                  <button type="button" onClick={addRang} style={{background:'rgba(212,160,23,.12)',border:'1px solid rgba(212,160,23,.3)',borderRadius:8,padding:'.3rem .7rem',color:'#d4a017',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.06em',textTransform:'uppercase',cursor:'pointer'}}>＋ Ajouter un rang</button>
+                </div>
+                {(form.rangs || []).length === 0 && (
+                  <div style={{fontSize:'.8rem',color:'#4a6880',fontStyle:'italic'}}>Aucun rang défini — l&apos;organigramme groupera par PJ / PNJ / Allié / Antagoniste par défaut.</div>
+                )}
+                {(form.rangs || []).map((r, i) => (
+                  <div key={i} style={{display:'flex',gap:'.5rem',marginBottom:'.5rem',alignItems:'center'}}>
+                    <input type="number" min={1} title="Ordre (1 = rang le plus haut)" style={{...S.input,width:64,textAlign:'center'}} value={r.ordre} onChange={e=>updateRang(i,{...r,ordre:parseInt(e.target.value)||1})} />
+                    <input style={{...S.input,flex:1}} value={r.nom} onChange={e=>updateRang(i,{...r,nom:e.target.value})} placeholder="Nom du rang (ex: Capitaine)" />
+                    <button type="button" onClick={()=>removeRang(i)} style={{background:'rgba(224,48,48,.1)',border:'1px solid rgba(224,48,48,.25)',borderRadius:8,padding:'.45rem .7rem',color:'#ff6060',cursor:'pointer',flexShrink:0}}>✕</button>
+                  </div>
+                ))}
+                {(form.rangs || []).length > 0 && (
+                  <div style={{fontSize:'.72rem',color:'#4a6880',fontStyle:'italic',marginTop:'.3rem'}}>Niveau 1 = rang le plus haut dans l&apos;organigramme.</div>
+                )}
+              </div>
+
               <div style={{background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:10,padding:'1.1rem'}}>
                 <div style={{...S.label,marginBottom:'.75rem'}}>🔗 Liens</div>
                 <div style={{marginBottom:'.65rem'}}><label style={{...S.label,color:'#7a9ab8'}}>📄 Google Doc</label><input style={S.input} value={form.gdoc||''} onChange={e=>setForm(f=>({...f,gdoc:e.target.value}))} placeholder="https://docs.google.com/..." /></div>
@@ -200,23 +235,32 @@ export default function FactionsPage() {
 
               <div style={{fontFamily:"'Cinzel',serif",fontSize:'.7rem',letterSpacing:'.14em',textTransform:'uppercase',color:'#00c8ff',marginBottom:'1rem',display:'flex',alignItems:'center',gap:'.5rem',flexWrap:'wrap'}}>
                 🧬 Organigramme <div style={{flex:1,height:1,background:'rgba(30,120,200,.2)'}} />
+                <button onClick={()=>{openForm(rosterFaction); setRosterFaction(null)}} style={{...S.btnCyan, padding:'.35rem .8rem', fontSize:'.58rem'}}>🎖️ Gérer les rangs</button>
                 <a href={`/personnages?newFaction=${encodeURIComponent(rosterFaction.nom)}`} style={{...S.btnGold, padding:'.35rem .8rem', fontSize:'.58rem', textDecoration:'none'}}>＋ Ajouter un personnage</a>
               </div>
 
               {(() => {
                 const factionMembers = members.filter(m => m.faction === rosterFaction.nom)
                 if (factionMembers.length === 0) return <div style={{textAlign:'center',padding:'2rem',color:'#4a6880',fontStyle:'italic',fontSize:'.88rem',marginBottom:'1.5rem'}}>Aucun membre pour l&apos;instant.</div>
-                const groups = ['pj','pnj','allié','antagoniste'].map(t => ({ t, items: factionMembers.filter(m => m.type === t) })).filter(g => g.items.length > 0)
                 const tc = TYPE_COLORS[rosterFaction.type||''] || '#a060ff'
+                const rangs = (rosterFaction.rangs || []).slice().sort((a,b) => a.ordre - b.ordre)
+                let groups: { label: string; color: string; items: Member[] }[]
+                if (rangs.length > 0) {
+                  groups = rangs.map(r => ({ label: r.nom, color: '#d4a017', items: factionMembers.filter(m => m.rang === r.nom) })).filter(g => g.items.length > 0)
+                  const sansRang = factionMembers.filter(m => !rangs.some(r => r.nom === m.rang))
+                  if (sansRang.length > 0) groups.push({ label: 'Sans rang', color: '#7a9ab8', items: sansRang })
+                } else {
+                  groups = ['pj','pnj','allié','antagoniste'].map(t => ({ label: MEMBER_TYPE_LABELS[t], color: MEMBER_TYPE_COLORS[t], items: factionMembers.filter(m => m.type === t) })).filter(g => g.items.length > 0)
+                }
                 return (
                   <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:0,marginBottom:'2rem'}}>
                     <div style={{background:`${tc}22`,border:`1px solid ${tc}66`,borderRadius:12,padding:'.75rem 1.5rem',fontFamily:"'Cinzel',serif",fontSize:'.85rem',fontWeight:700,color:tc,marginBottom:'0'}}>{rosterFaction.emoji} {rosterFaction.nom}</div>
                     <div style={{width:2,height:20,background:'rgba(30,120,200,.3)'}} />
                     {groups.map((g, gi) => (
-                      <div key={g.t} style={{width:'100%'}}>
+                      <div key={g.label} style={{width:'100%'}}>
                         <div style={{display:'flex',alignItems:'center',gap:'.5rem',margin:'0 0 .6rem'}}>
                           <div style={{flex:1,height:1,background:'rgba(30,120,200,.15)'}} />
-                          <span style={{fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.1em',textTransform:'uppercase',color:MEMBER_TYPE_COLORS[g.t]}}>{MEMBER_TYPE_LABELS[g.t]}</span>
+                          <span style={{fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.1em',textTransform:'uppercase',color:g.color}}>{g.label}</span>
                           <div style={{flex:1,height:1,background:'rgba(30,120,200,.15)'}} />
                         </div>
                         <div style={{display:'flex',gap:'.75rem',flexWrap:'wrap',justifyContent:'center',marginBottom: gi < groups.length-1 ? '1.25rem' : 0}}>

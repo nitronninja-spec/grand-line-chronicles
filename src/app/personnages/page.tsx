@@ -16,6 +16,7 @@ interface Personnage {
   origine?: string
   ile?: string
   faction?: string
+  rang?: string
   statut?: string
   fruit?: string
   tags?: string
@@ -28,6 +29,7 @@ interface Personnage {
 }
 
 interface LinkedItem { id: string; nom: string; proprietaire?: string }
+interface FactionRef { id: string; nom: string; rangs?: { nom: string; ordre: number }[] }
 
 const TYPE_COLORS: Record<string, string> = {
   pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', allié: '#40d060'
@@ -62,7 +64,7 @@ export default function PersonnagesPage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [iles, setIles] = useState<{ id: string; nom: string }[]>([])
-  const [factions, setFactions] = useState<{ id: string; nom: string }[]>([])
+  const [factions, setFactions] = useState<FactionRef[]>([])
   const [fruits, setFruits] = useState<LinkedItem[]>([])
   const [despas, setDespas] = useState<LinkedItem[]>([])
   const [lames, setLames] = useState<LinkedItem[]>([])
@@ -70,7 +72,7 @@ export default function PersonnagesPage() {
   const [factionFilter, setFactionFilter] = useState('')
   const [form, setForm] = useState<Partial<Personnage>>({
     nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant',
-    prime: '0', origine: '', ile: '', faction: '', equipage: '', fruit: 'Aucun',
+    prime: '0', origine: '', ile: '', faction: '', rang: '', equipage: '', fruit: 'Aucun',
     tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: ''
   })
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
@@ -106,7 +108,7 @@ export default function PersonnagesPage() {
   }
 
   async function fetchFactions() {
-    const { data } = await supabase.from('factions').select('id, nom').order('nom', { ascending: true })
+    const { data } = await supabase.from('factions').select('id, nom, rangs').order('nom', { ascending: true })
     setFactions(data || [])
   }
 
@@ -142,7 +144,7 @@ export default function PersonnagesPage() {
       setEditId(p.id)
       setPhotoPreviews(p.photos || [])
     } else {
-      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', origine: '', ile: '', faction: '', equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
+      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', origine: '', ile: '', faction: '', rang: '', equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
       setEditId(null)
       setPhotoPreviews([])
     }
@@ -424,12 +426,32 @@ export default function PersonnagesPage() {
                 </div>
                 <div>
                   <label style={S.label}>🏴‍☠️ Faction liée</label>
-                  <select style={{ ...S.input }} value={form.faction || ''} onChange={e => setForm(f => ({ ...f, faction: e.target.value }))}>
+                  <select style={{ ...S.input }} value={form.faction || ''} onChange={e => setForm(f => ({ ...f, faction: e.target.value, rang: '' }))}>
                     <option value="">— Aucune —</option>
                     {factions.map(f => <option key={f.id} value={f.nom}>{f.nom}</option>)}
                   </select>
                 </div>
               </div>
+
+              {/* Rang dans la faction */}
+              {(() => {
+                const selectedFaction = factions.find(f => f.nom === form.faction)
+                const rangs = (selectedFaction?.rangs || []).slice().sort((a, b) => a.ordre - b.ordre)
+                if (!form.faction) return null
+                return (
+                  <div>
+                    <label style={S.label}>🎖️ Rang</label>
+                    {rangs.length > 0 ? (
+                      <select style={{ ...S.input }} value={form.rang || ''} onChange={e => setForm(f => ({ ...f, rang: e.target.value }))}>
+                        <option value="">— Aucun —</option>
+                        {rangs.map(r => <option key={r.nom} value={r.nom}>{r.nom}</option>)}
+                      </select>
+                    ) : (
+                      <div style={{ fontSize:'.8rem', color:'#4a6880', fontStyle:'italic' }}>Cette faction n&apos;a aucun rang défini pour l&apos;instant (Factions → Gérer les rangs).</div>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Equipage + Fruit */}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'.85rem' }}>
@@ -523,6 +545,7 @@ export default function PersonnagesPage() {
                   <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap' }}>
                     <span style={{ background:`${TYPE_COLORS[selected.type]}22`, color:TYPE_COLORS[selected.type], border:`1px solid ${TYPE_COLORS[selected.type]}44`, borderRadius:100, padding:'.15rem .65rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.1em', textTransform:'uppercase' }}>{selected.type.toUpperCase()}</span>
                     {selected.fruit && selected.fruit !== 'Aucun' && <span style={{ background:'rgba(212,160,23,.18)', color:'#f0c040', border:'1px solid rgba(212,160,23,.3)', borderRadius:100, padding:'.15rem .65rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.1em', textTransform:'uppercase' }}>🍎 {selected.fruit}</span>}
+                    {selected.rang && <span style={{ background:'rgba(160,96,255,.18)', color:'#a060ff', border:'1px solid rgba(160,96,255,.3)', borderRadius:100, padding:'.15rem .65rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.1em', textTransform:'uppercase' }}>🎖️ {selected.rang}</span>}
                   </div>
                 </div>
               </div>
