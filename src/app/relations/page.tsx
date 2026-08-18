@@ -287,8 +287,6 @@ export default function RelationsPage() {
               background: 'radial-gradient(circle at 50% 42%, #0f2748 0%, #0a1c38 45%, #050d1a 100%)',
               border:'1px solid rgba(30,120,200,.25)',
               boxShadow:'inset 0 0 80px rgba(0,0,0,.5)',
-              backgroundImage: 'radial-gradient(circle at 50% 42%, #0f2748 0%, #0a1c38 45%, #050d1a 100%), radial-gradient(rgba(122,154,184,.12) 1px, transparent 1px)',
-              backgroundSize: '100% 100%, 26px 26px',
             }}
           >
             {relations.length === 0 && (
