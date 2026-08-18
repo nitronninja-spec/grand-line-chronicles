@@ -51,9 +51,26 @@ const TITRE_MONDIAL: Record<string, { label: string; icon: string; color: string
 }
 type SortMode = 'defaut' | 'prime' | 'groupe'
 function parsePrime(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
-function sortPersonnages(items: Personnage[], mode: SortMode) {
+function getRangOrdre(p: Personnage, factions: FactionRef[]): number {
+  if (!p.rang) return Infinity
+  const eqFaction = factions.find(f => f.nom === p.equipage)
+  const eqMatch = eqFaction?.rangs?.find(r => r.nom === p.rang)
+  if (eqMatch) return eqMatch.ordre
+  for (const fn of p.factions || []) {
+    const match = factions.find(f => f.nom === fn)?.rangs?.find(r => r.nom === p.rang)
+    if (match) return match.ordre
+  }
+  return Infinity
+}
+function sortPersonnages(items: Personnage[], mode: SortMode, factions: FactionRef[]) {
   if (mode === 'prime') return items.slice().sort((a, b) => parsePrime(b.prime) - parsePrime(a.prime))
-  if (mode === 'groupe') return items.slice().sort((a, b) => (a.equipage || 'zzz').localeCompare(b.equipage || 'zzz') || a.nom.localeCompare(b.nom))
+  if (mode === 'groupe') return items.slice().sort((a, b) => {
+    const g = (a.equipage || 'zzz').localeCompare(b.equipage || 'zzz')
+    if (g !== 0) return g
+    const ro = getRangOrdre(a, factions) - getRangOrdre(b, factions)
+    if (ro !== 0) return ro
+    return a.nom.localeCompare(b.nom)
+  })
   return items
 }
 
@@ -350,7 +367,7 @@ export default function PersonnagesPage() {
             <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter le premier</button>
           </div>
         )}
-        {sortPersonnages(filtered, sortMode).flatMap((p, idx, arr) => {
+        {sortPersonnages(filtered, sortMode, factions).flatMap((p, idx, arr) => {
           const nodes: React.ReactNode[] = []
           if (sortMode === 'groupe') {
             const g = p.equipage || 'Sans groupe'
