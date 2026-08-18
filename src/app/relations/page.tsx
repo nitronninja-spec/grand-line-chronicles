@@ -35,141 +35,37 @@ function factionZoneType(f: Faction): string {
   return TYPES.includes(f.type || '') ? (f.type as string) : 'Autre'
 }
 
-type Zone = { x0: number; y0: number; x1: number; y1: number }
-function computeTypeZones(factions: Faction[]): Record<string, Zone> {
-  const present = TYPES.filter(t => factions.some(f => factionZoneType(f) === t))
-  const zones: Record<string, Zone> = {}
-  const z = present.length
-  if (z === 0) return zones
-  const cols = Math.max(1, Math.ceil(Math.sqrt(z)))
-  const rows = Math.ceil(z / cols)
-  const marginX = 3, marginY = 4
-  const zw = (100 - marginX * 2) / cols
-  const zh = (100 - marginY * 2) / rows
-  present.forEach((t, i) => {
-    const col = i % cols, row = Math.floor(i / cols)
-    zones[t] = { x0: marginX + col * zw, y0: marginY + row * zh, x1: marginX + (col + 1) * zw, y1: marginY + (row + 1) * zh }
-  })
-  return zones
-}
+const CIRCLE_CENTER: Pos = { x: 50, y: 50 }
+const CIRCLE_R = 40
 
-function computeInitialPositions(list: Faction[]): Record<string, Pos> {
+// Disposition en cercle : chaque faction occupe un emplacement fixe et régulièrement espacé
+// sur un cercle — aucune superposition possible, contrairement à une simulation à forces qui
+// peut faire converger des nœuds au même endroit. Les factions sont ordonnées par type puis
+// alphabétiquement, donc les factions d'un même type (équipages, marine...) se retrouvent
+// naturellement groupées sur un même arc, sans qu'aucune case ne soit nécessaire.
+function computeCircularLayout(factions: Faction[]): Record<string, Pos> {
+  const ordered = factions.slice().sort((a, b) => {
+    const ta = TYPES.indexOf(factionZoneType(a))
+    const tb = TYPES.indexOf(factionZoneType(b))
+    return ta !== tb ? ta - tb : a.nom.localeCompare(b.nom)
+  })
+  const n = ordered.length
   const pos: Record<string, Pos> = {}
-  const cx = 50, cy = 50, r = 36
-  list.forEach((f, i) => {
-    if (f.rel_x != null && f.rel_y != null) {
-      pos[f.id] = { x: f.rel_x, y: f.rel_y }
-    } else {
-      const angle = (i / Math.max(list.length, 1)) * Math.PI * 2 - Math.PI / 2
-      pos[f.id] = { x: cx + r * Math.cos(angle), y: cy + r * 0.72 * Math.sin(angle) }
-    }
+  if (n === 0) return pos
+  if (n === 1) { pos[ordered[0].id] = { ...CIRCLE_CENTER }; return pos }
+  ordered.forEach((f, i) => {
+    const angle = -Math.PI / 2 + (i / n) * Math.PI * 2
+    pos[f.id] = { x: CIRCLE_CENTER.x + CIRCLE_R * Math.cos(angle), y: CIRCLE_CENTER.y + CIRCLE_R * Math.sin(angle) }
   })
   return pos
 }
 
-// Disposition optimale : simulation à forces (Fruchterman-Reingold) où les alliances
-// rapprochent les factions, les relations ennemies les repoussent davantage, et le
-// voisinage neutre garde une distance intermédiaire — pour un schéma qui reflète la politique.
-function computeForceLayout(factions: Faction[], relations: Relation[], seed: Record<string, Pos>): Record<string, Pos> {
-  const ids = factions.map(f => f.id)
-  const n = ids.length
-  if (n === 0) return {}
-  if (n === 1) return { [ids[0]]: { x: 50, y: 50 } }
-
+function computeInitialPositions(list: Faction[]): Record<string, Pos> {
+  const circular = computeCircularLayout(list)
   const pos: Record<string, Pos> = {}
-  ids.forEach((id, i) => {
-    const s = seed[id]
-    const angle = (i / n) * Math.PI * 2
-    pos[id] = s ? { x: s.x, y: s.y } : { x: 50 + 30 * Math.cos(angle), y: 50 + 30 * Math.sin(angle) }
+  list.forEach(f => {
+    pos[f.id] = (f.rel_x != null && f.rel_y != null) ? { x: f.rel_x, y: f.rel_y } : circular[f.id]
   })
-
-  const nameToId: Record<string, string> = {}
-  factions.forEach(f => { nameToId[f.nom] = f.id })
-  const edges = relations
-    .map(r => ({ a: nameToId[r.faction_a], b: nameToId[r.faction_b], type: r.type }))
-    .filter(e => e.a && e.b && e.a !== e.b)
-
-  const k = Math.sqrt((100 * 100) / n) * 0.9
-  let temp = 12
-
-  for (let iter = 0; iter < 260; iter++) {
-    const disp: Record<string, Pos> = {}
-    ids.forEach(id => { disp[id] = { x: 0, y: 0 } })
-
-    // Direction unitaire entre deux points ; si les points coïncident (dist ~ 0), la direction
-    // dx/dist dégénère à (0,0) et aucune force ne s'applique — on tire alors une direction
-    // aléatoire pour casser l'égalité et éviter que deux nœuds restent superposés indéfiniment.
-    function unitDir(dx: number, dy: number): { ux: number; uy: number; dist: number } {
-      const dist = Math.hypot(dx, dy)
-      if (dist < 0.02) {
-        const a = Math.random() * Math.PI * 2
-        return { ux: Math.cos(a), uy: Math.sin(a), dist: 0.02 }
-      }
-      return { ux: dx / dist, uy: dy / dist, dist }
-    }
-
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        const a = ids[i], b = ids[j]
-        const { ux, uy, dist } = unitDir(pos[a].x - pos[b].x, pos[a].y - pos[b].y)
-        const force = (k * k) / dist
-        disp[a].x += ux * force; disp[a].y += uy * force
-        disp[b].x -= ux * force; disp[b].y -= uy * force
-      }
-    }
-
-    edges.forEach(e => {
-      const a = pos[e.a], b = pos[e.b]
-      const { ux, uy, dist } = unitDir(a.x - b.x, a.y - b.y)
-      const mult = e.type === 'alliance' ? 1.7 : e.type === 'ennemie' ? -1.4 : 0.6
-      const force = (dist * dist / k) * mult
-      disp[e.a].x -= ux * force; disp[e.a].y -= uy * force
-      disp[e.b].x += ux * force; disp[e.b].y += uy * force
-    })
-
-    ids.forEach(id => {
-      const d = disp[id]
-      const len = Math.hypot(d.x, d.y) || 0.01
-      const lim = Math.min(len, temp)
-      pos[id].x += (d.x / len) * lim
-      pos[id].y += (d.y / len) * lim
-      pos[id].x = Math.min(94, Math.max(6, pos[id].x))
-      pos[id].y = Math.min(92, Math.max(8, pos[id].y))
-    })
-
-    temp *= 0.985
-  }
-
-  // Regroupe ensuite chaque type de faction dans sa propre case du schéma (cf. computeTypeZones),
-  // en conservant l'agencement relatif calculé par la simulation à l'intérieur de chaque groupe —
-  // les alliés d'un même type restent proches entre eux, mais chaque type occupe une zone distincte.
-  const zones = computeTypeZones(factions)
-  const byType: Record<string, string[]> = {}
-  factions.forEach(f => {
-    const t = factionZoneType(f)
-    ;(byType[t] = byType[t] || []).push(f.id)
-  })
-  Object.entries(byType).forEach(([t, groupIds]) => {
-    const zone = zones[t]
-    if (!zone) return
-    const gx0 = zone.x0 + 5, gx1 = zone.x1 - 5
-    const gy0 = zone.y0 + 9, gy1 = zone.y1 - 5
-    if (groupIds.length === 1) {
-      pos[groupIds[0]] = { x: (gx0 + gx1) / 2, y: (gy0 + gy1) / 2 }
-      return
-    }
-    const gxs = groupIds.map(id => pos[id].x), gys = groupIds.map(id => pos[id].y)
-    const gMinX = Math.min(...gxs), gMaxX = Math.max(...gxs)
-    const gMinY = Math.min(...gys), gMaxY = Math.max(...gys)
-    const gSpanX = Math.max(gMaxX - gMinX, 1), gSpanY = Math.max(gMaxY - gMinY, 1)
-    groupIds.forEach(id => {
-      pos[id] = {
-        x: gx0 + ((pos[id].x - gMinX) / gSpanX) * (gx1 - gx0),
-        y: gy0 + ((pos[id].y - gMinY) / gSpanY) * (gy1 - gy0),
-      }
-    })
-  })
-
   return pos
 }
 
@@ -177,12 +73,13 @@ function computeForceLayout(factions: Faction[], relations: Relation[], seed: Re
 function curveMid(p1: Pos, p2: Pos, ctrl: Pos): Pos {
   return { x: 0.25 * p1.x + 0.5 * ctrl.x + 0.25 * p2.x, y: 0.25 * p1.y + 0.5 * ctrl.y + 0.25 * p2.y }
 }
+// Arc de type diagramme d'accords (« chord diagram ») : la courbe est tirée vers le centre du
+// cercle plutôt que déportée perpendiculairement — c'est ce qui donne aux graphes de relations
+// professionnels leur lisibilité, quelle que soit la distance entre les deux factions reliées.
 function controlPoint(p1: Pos, p2: Pos): Pos {
   const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2
-  const dx = p2.x - p1.x, dy = p2.y - p1.y
-  const len = Math.hypot(dx, dy) || 1
-  const bow = Math.min(len * 0.16, 9)
-  return { x: mx + (-dy / len) * bow, y: my + (dx / len) * bow }
+  const bow = 0.32
+  return { x: mx + (CIRCLE_CENTER.x - mx) * bow, y: my + (CIRCLE_CENTER.y - my) * bow }
 }
 
 // Regroupe les relations d'un type donné en blocs (composantes connexes) : par exemple,
@@ -274,14 +171,9 @@ export default function RelationsPage() {
     if (moved && pos) await supabase.from('factions').update({ rel_x: pos.x, rel_y: pos.y }).eq('id', id)
   }
 
-  async function resetLayout() {
-    if (!confirm('Réorganiser automatiquement toutes les factions en cercle ?')) return
-    await Promise.all(factions.map(f => supabase.from('factions').update({ rel_x: null, rel_y: null }).eq('id', f.id)))
-    fetchFactions()
-  }
-
   async function applyOptimalLayout() {
-    const optimized = computeForceLayout(factions, relations, positions)
+    if (!confirm('Réorganiser toutes les factions en cercle, groupées par type ?')) return
+    const optimized = computeCircularLayout(factions)
     setPositions(optimized)
     await Promise.all(factions.map(f => {
       const p = optimized[f.id]
@@ -351,11 +243,10 @@ export default function RelationsPage() {
             <h1 style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'clamp(1.8rem,3.5vw,3rem)', fontWeight:700, background:'linear-gradient(135deg,#fff,#f0c040)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
               Relations entre factions
             </h1>
-            <p style={{ color:'#7a9ab8', fontSize:'.9rem', marginTop:'.3rem' }}>Glisse une faction pour organiser le schéma · clique un nœud pour surligner ses liens · clique un lien pour le modifier. Les cases en pointillés regroupent les factions par type.</p>
+            <p style={{ color:'#7a9ab8', fontSize:'.9rem', marginTop:'.3rem' }}>Glisse une faction pour l&apos;ajuster · clique un nœud pour surligner ses liens · clique un lien pour le modifier. Les factions sont ordonnées par type autour du cercle.</p>
           </div>
           <div style={{ display:'flex', gap:'.6rem' }}>
-            <button style={S.btnCyan} onClick={resetLayout} title="Remet toutes les factions en cercle régulier">↺ Cercle</button>
-            <button style={S.btnCyan} onClick={applyOptimalLayout} title="Rapproche les alliés, éloigne les ennemis, répartit le reste">✨ Disposition optimale</button>
+            <button style={S.btnCyan} onClick={applyOptimalLayout} title="Cercle régulier, factions groupées par type, aucun chevauchement">✨ Disposition optimale</button>
             <button style={S.btnGold} onClick={() => openRelForm()}>＋ Nouvelle relation</button>
           </div>
         </div>
@@ -373,6 +264,14 @@ export default function RelationsPage() {
               </div>
             )
           })}
+        </div>
+        <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap', marginBottom:'1.25rem' }}>
+          {TYPES.filter(t => factions.some(f => factionZoneType(f) === t)).map(t => (
+            <div key={t} style={{ display:'flex', alignItems:'center', gap:'.3rem', fontSize:'.68rem', color:'#7a9ab8' }}>
+              <span style={{ width:8, height:8, borderRadius:'50%', background:TYPE_COLORS[t], display:'inline-block' }} />
+              {TYPE_EMOJI[t]} {t}
+            </div>
+          ))}
         </div>
 
         {/* Canvas */}
@@ -399,19 +298,9 @@ export default function RelationsPage() {
               </div>
             )}
 
-            {/* Cases par type de faction — repères visuels pour la disposition optimale */}
-            {Object.entries(computeTypeZones(factions)).map(([t, z]) => (
-              <div key={t} style={{
-                position:'absolute', left:`${z.x0}%`, top:`${z.y0}%`, width:`${z.x1 - z.x0}%`, height:`${z.y1 - z.y0}%`,
-                border:`1px dashed ${TYPE_COLORS[t]}4d`, borderRadius:12, background:`${TYPE_COLORS[t]}0a`, pointerEvents:'none', zIndex:0,
-              }}>
-                <div style={{ position:'absolute', top:6, left:10, fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.08em', textTransform:'uppercase', color:`${TYPE_COLORS[t]}` , opacity:.85 }}>
-                  {TYPE_EMOJI[t]} {t} <span style={{ opacity:.7 }}>({factions.filter(f => factionZoneType(f) === t).length})</span>
-                </div>
-              </div>
-            ))}
-
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none' }}>
+              {/* Anneau-repère du cercle */}
+              <circle cx={CIRCLE_CENTER.x} cy={CIRCLE_CENTER.y} r={CIRCLE_R} fill="none" stroke="rgba(122,154,184,.18)" strokeWidth={0.25} strokeDasharray="0.8 1" />
               {relations.map(r => {
                 const fa = factions.find(f => f.nom === r.faction_a)
                 const fb = factions.find(f => f.nom === r.faction_b)
@@ -459,7 +348,7 @@ export default function RelationsPage() {
                   <div className="rel-node-circle" style={{ width:66, height:66, borderRadius:'50%', background:'linear-gradient(160deg,#132a4d,#0a1829)', border:`2.5px solid ${active ? '#f0c040' : ring}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.7rem', boxShadow: active ? '0 0 20px rgba(240,192,64,.65)' : `0 4px 14px rgba(0,0,0,.4)` }}>
                     {f.emoji || '⚔️'}
                   </div>
-                  <span style={{ fontSize:'.62rem', color: active ? '#f0c040' : '#c8d8e8', fontFamily:"'Cinzel',serif", fontWeight: active ? 700 : 400, whiteSpace:'nowrap', background:'rgba(5,13,26,.8)', padding:'.15rem .5rem', borderRadius:5, border:'1px solid rgba(30,120,200,.2)' }}>{f.nom}</span>
+                  <span style={{ fontSize:'.62rem', color: active ? '#f0c040' : '#c8d8e8', fontFamily:"'Cinzel',serif", fontWeight: active ? 700 : 400, whiteSpace:'normal', maxWidth:100, textAlign:'center', lineHeight:1.2, background:'rgba(5,13,26,.85)', padding:'.18rem .5rem', borderRadius:5, border:'1px solid rgba(30,120,200,.2)' }}>{f.nom}</span>
                 </div>
               )
             })}
