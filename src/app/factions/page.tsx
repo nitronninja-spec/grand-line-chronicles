@@ -17,11 +17,11 @@ interface Faction {
 }
 
 interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; factions?: string[]; rang?: string }
-interface LinkedIle { id: string; nom: string; emoji?: string; faction?: string }
+interface LinkedIle { id: string; nom: string; emoji?: string; factions?: string[] }
 
-const TYPES = ['Pirates', 'Marine', 'Gouvernement', 'Révolutionnaire', 'Neutre', 'Autre']
-const TYPE_COLORS: Record<string,string> = { Pirates:'#d4a017', Marine:'#00c8ff', Gouvernement:'#4488ff', 'Révolutionnaire':'#e03030', Neutre:'#7a9ab8', Autre:'#a060ff' }
-const TYPE_EMOJI: Record<string,string> = { Pirates:'🏴‍☠️', Marine:'⚓', Gouvernement:'🏛️', 'Révolutionnaire':'✊', Neutre:'🤝', Autre:'⚔️' }
+const TYPES = ['Pirates', 'Marine', 'Gouvernement', 'Révolutionnaire', 'Peuple', 'Neutre', 'Autre']
+const TYPE_COLORS: Record<string,string> = { Pirates:'#d4a017', Marine:'#00c8ff', Gouvernement:'#4488ff', 'Révolutionnaire':'#e03030', Peuple:'#40e0a0', Neutre:'#7a9ab8', Autre:'#a060ff' }
+const TYPE_EMOJI: Record<string,string> = { Pirates:'🏴‍☠️', Marine:'⚓', Gouvernement:'🏛️', 'Révolutionnaire':'✊', Peuple:'👥', Neutre:'🤝', Autre:'⚔️' }
 const MEMBER_TYPE_COLORS: Record<string, string> = { pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', 'allié': '#40d060' }
 const MEMBER_TYPE_LABELS: Record<string, string> = { pj: 'Joueurs', pnj: 'PNJ', antagoniste: 'Antagonistes', 'allié': 'Alliés' }
 
@@ -65,7 +65,7 @@ export default function FactionsPage() {
   }
 
   async function fetchIlesList() {
-    const { data } = await supabase.from('iles').select('id, nom, emoji, faction')
+    const { data } = await supabase.from('iles').select('id, nom, emoji, factions')
     setLinkedIles(data || [])
   }
 
@@ -281,7 +281,7 @@ export default function FactionsPage() {
               })()}
 
               {(() => {
-                const factionIles = linkedIles.filter(i => i.faction === rosterFaction.nom)
+                const factionIles = linkedIles.filter(i => i.factions?.includes(rosterFaction.nom))
                 if (factionIles.length === 0) return null
                 return (
                   <>
