@@ -112,10 +112,15 @@ export default function JournauxPage() {
       const url = await uploadImage(file, 'journaux')
       if (url) pdfs = [...pdfs, { nom: file.name, url }]
     }
-    const data = { ...form, photos, pdfs }
-    if (editId) await supabase.from('sessions').update(data).eq('id', editId)
-    else await supabase.from('sessions').insert([data])
-    setUploading(false); setShowForm(false); fetchJournaux()
+    // La colonne "date" est un vrai type date côté base — une chaîne vide n'est pas une
+    // valeur valide (contrairement à un champ texte), il faut explicitement envoyer null.
+    const data = { ...form, photos, pdfs, date: form.date || null }
+    const { error } = editId
+      ? await supabase.from('sessions').update(data).eq('id', editId)
+      : await supabase.from('sessions').insert([data])
+    setUploading(false)
+    if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
+    setShowForm(false); fetchJournaux()
   }
 
   async function deleteJournal(id: string) {
