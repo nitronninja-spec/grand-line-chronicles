@@ -52,7 +52,6 @@ const TITRE_MONDIAL: Record<string, { label: string; icon: string; color: string
   'Empereur Déchu': { label: 'Empereur Déchu', icon: '👑', color: '#8a5a3a' },
   'Amiral': { label: 'Amiral', icon: '⚓', color: '#00c8ff' },
   'Amiral Déchu': { label: 'Amiral Déchu', icon: '⚓', color: '#5a7a8a' },
-  'Vice-Amiral': { label: 'Vice-Amiral', icon: '🎖️', color: '#4488ff' },
   'Shichibukai': { label: 'Shichibukai', icon: '🗡️', color: '#a060ff' },
   'Shichibukai Déchu': { label: 'Shichibukai Déchu', icon: '🗡️', color: '#6a4a7a' },
   'Dragon Céleste': { label: 'Dragon Céleste', icon: '🫧', color: '#f0c040' },
@@ -71,8 +70,20 @@ const PAGE_THEMES: Record<PageTab, { label: string; emoji: string; color: string
   peuple: { label: 'Peuple', emoji: '👥', color: '#40d060' },
   sans_groupe: { label: 'Sans groupe', emoji: '✨', color: '#f0c040' },
 }
+// Pseudo-groupe utilisable quand on sait qu'un personnage est côté Pirates sans connaître
+// son équipage précis — n'existe pas comme faction en base, juste une étiquette de tri.
+const GROUPE_INCONNU = 'Groupe Inconnu'
+// Le "groupe principal" d'un personnage — celui qui détermine sur quel onglet (Pirates,
+// Marine..) il apparaît, et sous quel en-tête il est classé dans le tri "par groupe". Un
+// personnage n'a qu'un seul groupe principal, même s'il est listé dans plusieurs factions
+// (ex: membre d'Arasaka ET Shichibukai) — sinon il se retrouverait affiché deux fois, une
+// fois sous chaque faction, y compris sur un onglet qui ne correspond pas à son type.
+function primaryFactionOf(p: Personnage): string {
+  return p.equipage || (p.factions || [])[0] || ''
+}
 function personnagePage(p: Personnage, factions: FactionRef[]): PageTab {
-  const primaryNom = p.equipage || (p.factions || [])[0]
+  const primaryNom = primaryFactionOf(p)
+  if (primaryNom === GROUPE_INCONNU) return 'pirates'
   const type = factions.find(f => f.nom === primaryNom)?.type
   if (type === 'Pirates') return 'pirates'
   if (type === 'Marine' || type === 'Gouvernement') return 'marine'
@@ -97,28 +108,28 @@ function sortPersonnages(items: Personnage[], mode: SortMode) {
   if (mode === 'prime') return items.slice().sort((a, b) => parsePrime(b.prime) - parsePrime(a.prime))
   return items
 }
-function personnageGroups(p: Personnage): string[] {
-  const set = new Set<string>()
-  ;(p.factions || []).forEach(f => f && set.add(f))
-  if (p.equipage) set.add(p.equipage)
-  return Array.from(set)
-}
 function getRangOrdreForFaction(p: Personnage, factionNom: string, factions: FactionRef[]): number {
   const entry = personnageRangs(p).find(r => r.faction === factionNom)
   if (!entry) return Infinity
   const match = factions.find(f => f.nom === factionNom)?.rangs?.find(r => r.nom === entry.rang)
   return match ? match.ordre : Infinity
 }
+// Priorité liée au titre mondial pour le tri : un Empereur en exercice passe devant tout
+// (y compris devant les rangs organisationnels), un Empereur Déchu passe devant les membres
+// normaux mais reste en dessous d'un Empereur en exercice — les autres titres n'influencent
+// pas ce classement global, seulement le rang au sein d'un même niveau organisationnel.
+function empereurPriority(p: Personnage): number {
+  if (p.titre_mondial === 'Empereur') return 0
+  if (p.titre_mondial === 'Empereur Déchu') return 1
+  return 2
+}
 interface GroupSection { faction: string; members: Personnage[] }
 function buildGroupSections(items: Personnage[], factions: FactionRef[]): GroupSection[] {
   const map = new Map<string, Personnage[]>()
   items.forEach(p => {
-    const groups = personnageGroups(p)
-    const keys = groups.length > 0 ? groups : ['']
-    keys.forEach(g => {
-      if (!map.has(g)) map.set(g, [])
-      map.get(g)!.push(p)
-    })
+    const g = primaryFactionOf(p)
+    if (!map.has(g)) map.set(g, [])
+    map.get(g)!.push(p)
   })
   const names = Array.from(map.keys())
   // Un Empereur fait remonter son groupe en haut de la liste — sauf pour les groupes de type
@@ -136,8 +147,8 @@ function buildGroupSections(items: Personnage[], factions: FactionRef[]): GroupS
   return names.map(g => ({
     faction: g,
     members: (map.get(g) || []).slice().sort((a, b) => {
-      const ea = a.titre_mondial === 'Empereur' ? 0 : 1
-      const eb = b.titre_mondial === 'Empereur' ? 0 : 1
+      const ea = empereurPriority(a)
+      const eb = empereurPriority(b)
       if (ea !== eb) return ea - eb
       const ro = getRangOrdreForFaction(a, g, factions) - getRangOrdreForFaction(b, g, factions)
       if (ro !== 0) return ro
@@ -192,7 +203,7 @@ export default function PersonnagesPage() {
   const [pageTab, setPageTab] = useState<PageTab>('pirates')
   const [form, setForm] = useState<Partial<Personnage>>({
     nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant',
-    prime: '0', condition_prime: 'mort_ou_vif', titre_mondial: '', origine: '', ile: '', factions: [], rangs: [], equipage: '', fruit: 'Aucun',
+    prime: '0', condition_prime: 'non_recherche', titre_mondial: '', origine: '', ile: '', factions: [], rangs: [], equipage: '', fruit: 'Aucun',
     tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: ''
   })
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
@@ -267,7 +278,7 @@ export default function PersonnagesPage() {
       setForm({ ...p, rangs: personnageRangs(p) })
       setEditId(p.id)
     } else {
-      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', condition_prime: 'mort_ou_vif', titre_mondial: '', origine: '', ile: '', factions: [], rangs: [], equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
+      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', condition_prime: 'non_recherche', titre_mondial: '', origine: '', ile: '', factions: [], rangs: [], equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
       setEditId(null)
     }
     setPhotoFiles([])
@@ -411,7 +422,9 @@ export default function PersonnagesPage() {
           )}
 
           <div style={{ fontSize:'.82rem', color:'#7a9ab8', marginBottom:'.15rem' }}>⭐ <span style={{ color:'#f0c040', fontFamily:"'Cinzel',serif", fontWeight:700 }}>{p.prime} 🍖</span></div>
-          <div style={{ fontSize:'.62rem', color:'#e03030', fontFamily:"'Cinzel',serif", letterSpacing:'.06em', textTransform:'uppercase', marginBottom:'.4rem' }}>{CONDITION_PRIME_LABELS[p.condition_prime||'mort_ou_vif']}</div>
+          {p.condition_prime && p.condition_prime !== 'non_recherche' && (
+            <div style={{ fontSize:'.62rem', color:'#e03030', fontFamily:"'Cinzel',serif", letterSpacing:'.06em', textTransform:'uppercase', marginBottom:'.4rem' }}>{CONDITION_PRIME_LABELS[p.condition_prime]}</div>
+          )}
           {p.equipage && <div style={{ fontSize:'.82rem', color:'#7a9ab8', marginBottom:'.4rem' }}>⚓ {p.equipage}</div>}
           {p.fruit && p.fruit !== 'Aucun' && <div style={{ fontSize:'.82rem', color:'#7a9ab8' }}>🍎 {p.fruit}</div>}
           {linkedDespa && <div style={{ fontSize:'.82rem', color:'#7a9ab8' }}>🦾 {linkedDespa.nom}</div>}
@@ -471,7 +484,7 @@ export default function PersonnagesPage() {
           🏴‍☠️ › Personnages › {pageTheme.label}
         </div>
         <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', gap:'1rem', flexWrap:'wrap', marginBottom:'1.25rem' }}>
-          <h1 style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'clamp(1.8rem,3.5vw,3rem)', fontWeight:700, background:`linear-gradient(135deg,#fff,${pageTheme.color})`, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
+          <h1 style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'clamp(1.8rem,3.5vw,3rem)', fontWeight:700, background:`linear-gradient(135deg,#fff,${pageTheme.color})`, backgroundClip:'text', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', color:'transparent', isolation:'isolate' }}>
             Personnages
           </h1>
           <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter un personnage</button>
@@ -653,7 +666,7 @@ export default function PersonnagesPage() {
                 </div>
                 <div>
                   <label style={S.label}>Avis de recherche</label>
-                  <select style={{ ...S.input }} value={form.condition_prime||'mort_ou_vif'} onChange={e => setForm(f => ({...f, condition_prime:e.target.value}))}>
+                  <select style={{ ...S.input }} value={form.condition_prime||'non_recherche'} onChange={e => setForm(f => ({...f, condition_prime:e.target.value}))}>
                     <option value="mort_ou_vif">Mort ou Vif</option>
                     <option value="mort_uniquement">Mort uniquement</option>
                     <option value="vif_uniquement">Vif uniquement</option>
@@ -676,7 +689,6 @@ export default function PersonnagesPage() {
                     <option value="Empereur Déchu">👑 Empereur Déchu</option>
                     <option value="Amiral">⚓ Amiral</option>
                     <option value="Amiral Déchu">⚓ Amiral Déchu</option>
-                    <option value="Vice-Amiral">🎖️ Vice-Amiral</option>
                     <option value="Shichibukai">🗡️ Shichibukai</option>
                     <option value="Shichibukai Déchu">🗡️ Shichibukai Déchu</option>
                     <option value="Dragon Céleste">🫧 Dragon Céleste</option>
@@ -761,6 +773,7 @@ export default function PersonnagesPage() {
                   <label style={S.label}>Équipage</label>
                   <select style={{ ...S.input }} value={form.equipage || ''} onChange={e => setForm(f => ({...f, equipage:e.target.value}))}>
                     <option value="">— Aucun —</option>
+                    <option value={GROUPE_INCONNU}>🏴‍☠️ Groupe Inconnu (Pirates)</option>
                     {factions.map(fac => <option key={fac.id} value={fac.nom}>{fac.nom}</option>)}
                   </select>
                 </div>
@@ -891,7 +904,7 @@ export default function PersonnagesPage() {
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.1rem', marginBottom:'1.25rem' }}>
                 {[
                   { l:'⭐ Prime', v:selected.prime+' 🍖', c:'#f0c040', href:null },
-                  { l:'📋 Avis de recherche', v:CONDITION_PRIME_LABELS[selected.condition_prime||'mort_ou_vif'], c:'#e03030', href:null },
+                  { l:'📋 Avis de recherche', v:CONDITION_PRIME_LABELS[selected.condition_prime||'non_recherche'], c:'#e03030', href:null },
                   { l:'⚓ Équipage', v:selected.equipage||'—', c:'#00c8ff', href:null },
                   { l:'📍 Origine', v:selected.origine||'—', c:'#7a9ab8', href:null },
                   { l:'🏝️ Île', v:selected.ile||'—', c:'#40d060', href: selected.ile ? `/iles?q=${encodeURIComponent(selected.ile)}` : null },
