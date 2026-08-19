@@ -73,24 +73,7 @@ const PAGE_THEMES: Record<PageTab, { label: string; emoji: string; color: string
 // Pseudo-groupe utilisable quand on sait qu'un personnage est côté Pirates sans connaître
 // son équipage précis — n'existe pas comme faction en base, juste une étiquette de tri.
 const GROUPE_INCONNU = 'Groupe Inconnu'
-// Le "groupe principal" d'un personnage — celui qui détermine sur quel onglet (Pirates,
-// Marine..) il apparaît, et sous quel en-tête il est classé dans le tri "par groupe". Un
-// personnage n'a qu'un seul groupe principal, même s'il est listé dans plusieurs factions
-// (ex: membre d'Arasaka ET Shichibukai) — sinon il se retrouverait affiché deux fois, une
-// fois sous chaque faction, y compris sur un onglet qui ne correspond pas à son type.
-function primaryFactionOf(p: Personnage): string {
-  return p.equipage || (p.factions || [])[0] || ''
-}
-function personnagePage(p: Personnage, factions: FactionRef[]): PageTab {
-  const primaryNom = primaryFactionOf(p)
-  if (primaryNom === GROUPE_INCONNU) return 'pirates'
-  const type = factions.find(f => f.nom === primaryNom)?.type
-  if (type === 'Pirates') return 'pirates'
-  if (type === 'Marine' || type === 'Gouvernement') return 'marine'
-  if (type === 'Peuple') return 'peuple'
-  return 'sans_groupe'
-}
-// Même répartition par type que personnagePage, appliquée aux factions elles-mêmes — sert à
+// Même répartition par type que personnageTabs, appliquée aux factions elles-mêmes — sert à
 // ne proposer, dans le filtre par faction, que les factions du même onglet (ex : sur l'onglet
 // Pirates, ne garder que les factions 100% de type Pirates, pas Marine/Peuple/etc.).
 function factionTabOf(f: FactionRef): PageTab {
@@ -98,6 +81,39 @@ function factionTabOf(f: FactionRef): PageTab {
   if (f.type === 'Marine' || f.type === 'Gouvernement') return 'marine'
   if (f.type === 'Peuple') return 'peuple'
   return 'sans_groupe'
+}
+function groupTabOf(nom: string, factions: FactionRef[]): PageTab {
+  if (nom === GROUPE_INCONNU) return 'pirates'
+  const f = factions.find(x => x.nom === nom)
+  return f ? factionTabOf(f) : 'sans_groupe'
+}
+// Toutes les appartenances d'un personnage (équipage + factions[]), sans doublon.
+function personnageGroupsAll(p: Personnage): string[] {
+  const set = new Set<string>()
+  if (p.equipage) set.add(p.equipage)
+  ;(p.factions || []).forEach(f => f && set.add(f))
+  return Array.from(set)
+}
+// Un personnage peut légitimement apparaître sur plusieurs onglets à la fois s'il a des
+// appartenances de types différents (ex: un pirate de la lignée D apparaît à la fois sous
+// Pirates via son équipage et sous Peuple via "D") — contrairement au groupe "principal"
+// (voir primaryGroupForTab) qui ne sert qu'à éviter les doublons DANS un même onglet.
+function personnageTabs(p: Personnage, factions: FactionRef[]): PageTab[] {
+  const groups = personnageGroupsAll(p)
+  if (groups.length === 0) return ['sans_groupe']
+  const tabs = new Set(groups.map(g => groupTabOf(g, factions)))
+  return Array.from(tabs)
+}
+// Le groupe sous lequel un personnage est classé DANS un onglet donné — parmi ses
+// appartenances qui correspondent à cet onglet, on privilégie l'équipage s'il correspond,
+// sinon la première faction correspondante. Un personnage n'apparaît donc qu'une seule fois
+// par onglet, jamais sous plusieurs en-têtes à la fois.
+function primaryGroupForTab(p: Personnage, tab: PageTab, factions: FactionRef[]): string {
+  const groups = personnageGroupsAll(p)
+  const matching = groups.filter(g => groupTabOf(g, factions) === tab)
+  if (matching.length === 0) return ''
+  if (p.equipage && matching.includes(p.equipage)) return p.equipage
+  return matching[0]
 }
 function personnageRangs(p: Personnage): PersonnageRang[] {
   if (p.rangs !== undefined) return p.rangs
@@ -124,10 +140,10 @@ function empereurPriority(p: Personnage): number {
   return 2
 }
 interface GroupSection { faction: string; members: Personnage[] }
-function buildGroupSections(items: Personnage[], factions: FactionRef[]): GroupSection[] {
+function buildGroupSections(items: Personnage[], factions: FactionRef[], tab: PageTab): GroupSection[] {
   const map = new Map<string, Personnage[]>()
   items.forEach(p => {
-    const g = primaryFactionOf(p)
+    const g = primaryGroupForTab(p, tab, factions)
     if (!map.has(g)) map.set(g, [])
     map.get(g)!.push(p)
   })
@@ -261,10 +277,10 @@ export default function PersonnagesPage() {
   }
 
   useEffect(() => {
-    let l = list.filter(p => personnagePage(p, factions) === pageTab)
+    let l = list.filter(p => personnageTabs(p, factions).includes(pageTab))
     if (search) l = l.filter(p => p.nom.toLowerCase().includes(search.toLowerCase()) || (p.surnom||'').toLowerCase().includes(search.toLowerCase()))
     if (typeFilter) l = l.filter(p => p.type === typeFilter)
-    if (factionFilter) l = l.filter(p => p.factions?.includes(factionFilter))
+    if (factionFilter) l = l.filter(p => p.factions?.includes(factionFilter) || p.equipage === factionFilter)
     setFiltered(l)
   }, [list, search, typeFilter, factionFilter, pageTab, factions])
 
@@ -484,7 +500,7 @@ export default function PersonnagesPage() {
           🏴‍☠️ › Personnages › {pageTheme.label}
         </div>
         <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', gap:'1rem', flexWrap:'wrap', marginBottom:'1.25rem' }}>
-          <h1 style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'clamp(1.8rem,3.5vw,3rem)', fontWeight:700, background:`linear-gradient(135deg,#fff,${pageTheme.color})`, backgroundClip:'text', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', color:'transparent', isolation:'isolate' }}>
+          <h1 style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'clamp(1.8rem,3.5vw,3rem)', fontWeight:700, backgroundImage:`linear-gradient(135deg,#fff,${pageTheme.color})`, backgroundClip:'text', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', color:'transparent' }}>
             Personnages
           </h1>
           <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter un personnage</button>
@@ -495,7 +511,7 @@ export default function PersonnagesPage() {
           {PAGE_ORDER.map(tab => {
             const t = PAGE_THEMES[tab]
             const active = pageTab === tab
-            const count = list.filter(p => personnagePage(p, factions) === tab).length
+            const count = list.filter(p => personnageTabs(p, factions).includes(tab)).length
             return (
               <button key={tab} onClick={() => { setPageTab(tab); setFactionFilter('') }} style={{ background: active ? `${t.color}30` : '#0a1829', border:`1.5px solid ${active ? t.color : 'rgba(30,120,200,.2)'}`, borderRadius:12, padding:'.6rem 1.1rem', fontFamily:"'Cinzel',serif", fontSize:'.68rem', letterSpacing:'.05em', textTransform:'uppercase', color: active ? t.color : '#7a9ab8', cursor:'pointer', display:'flex', alignItems:'center', gap:'.5rem', boxShadow: active ? `0 0 20px ${t.color}55` : 'none', whiteSpace:'nowrap' }}>
                 {t.emoji} {t.label} <span style={{ opacity:.7 }}>({count})</span>
@@ -555,7 +571,7 @@ export default function PersonnagesPage() {
           </div>
         )}
         {sortMode === 'groupe'
-          ? buildGroupSections(filtered, factions).flatMap((section, si) => {
+          ? buildGroupSections(filtered, factions, pageTab).flatMap((section, si) => {
               const nodes: React.ReactNode[] = [
                 <div key={`div-${section.faction || 'none'}`} style={{ gridColumn:'1/-1', display:'flex', alignItems:'center', gap:'.75rem', margin: si===0 ? '0 0 .2rem' : '1.4rem 0 .2rem' }}>
                   <span style={{ fontFamily:"'Cinzel',serif", fontSize:'.68rem', letterSpacing:'.12em', textTransform:'uppercase', color:'#f0c040' }}>

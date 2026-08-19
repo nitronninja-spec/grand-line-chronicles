@@ -19,7 +19,7 @@ interface Faction {
 }
 
 interface MemberRang { faction: string; rang: string; ordre?: number }
-interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; factions?: string[]; rang?: string; rangs?: MemberRang[]; prime?: string; condition_prime?: string }
+interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; factions?: string[]; equipage?: string; rang?: string; rangs?: MemberRang[]; prime?: string; condition_prime?: string }
 interface LinkedIle { id: string; nom: string; emoji?: string; factions?: string[] }
 
 function memberRangFor(m: Member, factionNom: string): string | undefined {
@@ -30,6 +30,12 @@ function memberOrdreFor(m: Member, factionNom: string): number | undefined {
   return m.rangs?.find(r => r.faction === factionNom)?.ordre
 }
 function parsePrime(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
+// Un membre "appartient" à une faction soit via son tableau factions[], soit via son
+// équipage — les deux champs ne sont pas toujours synchronisés (un GM peut définir l'un sans
+// l'autre), donc ne vérifier que factions[] faisait disparaître certains membres du roster.
+function belongsToFaction(m: Member, factionNom: string): boolean {
+  return !!m.factions?.includes(factionNom) || m.equipage === factionNom
+}
 // Trie une liste de membres (au sein d'un même rang) par ordre manuel s'il a été fixé par
 // glisser-déposer, sinon par prime décroissante ; les "Non recherché" ne comptent pas comme
 // une prime et sont toujours relégués en dernier — le classement manuel est un raffinement
@@ -48,7 +54,7 @@ function sortMembersInTier(items: Member[], factionNom: string) {
 // La prime du "capitaine" d'une faction : le ou les membres au rang le plus haut défini pour
 // cette faction (ordre le plus bas) ; à défaut de rang défini, le membre le mieux payé.
 function captainPrime(faction: Faction, members: Member[]): number {
-  const facMembers = members.filter(m => m.factions?.includes(faction.nom))
+  const facMembers = members.filter(m => belongsToFaction(m, faction.nom))
   const rangs = (faction.rangs || []).slice().sort((a, b) => a.ordre - b.ordre)
   if (rangs.length === 0) return facMembers.length ? Math.max(...facMembers.map(m => parsePrime(m.prime))) : 0
   const topRang = rangs[0].nom
@@ -59,7 +65,7 @@ function captainPrime(faction: Faction, members: Member[]): number {
 // Somme des primes de tous les membres — n'a pas vraiment de sens pour les factions de
 // type Peuple (ce ne sont pas des équipages de primes), donc on ne l'affiche pas pour elles.
 function totalPrime(faction: Faction, members: Member[]): number {
-  return members.filter(m => m.factions?.includes(faction.nom)).reduce((sum, m) => sum + parsePrime(m.prime), 0)
+  return members.filter(m => belongsToFaction(m, faction.nom)).reduce((sum, m) => sum + parsePrime(m.prime), 0)
 }
 
 const TYPES = ['Pirates', 'Marine', 'Gouvernement', 'Révolutionnaire', 'Peuple', 'Neutre', 'Autre']
@@ -144,7 +150,7 @@ export default function FactionsPage() {
   }
 
   async function fetchMembers() {
-    const { data } = await supabase.from('personnages').select('id, nom, emoji, type, photos, factions, rang, rangs, prime, condition_prime')
+    const { data } = await supabase.from('personnages').select('id, nom, emoji, type, photos, factions, equipage, rang, rangs, prime, condition_prime')
     setMembers(data || [])
   }
 
@@ -370,7 +376,7 @@ export default function FactionsPage() {
                   {tot > 0 && <div title="Prime totale de la faction" style={{display:'inline-block',background:'rgba(224,48,48,.12)',color:'#ff8080',border:'1px solid rgba(224,48,48,.3)',borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.05em',width:'fit-content'}}>💰 {tot.toLocaleString('fr-FR')}</div>}
                 </div>
                 {f.description && <div style={{fontSize:'.88rem',color:'#7a9ab8',lineHeight:1.6,fontStyle:'italic',flex:1}}>{f.description}</div>}
-                <div style={{fontSize:'.78rem',color:'#4a6880'}}>👥 {members.filter(m => m.factions?.includes(f.nom)).length} membre(s)</div>
+                <div style={{fontSize:'.78rem',color:'#4a6880'}}>👥 {members.filter(m => belongsToFaction(m, f.nom)).length} membre(s)</div>
                 <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center'}}>
                   {f.gdoc && <a href={f.gdoc} target="_blank" rel="noopener" style={{background:'rgba(66,133,244,.12)',color:'#6aabff',border:'1px solid rgba(66,133,244,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>📄 Doc</a>}
                   {f.miro && <a href={f.miro} target="_blank" rel="noopener" style={{background:'rgba(255,196,0,.1)',color:'#ffc400',border:'1px solid rgba(255,196,0,.25)',borderRadius:6,padding:'.18rem .5rem',fontFamily:"'Cinzel',serif",fontSize:'.48rem',textDecoration:'none'}}>🗒 Miro</a>}
@@ -471,7 +477,7 @@ export default function FactionsPage() {
               </div>
 
               {(() => {
-                const factionMembers = members.filter(m => m.factions?.includes(rosterFaction.nom))
+                const factionMembers = members.filter(m => belongsToFaction(m, rosterFaction.nom))
                 if (factionMembers.length === 0) return <div style={{textAlign:'center',padding:'2rem',color:'#4a6880',fontStyle:'italic',fontSize:'.88rem',marginBottom:'1.5rem'}}>Aucun membre pour l&apos;instant.</div>
                 const tc = TYPE_COLORS[rosterFaction.type||''] || '#a060ff'
                 const rangs = (rosterFaction.rangs || []).slice().sort((a,b) => a.ordre - b.ordre)
