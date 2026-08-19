@@ -287,10 +287,21 @@ export default function PdsPage() {
                   </div>
                 )}
                 {p.sujet_nom && (
-                  <div style={{ background: '#0a1829', border: '1px solid rgba(30,120,200,.2)', borderRadius: 10, padding: '.75rem .9rem', marginBottom: '.65rem' }}>
-                    <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.35rem' }}>👤 Sujet</div>
-                    <div style={{ fontSize: '.88rem', color: '#e8eef5', fontWeight: 700, marginBottom: p.sujet_statut ? '.2rem' : 0 }}>{p.sujet_nom}</div>
-                    {p.sujet_statut && <div style={{ fontSize: '.78rem', color: '#7a9ab8' }}>{p.sujet_statut}</div>}
+                  <div style={{ background: '#0a1829', border: '1px solid rgba(30,120,200,.2)', borderRadius: 10, padding: '.75rem .9rem', marginBottom: '.65rem', display: 'flex', gap: '.75rem', alignItems: 'center' }}>
+                    {p.sujet_photos && p.sujet_photos[0] ? (
+                      <div style={{ width: 52, height: 52, borderRadius: 8, overflow: 'hidden', flexShrink: 0, border: `2px solid ${tc}`, cursor: 'zoom-in', position: 'relative' }}
+                        onClick={e => { e.stopPropagation(); setLightbox({ images: p.sujet_photos!, index: 0 }) }}>
+                        <img src={p.sujet_photos[0]} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        {p.sujet_photos.length > 1 && <span style={{ position: 'absolute', bottom: 0, right: 0, background: 'rgba(5,13,26,.85)', color: '#e8eef5', fontSize: '.42rem', fontFamily: "'Cinzel',serif", padding: '0 3px' }}>+{p.sujet_photos.length - 1}</span>}
+                      </div>
+                    ) : (
+                      <div style={{ width: 52, height: 52, borderRadius: 8, flexShrink: 0, background: '#0d2040', border: '1px solid rgba(30,120,200,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>👤</div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.2rem' }}>👤 Sujet</div>
+                      <div style={{ fontSize: '.88rem', color: '#e8eef5', fontWeight: 700, marginBottom: p.sujet_statut ? '.15rem' : 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.sujet_nom}</div>
+                      {p.sujet_statut && <div style={{ fontSize: '.78rem', color: '#7a9ab8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.sujet_statut}</div>}
+                    </div>
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: '.4rem', justifyContent: 'flex-end' }}>
