@@ -26,15 +26,15 @@ interface Lame {
   photos?: string[]
 }
 
-const RANGS = ['Lame de qualité', 'Lame de Grande qualité', 'Lame de 1er Ordre', 'Lame Légendaire']
+const RANGS = ['Lame de qualité', 'Lame de Grande qualité', 'Lame de 1er Ordre', 'Lame Légendaire', 'Grande Lame']
 const RANG_MAX: Record<string, number> = {
-  'Lame de qualité': 100, 'Lame de Grande qualité': 50, 'Lame de 1er Ordre': 20, 'Lame Légendaire': 10
+  'Lame de qualité': 100, 'Lame de Grande qualité': 50, 'Lame de 1er Ordre': 20, 'Lame Légendaire': 10, 'Grande Lame': 5
 }
 const RANG_COLORS: Record<string, string> = {
-  'Lame de qualité': '#7a9ab8', 'Lame de Grande qualité': '#00c8ff', 'Lame de 1er Ordre': '#a060ff', 'Lame Légendaire': '#d4a017'
+  'Lame de qualité': '#7a9ab8', 'Lame de Grande qualité': '#00c8ff', 'Lame de 1er Ordre': '#a060ff', 'Lame Légendaire': '#d4a017', 'Grande Lame': '#e03030'
 }
 const RANG_EMOJI: Record<string, string> = {
-  'Lame de qualité': '🗡️', 'Lame de Grande qualité': '⚔️', 'Lame de 1er Ordre': '🔱', 'Lame Légendaire': '✨'
+  'Lame de qualité': '🗡️', 'Lame de Grande qualité': '⚔️', 'Lame de 1er Ordre': '🔱', 'Lame Légendaire': '✨', 'Grande Lame': '👑'
 }
 const TAB_ALL = ''
 const LAME_TABS = [TAB_ALL, ...RANGS]
@@ -242,7 +242,7 @@ export default function LamesPage() {
                 )}
                 {l.lore && (
                   <div style={{ marginBottom: '.85rem' }}>
-                    <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.25rem' }}>📜 Lore</div>
+                    <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.25rem' }}>📜 Légende</div>
                     <div style={{ fontSize: '.85rem', color: '#c8d8e8', lineHeight: 1.6, fontStyle: 'italic' }}>{l.lore}</div>
                   </div>
                 )}
@@ -358,7 +358,7 @@ export default function LamesPage() {
               </div>
               <div><label style={S.label}>Description / Histoire</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Cette lame a été forgée..." /></div>
               <div><label style={S.label}>Capacités</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.capacites || ''} onChange={e => setForm(f => ({ ...f, capacites: e.target.value }))} placeholder="Cette lame permet de..." /></div>
-              <div><label style={S.label}>Lore</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.lore || ''} onChange={e => setForm(f => ({ ...f, lore: e.target.value }))} placeholder="Origine, légendes, histoire de la lame..." /></div>
+              <div><label style={S.label}>Légende</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.lore || ''} onChange={e => setForm(f => ({ ...f, lore: e.target.value }))} placeholder="Origine, légendes, histoire de la lame..." /></div>
               <div><label style={S.label}>Particularités</label><textarea style={{ ...S.input, minHeight: 70, resize: 'vertical', lineHeight: 1.7 }} value={form.particularites || ''} onChange={e => setForm(f => ({ ...f, particularites: e.target.value }))} placeholder="Capacités spéciales, résistance, malédiction..." /></div>
             </div>
 

@@ -444,7 +444,7 @@ export default function FruitsPage() {
                 )}
                 {f.lore && (
                   <div style={{ marginBottom: '.85rem' }}>
-                    <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.25rem' }}>📜 Lore</div>
+                    <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.25rem' }}>📜 Légende</div>
                     <div style={{ fontSize: '.85rem', color: '#c8d8e8', lineHeight: 1.6, fontStyle: 'italic' }}>{f.lore}</div>
                   </div>
                 )}
@@ -578,7 +578,7 @@ export default function FruitsPage() {
               </div>
               <div><label style={S.label}>Description</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Description générale du fruit..." /></div>
               <div><label style={S.label}>Capacités</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.capacites || ''} onChange={e => setForm(f => ({ ...f, capacites: e.target.value }))} placeholder="Ce fruit permet de..." /></div>
-              <div><label style={S.label}>Lore</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.lore || ''} onChange={e => setForm(f => ({ ...f, lore: e.target.value }))} placeholder="Origine, légendes, histoire du fruit..." /></div>
+              <div><label style={S.label}>Légende</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.lore || ''} onChange={e => setForm(f => ({ ...f, lore: e.target.value }))} placeholder="Origine, légendes, histoire du fruit..." /></div>
               <div><label style={S.label}>Faiblesses</label><textarea style={{ ...S.input, minHeight: 70, resize: 'vertical', lineHeight: 1.7 }} value={form.faiblesses || ''} onChange={e => setForm(f => ({ ...f, faiblesses: e.target.value }))} placeholder="Faiblesses et limitations..." /></div>
             </div>
 
