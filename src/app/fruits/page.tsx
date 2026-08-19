@@ -5,6 +5,7 @@ import { supabase, uploadImage } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
 import PersonnageSearchSelect from '@/components/PersonnageSearchSelect'
 import ImageLightbox from '@/components/ImageLightbox'
+import MoneyInput from '@/components/MoneyInput'
 
 interface Fruit {
   id: string
@@ -22,16 +23,28 @@ interface Fruit {
   photo?: string
   photos?: string[]
   statut?: string
+  prix?: string
   faiblesses?: string
 }
 
+const FRUIT_TYPES = ['Paramecia', 'Logia', 'Zoan', 'Mythical', 'Inconnu']
 const TYPE_COLORS: Record<string, string> = {
   Paramecia: '#40d060', Logia: '#ff8c40', Zoan: '#a060ff', Mythical: '#d4a017', Inconnu: '#7a9ab8'
 }
-const STATUT_FRUIT: Record<string, { label: string; icon: string; color: string }> = {
-  mange: { label: 'Mangé', icon: '🍽️', color: '#40d060' },
-  perdu: { label: 'Perdu', icon: '❓', color: '#e03030' },
+const TYPE_EMOJI: Record<string, string> = {
+  Paramecia: '🔮', Logia: '🌪️', Zoan: '🐾', Mythical: '✨', Inconnu: '❓'
 }
+// Mangé/Perdu/Stocké sont des états mutuellement exclusifs et volontairement très visibles
+// (ruban plein sur la photo) — l'absence de statut affiche "Disponible" pour que l'information
+// soit toujours explicite plutôt que silencieuse.
+const STATUT_FRUIT: Record<string, { label: string; icon: string; color: string }> = {
+  mange: { label: 'Mangé', icon: '🍽️', color: '#e03030' },
+  perdu: { label: 'Perdu', icon: '❓', color: '#a0a0c0' },
+  stocke: { label: 'Stocké', icon: '📦', color: '#00c8ff' },
+}
+const STATUT_DISPONIBLE = { label: 'Disponible', icon: '🌱', color: '#40d060' }
+function fruitStatut(f: Fruit) { return f.statut && STATUT_FRUIT[f.statut] ? STATUT_FRUIT[f.statut] : STATUT_DISPONIBLE }
+function parsePrix(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
 
 const S = {
   page: { minHeight: '100vh', background: '#050d1a', color: '#e8eef5', fontFamily: "'Crimson Pro', Georgia, serif", paddingTop: 60 } as React.CSSProperties,
@@ -230,7 +243,7 @@ Réponds UNIQUEMENT en JSON valide, sans markdown, sans backticks :
 export default function FruitsPage() {
   const [list, setList] = useState<Fruit[]>([])
   const [filtered, setFiltered] = useState<Fruit[]>([])
-  const [typeFilter, setTypeFilter] = useState('')
+  const [pageTab, setPageTab] = useState(FRUIT_TYPES[0])
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -242,7 +255,7 @@ export default function FruitsPage() {
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [form, setForm] = useState<Partial<Fruit>>({
     nom: '', jp: '', type: 'Paramecia', puissance: 5,
-    emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', color: '#40d060', faiblesses: '', photos: [], statut: ''
+    emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', color: '#40d060', faiblesses: '', photos: [], statut: '', prix: ''
   })
 
   const personnageMap = new Map(personnages.map(p => [p.nom, p.id]))
@@ -253,10 +266,11 @@ export default function FruitsPage() {
     if (q) setSearch(q)
   }, [])
   useEffect(() => {
-    let l = typeFilter ? list.filter(f => f.type === typeFilter) : list
+    let l = list.filter(f => f.type === pageTab)
     if (search) l = l.filter(f => f.nom.toLowerCase().includes(search.toLowerCase()))
+    l = l.slice().sort((a, b) => parsePrix(b.prix) - parsePrix(a.prix))
     setFiltered(l)
-  }, [list, typeFilter, search])
+  }, [list, pageTab, search])
 
   async function fetchList() {
     const { data } = await supabase.from('fruits').select('*').order('created_at', { ascending: false })
@@ -270,7 +284,7 @@ export default function FruitsPage() {
 
   function openForm(f?: Fruit) {
     if (f) { setForm({ ...f, photos: f.photos && f.photos.length > 0 ? f.photos : (f.photo ? [f.photo] : []) }); setEditId(f.id) }
-    else { setForm({ nom: '', jp: '', type: 'Paramecia', puissance: 5, emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', color: '#40d060', faiblesses: '', photos: [], statut: '' }); setEditId(null) }
+    else { setForm({ nom: '', jp: '', type: pageTab, puissance: 5, emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', color: '#40d060', faiblesses: '', photos: [], statut: '', prix: '' }); setEditId(null) }
     setPhotoFiles([])
     setPhotoPreviews([])
     setShowForm(true)
@@ -331,8 +345,10 @@ export default function FruitsPage() {
 
   const navLinks = [['Accueil', '/'], ['Personnages', '/personnages'], ['Fruits', '/fruits'], ['Despas', '/despas'], ['Lames', '/lames'], ['Cristaux', '/cristaux'], ['Îles', '/iles'], ['Factions', '/factions'], ['Journaux', '/journaux'], ['Lore', '/lore'], ['Dashboard', '/dashboard']]
 
+  const tabColor = TYPE_COLORS[pageTab] || '#f0c040'
+
   return (
-    <div style={S.page}>
+    <div style={{ ...S.page, background: `radial-gradient(ellipse 1400px 500px at 50% 0%, ${tabColor}14, #050d1a 60%)` }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,400;1,400&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -355,24 +371,33 @@ export default function FruitsPage() {
       </nav>
 
       <div style={S.header}>
-        <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.1em', color: '#7a9ab8', textTransform: 'uppercase', marginBottom: '.4rem' }}>🏴‍☠️ › Fruits du Démon</div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
-          <h1 style={{ fontFamily: "'Cinzel Decorative',serif", fontSize: 'clamp(1.8rem,3.5vw,3rem)', fontWeight: 700, background: 'linear-gradient(135deg,#fff,#f0c040)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Fruits du Démon</h1>
+        <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.1em', color: '#7a9ab8', textTransform: 'uppercase', marginBottom: '.4rem' }}>🏴‍☠️ › Fruits du Démon › {pageTab}</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          <h1 style={{ fontFamily: "'Cinzel Decorative',serif", fontSize: 'clamp(1.8rem,3.5vw,3rem)', fontWeight: 700, backgroundImage: `linear-gradient(135deg,#fff,${tabColor})`, backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>Fruits du Démon</h1>
           <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter un fruit</button>
         </div>
+
+        {/* Menu par catégorie, comme sur Personnages/Factions */}
+        <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          {FRUIT_TYPES.map(t => {
+            const active = pageTab === t
+            const tc = TYPE_COLORS[t]
+            const count = list.filter(f => f.type === t).length
+            return (
+              <button key={t} onClick={() => setPageTab(t)} style={{ background: active ? `${tc}30` : '#0a1829', border: `1.5px solid ${active ? tc : 'rgba(30,120,200,.2)'}`, borderRadius: 12, padding: '.6rem 1.1rem', fontFamily: "'Cinzel',serif", fontSize: '.68rem', letterSpacing: '.05em', textTransform: 'uppercase', color: active ? tc : '#7a9ab8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '.5rem', boxShadow: active ? `0 0 20px ${tc}55` : 'none', whiteSpace: 'nowrap' }}>
+                {TYPE_EMOJI[t]} {t} <span style={{ opacity: .7 }}>({count})</span>
+              </button>
+            )
+          })}
+        </div>
+
         <div style={{ display: 'flex', gap: '.65rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 220, position: 'relative' }}>
             <span style={{ position: 'absolute', left: '.75rem', top: '50%', transform: 'translateY(-50%)', color: '#4a6880' }}>🔍</span>
             <input style={{ ...S.input, paddingLeft: '2.5rem' }} placeholder="Rechercher un fruit..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          {['', 'Paramecia', 'Logia', 'Zoan', 'Mythical', 'Inconnu'].map(t => (
-            <button key={t} onClick={() => setTypeFilter(t)} style={{ background: typeFilter === t ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${typeFilter === t ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: typeFilter === t ? '#f0c040' : '#7a9ab8', cursor: 'pointer' }}>
-              {t || 'Tous'}
-            </button>
-          ))}
-        </div>
+        <div style={{ fontSize: '.72rem', color: '#4a6880', fontStyle: 'italic', marginBottom: '1.25rem' }}>Classés par prix décroissant.</div>
       </div>
 
       <div style={S.grid}>
@@ -395,16 +420,19 @@ export default function FruitsPage() {
                 {f.photos && f.photos[0] && <img src={f.photos[0]} alt={f.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
                 {f.emoji && <span style={{ position: 'relative', zIndex: 1, opacity: f.photos && f.photos[0] ? 0.3 : 1 }}>{f.emoji}</span>}
                 {f.photos && f.photos.length > 1 && <span style={{ position: 'absolute', bottom: 8, right: 8, background: 'rgba(5,13,26,.75)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 100, padding: '.15rem .5rem', fontSize: '.62rem', fontFamily: "'Cinzel',serif", color: '#e8eef5' }}>📷 {f.photos.length}</span>}
+                {(() => {
+                  const st = fruitStatut(f)
+                  return (
+                    <div style={{ position: 'absolute', top: 0, left: 0, zIndex: 2, background: st.color, color: '#050d1a', padding: '.3rem .8rem .3rem .6rem', borderBottomRightRadius: 10, fontFamily: "'Cinzel',serif", fontSize: '.62rem', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase', boxShadow: '0 4px 12px rgba(0,0,0,.4)' }}>
+                      {st.icon} {st.label}
+                    </div>
+                  )
+                })()}
               </div>
               <div style={{ padding: '1.1rem' }}>
-                <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '.65rem' }}>
-                  <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: `${tc}22`, color: tc, border: `1px solid ${tc}44` }}>{f.type}</div>
-                  {f.statut && STATUT_FRUIT[f.statut] && (
-                    <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: `${STATUT_FRUIT[f.statut].color}22`, color: STATUT_FRUIT[f.statut].color, border: `1px solid ${STATUT_FRUIT[f.statut].color}44` }}>{STATUT_FRUIT[f.statut].icon} {STATUT_FRUIT[f.statut].label}</div>
-                  )}
-                </div>
                 <div style={{ fontFamily: "'Cinzel',serif", fontSize: '1.05rem', fontWeight: 700, color: '#e8eef5', marginBottom: '.12rem' }}>{f.nom}</div>
                 {f.jp && <div style={{ fontSize: '.78rem', color: '#4a6880', marginBottom: '.65rem' }}>{f.jp}</div>}
+                {f.prix && parsePrix(f.prix) > 0 && <div style={{ fontSize: '.85rem', color: '#7a9ab8', marginBottom: '.65rem' }}>💰 <span style={{ color: '#f0c040', fontFamily: "'Cinzel',serif", fontWeight: 700 }}>{f.prix} berries</span></div>}
                 {f.description && <div style={{ fontSize: '.88rem', color: '#7a9ab8', lineHeight: 1.6, fontStyle: 'italic', marginBottom: '.85rem' }}>{f.description}</div>}
                 {f.capacites && (
                   <div style={{ marginBottom: '.85rem' }}>
@@ -527,18 +555,24 @@ export default function FruitsPage() {
                 <div><label style={S.label}>Emoji (optionnel)</label><input style={{ ...S.input, width: 70, fontSize: '1.4rem', textAlign: 'center' }} value={form.emoji || ''} onChange={e => setForm(f => ({ ...f, emoji: e.target.value }))} placeholder="🍎" /></div>
                 <div><label style={S.label}>Couleur accent</label><input type="color" style={{ ...S.input, height: 42, padding: '.3rem' }} value={form.color || '#40d060'} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} /></div>
               </div>
-              <div><label style={S.label}>Statut</label>
-                <select style={{ ...S.input }} value={form.statut || ''} onChange={e => setForm(f => ({ ...f, statut: e.target.value }))}>
-                  <option value="">— Disponible —</option>
-                  <option value="mange">🍽️ Mangé</option>
-                  <option value="perdu">❓ Perdu</option>
-                </select>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.85rem' }}>
+                <div><label style={S.label}>Statut</label>
+                  <select style={{ ...S.input }} value={form.statut || ''} onChange={e => setForm(f => ({ ...f, statut: e.target.value }))}>
+                    <option value="">🌱 Disponible</option>
+                    <option value="mange">🍽️ Mangé</option>
+                    <option value="perdu">❓ Perdu</option>
+                    <option value="stocke">📦 Stocké</option>
+                  </select>
+                </div>
+                <div><label style={S.label}>Prix (berries)</label>
+                  <MoneyInput value={form.prix || ''} onChange={v => setForm(f => ({ ...f, prix: v }))} placeholder="1,000,000,000" inputStyle={S.input} />
+                </div>
               </div>
               <div><label style={S.label}>Propriétaire</label>
-                <PersonnageSearchSelect personnages={personnages} value={form.proprietaire || ''} onChange={nom => setForm(f => ({ ...f, proprietaire: nom }))} placeholder="Rechercher un personnage ou Non attribué" inputStyle={S.input} />
+                <PersonnageSearchSelect personnages={personnages} value={form.proprietaire || ''} onChange={nom => setForm(f => ({ ...f, proprietaire: nom }))} placeholder="Rechercher un personnage ou Non attribué" inputStyle={S.input} unknownOption={{ label: '❓ Propriétaire inconnu', value: 'Propriétaire inconnu' }} />
               </div>
               <div><label style={S.label}>Ancien détenteur</label>
-                <PersonnageSearchSelect personnages={personnages} value={form.ancien_detenteur || ''} onChange={nom => setForm(f => ({ ...f, ancien_detenteur: nom }))} placeholder="Rechercher un personnage ou Aucun" inputStyle={S.input} />
+                <PersonnageSearchSelect personnages={personnages} value={form.ancien_detenteur || ''} onChange={nom => setForm(f => ({ ...f, ancien_detenteur: nom }))} placeholder="Rechercher un personnage ou Aucun" inputStyle={S.input} unknownOption={{ label: '❓ Ancien détenteur inconnu', value: 'Ancien détenteur inconnu' }} />
               </div>
               <div><label style={S.label}>Description</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Description générale du fruit..." /></div>
               <div><label style={S.label}>Capacités</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.capacites || ''} onChange={e => setForm(f => ({ ...f, capacites: e.target.value }))} placeholder="Ce fruit permet de..." /></div>

@@ -5,6 +5,7 @@ import { supabase, uploadImage } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageCropper from '@/components/ImageCropper'
 import ImageLightbox from '@/components/ImageLightbox'
+import MoneyInput from '@/components/MoneyInput'
 
 interface PersonnageRang { faction: string; rang: string }
 interface Personnage {
@@ -678,7 +679,7 @@ export default function PersonnagesPage() {
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'.85rem' }}>
                 <div>
                   <label style={S.label}>Prime (beris)</label>
-                  <input style={S.input} value={form.prime||''} onChange={e => setForm(f => ({...f, prime:e.target.value}))} placeholder="450,000,000" />
+                  <MoneyInput value={form.prime||''} onChange={v => setForm(f => ({...f, prime:v}))} placeholder="450,000,000" inputStyle={S.input} />
                 </div>
                 <div>
                   <label style={S.label}>Avis de recherche</label>
@@ -925,6 +926,7 @@ export default function PersonnagesPage() {
                   { l:'📍 Origine', v:selected.origine||'—', c:'#7a9ab8', href:null },
                   { l:'🏝️ Île', v:selected.ile||'—', c:'#40d060', href: selected.ile ? `/iles?q=${encodeURIComponent(selected.ile)}` : null },
                   { l:'🏴‍☠️ Factions', v:(selected.factions && selected.factions.length > 0) ? selected.factions.join(', ') : '—', c:'#ff8c40', href: null },
+                  { l:'🍎 Fruit du Démon', v: fruits.find(fr => fr.proprietaire === selected.nom)?.nom || '—', c:'#f0c040', href: fruits.find(fr => fr.proprietaire === selected.nom) ? `/fruits?q=${encodeURIComponent(fruits.find(fr => fr.proprietaire === selected.nom)!.nom)}` : null },
                   { l:'🦾 Despa', v: despas.find(d => d.proprietaire === selected.nom)?.nom || '—', c:'#4488ff', href: despas.find(d => d.proprietaire === selected.nom) ? `/despas?q=${encodeURIComponent(despas.find(d => d.proprietaire === selected.nom)!.nom)}` : null },
                   { l:'❤️ Statut', v:selected.statut||'—', c:STATUT_COLORS[selected.statut||''] , href:null},
                 ].map(({l,v,c,href}) => {

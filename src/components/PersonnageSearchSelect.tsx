@@ -8,9 +8,13 @@ interface Props {
   onChange: (nom: string) => void
   placeholder?: string
   inputStyle: React.CSSProperties
+  // Libellé + valeur d'une option supplémentaire pour marquer explicitement "on sait qu'il y a
+  // un détenteur, mais on ne sait pas qui" — distinct de "Non attribué" (pas de détenteur du
+  // tout). ex: { label: '❓ Propriétaire inconnu', value: 'Propriétaire inconnu' }
+  unknownOption?: { label: string; value: string }
 }
 
-export default function PersonnageSearchSelect({ personnages, value, onChange, placeholder, inputStyle }: Props) {
+export default function PersonnageSearchSelect({ personnages, value, onChange, placeholder, inputStyle, unknownOption }: Props) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -39,6 +43,13 @@ export default function PersonnageSearchSelect({ personnages, value, onChange, p
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(212,160,23,.1)' }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none' }}
           >— Non attribué —</div>
+          {unknownOption && (
+            <div onClick={() => { onChange(unknownOption.value); setOpen(false) }}
+              style={{ padding: '.55rem .8rem', color: '#d4a017', fontStyle: 'italic', fontSize: '.85rem', cursor: 'pointer', borderBottom: '1px solid rgba(30,120,200,.1)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(212,160,23,.1)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none' }}
+            >{unknownOption.label}</div>
+          )}
           {matches.length === 0 && <div style={{ padding: '.55rem .8rem', color: '#4a6880', fontSize: '.85rem' }}>Aucun résultat</div>}
           {matches.map(p => (
             <div key={p.id} onClick={() => { onChange(p.nom); setOpen(false) }}
