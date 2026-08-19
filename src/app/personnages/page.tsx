@@ -63,11 +63,13 @@ function parsePrime(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, '
 // Même répartition en 4 pages à couleur dominante que sur la page Factions — mais avec un
 // effet beaucoup plus marqué : c'est ici toute la page qui prend la couleur, pas juste un
 // léger fond derrière la grille.
-type PageTab = 'pirates' | 'marine' | 'peuple' | 'sans_groupe'
-const PAGE_ORDER: PageTab[] = ['pirates', 'marine', 'peuple', 'sans_groupe']
+type PageTab = 'tous' | 'pirates' | 'marine' | 'revolutionnaire' | 'peuple' | 'sans_groupe'
+const PAGE_ORDER: PageTab[] = ['tous', 'pirates', 'marine', 'revolutionnaire', 'peuple', 'sans_groupe']
 const PAGE_THEMES: Record<PageTab, { label: string; emoji: string; color: string }> = {
+  tous: { label: 'Tous', emoji: '✨', color: '#7a9ab8' },
   pirates: { label: 'Pirates', emoji: '🏴‍☠️', color: '#e03030' },
   marine: { label: 'Marine · CP · Shichibukai · GM', emoji: '⚓', color: '#3f7fe0' },
+  revolutionnaire: { label: 'Révolutionnaire', emoji: '✊', color: '#ff8c40' },
   peuple: { label: 'Peuple', emoji: '👥', color: '#40d060' },
   sans_groupe: { label: 'Sans groupe', emoji: '✨', color: '#f0c040' },
 }
@@ -76,14 +78,16 @@ const PAGE_THEMES: Record<PageTab, { label: string; emoji: string; color: string
 const GROUPE_INCONNU = 'Groupe Inconnu'
 // Même répartition par type que personnageTabs, appliquée aux factions elles-mêmes — sert à
 // ne proposer, dans le filtre par faction, que les factions du même onglet (ex : sur l'onglet
-// Pirates, ne garder que les factions 100% de type Pirates, pas Marine/Peuple/etc.).
-function factionTabOf(f: FactionRef): PageTab {
+// Pirates, ne garder que les factions 100% de type Pirates, pas Marine/Peuple/etc.). "Tous"
+// n'est jamais retourné ici : c'est un état d'affichage, pas une catégorie de faction.
+function factionTabOf(f: FactionRef): Exclude<PageTab, 'tous'> {
   if (f.type === 'Pirates') return 'pirates'
   if (f.type === 'Marine' || f.type === 'Gouvernement') return 'marine'
+  if (f.type === 'Révolutionnaire') return 'revolutionnaire'
   if (f.type === 'Peuple') return 'peuple'
   return 'sans_groupe'
 }
-function groupTabOf(nom: string, factions: FactionRef[]): PageTab {
+function groupTabOf(nom: string, factions: FactionRef[]): Exclude<PageTab, 'tous'> {
   if (nom === GROUPE_INCONNU) return 'pirates'
   const f = factions.find(x => x.nom === nom)
   return f ? factionTabOf(f) : 'sans_groupe'
@@ -97,24 +101,23 @@ function personnageGroupsAll(p: Personnage): string[] {
 }
 // Un personnage peut légitimement apparaître sur plusieurs onglets à la fois s'il a des
 // appartenances de types différents (ex: un pirate de la lignée D apparaît à la fois sous
-// Pirates via son équipage et sous Peuple via "D") — contrairement au groupe "principal"
-// (voir primaryGroupForTab) qui ne sert qu'à éviter les doublons DANS un même onglet.
+// Pirates via son équipage et sous Peuple via "D").
 function personnageTabs(p: Personnage, factions: FactionRef[]): PageTab[] {
   const groups = personnageGroupsAll(p)
   if (groups.length === 0) return ['sans_groupe']
   const tabs = new Set(groups.map(g => groupTabOf(g, factions)))
   return Array.from(tabs)
 }
-// Le groupe sous lequel un personnage est classé DANS un onglet donné — parmi ses
-// appartenances qui correspondent à cet onglet, on privilégie l'équipage s'il correspond,
-// sinon la première faction correspondante. Un personnage n'apparaît donc qu'une seule fois
-// par onglet, jamais sous plusieurs en-têtes à la fois.
-function primaryGroupForTab(p: Personnage, tab: PageTab, factions: FactionRef[]): string {
+// Les groupes sous lesquels un personnage est classé DANS un onglet donné. S'il a plusieurs
+// appartenances qui correspondent TOUTES à cet onglet (ex: Marine + Dragon Céleste, deux
+// factions de type Marine), il apparaît sous chacune d'entre elles — mais jamais sous une
+// faction d'un autre type que celui de l'onglet courant (ça, c'est ce qui évite les doublons
+// inter-onglets). Sur "Tous", aucune restriction : toutes ses appartenances comptent.
+function groupsForTab(p: Personnage, tab: PageTab, factions: FactionRef[]): string[] {
   const groups = personnageGroupsAll(p)
+  if (tab === 'tous') return groups.length > 0 ? groups : ['']
   const matching = groups.filter(g => groupTabOf(g, factions) === tab)
-  if (matching.length === 0) return ''
-  if (p.equipage && matching.includes(p.equipage)) return p.equipage
-  return matching[0]
+  return matching.length > 0 ? matching : ['']
 }
 function personnageRangs(p: Personnage): PersonnageRang[] {
   if (p.rangs !== undefined) return p.rangs
@@ -144,9 +147,10 @@ interface GroupSection { faction: string; members: Personnage[] }
 function buildGroupSections(items: Personnage[], factions: FactionRef[], tab: PageTab): GroupSection[] {
   const map = new Map<string, Personnage[]>()
   items.forEach(p => {
-    const g = primaryGroupForTab(p, tab, factions)
-    if (!map.has(g)) map.set(g, [])
-    map.get(g)!.push(p)
+    groupsForTab(p, tab, factions).forEach(g => {
+      if (!map.has(g)) map.set(g, [])
+      map.get(g)!.push(p)
+    })
   })
   const names = Array.from(map.keys())
   // Un Empereur fait remonter son groupe en haut de la liste — sauf pour les groupes de type
@@ -278,7 +282,7 @@ export default function PersonnagesPage() {
   }
 
   useEffect(() => {
-    let l = list.filter(p => personnageTabs(p, factions).includes(pageTab))
+    let l = pageTab === 'tous' ? list : list.filter(p => personnageTabs(p, factions).includes(pageTab))
     if (search) l = l.filter(p => p.nom.toLowerCase().includes(search.toLowerCase()) || (p.surnom||'').toLowerCase().includes(search.toLowerCase()))
     if (typeFilter) l = l.filter(p => p.type === typeFilter)
     if (factionFilter) l = l.filter(p => p.factions?.includes(factionFilter) || p.equipage === factionFilter)
@@ -512,7 +516,7 @@ export default function PersonnagesPage() {
           {PAGE_ORDER.map(tab => {
             const t = PAGE_THEMES[tab]
             const active = pageTab === tab
-            const count = list.filter(p => personnageTabs(p, factions).includes(tab)).length
+            const count = tab === 'tous' ? list.length : list.filter(p => personnageTabs(p, factions).includes(tab)).length
             return (
               <button key={tab} onClick={() => { setPageTab(tab); setFactionFilter('') }} style={{ background: active ? `${t.color}30` : '#0a1829', border:`1.5px solid ${active ? t.color : 'rgba(30,120,200,.2)'}`, borderRadius:12, padding:'.6rem 1.1rem', fontFamily:"'Cinzel',serif", fontSize:'.68rem', letterSpacing:'.05em', textTransform:'uppercase', color: active ? t.color : '#7a9ab8', cursor:'pointer', display:'flex', alignItems:'center', gap:'.5rem', boxShadow: active ? `0 0 20px ${t.color}55` : 'none', whiteSpace:'nowrap' }}>
                 {t.emoji} {t.label} <span style={{ opacity:.7 }}>({count})</span>
@@ -548,7 +552,7 @@ export default function PersonnagesPage() {
 
         {/* Filtre par faction — uniquement les factions du même onglet (ex : Pirates pur sur l'onglet Pirates) */}
         {(() => {
-          const factionsInTab = factions.filter(f => factionTabOf(f) === pageTab)
+          const factionsInTab = pageTab === 'tous' ? factions : factions.filter(f => factionTabOf(f) === pageTab)
           if (factionsInTab.length === 0) return null
           return (
             <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap', alignItems:'center', marginBottom:'1.25rem' }}>

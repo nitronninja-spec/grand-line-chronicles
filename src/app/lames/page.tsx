@@ -15,6 +15,8 @@ interface Lame {
   puissance?: number
   emoji?: string
   description?: string
+  capacites?: string
+  lore?: string
   proprietaire?: string
   ancien_detenteur?: string
   prix?: string
@@ -31,7 +33,13 @@ const RANG_MAX: Record<string, number> = {
 const RANG_COLORS: Record<string, string> = {
   'Lame de qualité': '#7a9ab8', 'Lame de Grande qualité': '#00c8ff', 'Lame de 1er Ordre': '#a060ff', 'Lame Légendaire': '#d4a017'
 }
+const RANG_EMOJI: Record<string, string> = {
+  'Lame de qualité': '🗡️', 'Lame de Grande qualité': '⚔️', 'Lame de 1er Ordre': '🔱', 'Lame Légendaire': '✨'
+}
+const TAB_ALL = ''
+const LAME_TABS = [TAB_ALL, ...RANGS]
 function rangLabel(r: string) { return RANG_MAX[r] ? `[${RANG_MAX[r]}] ${r}` : r }
+function parsePrix(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
 
 const S = {
   page: { minHeight: '100vh', background: '#050d1a', color: '#e8eef5', fontFamily: "'Crimson Pro', Georgia, serif", paddingTop: 60 } as React.CSSProperties,
@@ -52,7 +60,7 @@ const navLinks = [['Accueil', '/'], ['Personnages', '/personnages'], ['Fruits', 
 export default function LamesPage() {
   const [list, setList] = useState<Lame[]>([])
   const [filtered, setFiltered] = useState<Lame[]>([])
-  const [rangFilter, setRangFilter] = useState('')
+  const [pageTab, setPageTab] = useState(TAB_ALL)
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -63,7 +71,7 @@ export default function LamesPage() {
   const [personnages, setPersonnages] = useState<{ id: string; nom: string }[]>([])
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [form, setForm] = useState<Partial<Lame>>({
-    nom: '', jp: '', rang: 'Lame de qualité', puissance: 5, emoji: '⚔️', description: '', proprietaire: '', ancien_detenteur: '', prix: '', particularites: '', color: '#7a9ab8', photos: []
+    nom: '', jp: '', rang: 'Lame de qualité', puissance: 5, emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', prix: '', particularites: '', color: '#7a9ab8', photos: []
   })
 
   const personnageMap = new Map(personnages.map(p => [p.nom, p.id]))
@@ -74,10 +82,11 @@ export default function LamesPage() {
     if (q) setSearch(q)
   }, [])
   useEffect(() => {
-    let l = rangFilter ? list.filter(l2 => l2.rang === rangFilter) : list
+    let l = pageTab === TAB_ALL ? list : list.filter(l2 => l2.rang === pageTab)
     if (search) l = l.filter(l2 => l2.nom.toLowerCase().includes(search.toLowerCase()))
+    l = l.slice().sort((a, b) => parsePrix(b.prix) - parsePrix(a.prix))
     setFiltered(l)
-  }, [list, rangFilter, search])
+  }, [list, pageTab, search])
 
   async function fetchList() {
     const { data } = await supabase.from('lames').select('*').order('created_at', { ascending: false })
@@ -91,7 +100,7 @@ export default function LamesPage() {
 
   function openForm(l?: Lame) {
     if (l) { setForm({ ...l, photos: l.photos && l.photos.length > 0 ? l.photos : (l.photo ? [l.photo] : []) }); setEditId(l.id) }
-    else { setForm({ nom: '', jp: '', rang: 'Lame de qualité', puissance: 5, emoji: '⚔️', description: '', proprietaire: '', ancien_detenteur: '', prix: '', particularites: '', color: '#7a9ab8', photos: [] }); setEditId(null) }
+    else { setForm({ nom: '', jp: '', rang: pageTab || 'Lame de qualité', puissance: 5, emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', prix: '', particularites: '', color: '#7a9ab8', photos: [] }); setEditId(null) }
     setPhotoFiles([])
     setPhotoPreviews([])
     setShowForm(true)
@@ -169,24 +178,33 @@ export default function LamesPage() {
       </nav>
 
       <div style={S.header}>
-        <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.1em', color: '#7a9ab8', textTransform: 'uppercase', marginBottom: '.4rem' }}>🏴‍☠️ › Lames</div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
-          <h1 style={{ fontFamily: "'Cinzel Decorative',serif", fontSize: 'clamp(1.8rem,3.5vw,3rem)', fontWeight: 700, background: 'linear-gradient(135deg,#fff,#f0c040)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Lames</h1>
+        <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.1em', color: '#7a9ab8', textTransform: 'uppercase', marginBottom: '.4rem' }}>🏴‍☠️ › Lames › {pageTab || 'Tous'}</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          <h1 style={{ fontFamily: "'Cinzel Decorative',serif", fontSize: 'clamp(1.8rem,3.5vw,3rem)', fontWeight: 700, backgroundImage: `linear-gradient(135deg,#fff,${RANG_COLORS[pageTab] || '#f0c040'})`, backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>Lames</h1>
           <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter une lame</button>
         </div>
+
+        {/* Menu par catégorie, comme sur Fruits/Personnages/Factions */}
+        <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          {LAME_TABS.map(r => {
+            const active = pageTab === r
+            const tc = r ? (RANG_COLORS[r] || '#d4a017') : '#f0c040'
+            const count = r === TAB_ALL ? list.length : list.filter(l => l.rang === r).length
+            return (
+              <button key={r || 'tous'} onClick={() => setPageTab(r)} style={{ background: active ? `${tc}30` : '#0a1829', border: `1.5px solid ${active ? tc : 'rgba(30,120,200,.2)'}`, borderRadius: 12, padding: '.6rem 1.1rem', fontFamily: "'Cinzel',serif", fontSize: '.68rem', letterSpacing: '.05em', textTransform: 'uppercase', color: active ? tc : '#7a9ab8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '.5rem', boxShadow: active ? `0 0 20px ${tc}55` : 'none', whiteSpace: 'nowrap' }}>
+                {r ? RANG_EMOJI[r] : '✨'} {r ? rangLabel(r) : 'Tous'} <span style={{ opacity: .7 }}>({count})</span>
+              </button>
+            )
+          })}
+        </div>
+
         <div style={{ display: 'flex', gap: '.65rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 220, position: 'relative' }}>
             <span style={{ position: 'absolute', left: '.75rem', top: '50%', transform: 'translateY(-50%)', color: '#4a6880' }}>🔍</span>
             <input style={{ ...S.input, paddingLeft: '2.5rem' }} placeholder="Rechercher une lame..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          {['', ...RANGS].map(r => (
-            <button key={r} onClick={() => setRangFilter(r)} style={{ background: rangFilter === r ? `${RANG_COLORS[r] || '#d4a017'}22` : '#0a1829', border: `1px solid ${rangFilter === r ? (RANG_COLORS[r] || '#d4a017') : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: rangFilter === r ? (RANG_COLORS[r] || '#f0c040') : '#7a9ab8', cursor: 'pointer' }}>
-              {r ? rangLabel(r) : 'Tous'}
-            </button>
-          ))}
-        </div>
+        <div style={{ fontSize: '.72rem', color: '#4a6880', fontStyle: 'italic', marginBottom: '1.25rem' }}>Classées par prix décroissant.</div>
       </div>
 
       <div style={S.grid}>
@@ -207,7 +225,7 @@ export default function LamesPage() {
               <div style={{ width: '100%', height: 160, background: 'linear-gradient(135deg,#0a1829,#050d1a)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem', overflow: 'hidden', cursor: (l.photos && l.photos[0]) ? 'zoom-in' : 'default' }}
                 onClick={() => { if (l.photos && l.photos.length > 0) setLightbox({ images: l.photos, index: 0 }) }}>
                 {l.photos && l.photos[0] && <img src={l.photos[0]} alt={l.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
-                <span style={{ position: 'relative', zIndex: 1, opacity: l.photos && l.photos[0] ? 0.3 : 1 }}>{l.emoji || '⚔️'}</span>
+                {l.emoji && <span style={{ position: 'relative', zIndex: 1, opacity: l.photos && l.photos[0] ? 0.3 : 1 }}>{l.emoji}</span>}
                 {l.photos && l.photos.length > 1 && <span style={{ position: 'absolute', bottom: 8, right: 8, background: 'rgba(5,13,26,.75)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 100, padding: '.15rem .5rem', fontSize: '.62rem', fontFamily: "'Cinzel',serif", color: '#e8eef5' }}>📷 {l.photos.length}</span>}
               </div>
               <div style={{ padding: '1.1rem' }}>
@@ -216,6 +234,18 @@ export default function LamesPage() {
                 {l.jp && <div style={{ fontSize: '.78rem', color: '#4a6880', marginBottom: '.65rem' }}>{l.jp}</div>}
                 {l.prix && <div style={{ fontSize: '.85rem', color: '#7a9ab8', marginBottom: '.65rem' }}>💰 <span style={{ color: '#f0c040', fontFamily: "'Cinzel',serif", fontWeight: 700 }}>{l.prix} berries</span></div>}
                 {l.description && <div style={{ fontSize: '.88rem', color: '#7a9ab8', lineHeight: 1.6, fontStyle: 'italic', marginBottom: '.85rem' }}>{l.description}</div>}
+                {l.capacites && (
+                  <div style={{ marginBottom: '.85rem' }}>
+                    <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.25rem' }}>⚡ Capacités</div>
+                    <div style={{ fontSize: '.85rem', color: '#c8d8e8', lineHeight: 1.6 }}>{l.capacites}</div>
+                  </div>
+                )}
+                {l.lore && (
+                  <div style={{ marginBottom: '.85rem' }}>
+                    <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.25rem' }}>📜 Lore</div>
+                    <div style={{ fontSize: '.85rem', color: '#c8d8e8', lineHeight: 1.6, fontStyle: 'italic' }}>{l.lore}</div>
+                  </div>
+                )}
                 {l.particularites && <div style={{ fontSize: '.8rem', color: '#4a6880', marginBottom: '.65rem' }}>✨ {l.particularites}</div>}
                 {l.proprietaire && (
                   <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>
@@ -314,7 +344,7 @@ export default function LamesPage() {
                 <div><label style={S.label}>Puissance (1-10)</label><input style={S.input} type="number" min="1" max="10" value={form.puissance || 5} onChange={e => setForm(f => ({ ...f, puissance: parseInt(e.target.value) }))} /></div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '.85rem', alignItems: 'end' }}>
-                <div><label style={S.label}>Emoji</label><input style={{ ...S.input, width: 70, fontSize: '1.4rem', textAlign: 'center' }} value={form.emoji || '⚔️'} onChange={e => setForm(f => ({ ...f, emoji: e.target.value }))} /></div>
+                <div><label style={S.label}>Emoji (optionnel)</label><input style={{ ...S.input, width: 70, fontSize: '1.4rem', textAlign: 'center' }} value={form.emoji || ''} onChange={e => setForm(f => ({ ...f, emoji: e.target.value }))} placeholder="⚔️" /></div>
                 <div><label style={S.label}>Couleur accent</label><input type="color" style={{ ...S.input, height: 42, padding: '.3rem' }} value={form.color || '#7a9ab8'} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} /></div>
               </div>
               <div><label style={S.label}>Prix (berries)</label>
@@ -327,6 +357,8 @@ export default function LamesPage() {
                 <PersonnageSearchSelect personnages={personnages} value={form.ancien_detenteur || ''} onChange={nom => setForm(f => ({ ...f, ancien_detenteur: nom }))} placeholder="Rechercher un personnage ou Aucun" inputStyle={S.input} unknownOption={{ label: '❓ Ancien détenteur inconnu', value: 'Ancien détenteur inconnu' }} />
               </div>
               <div><label style={S.label}>Description / Histoire</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Cette lame a été forgée..." /></div>
+              <div><label style={S.label}>Capacités</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.capacites || ''} onChange={e => setForm(f => ({ ...f, capacites: e.target.value }))} placeholder="Cette lame permet de..." /></div>
+              <div><label style={S.label}>Lore</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.lore || ''} onChange={e => setForm(f => ({ ...f, lore: e.target.value }))} placeholder="Origine, légendes, histoire de la lame..." /></div>
               <div><label style={S.label}>Particularités</label><textarea style={{ ...S.input, minHeight: 70, resize: 'vertical', lineHeight: 1.7 }} value={form.particularites || ''} onChange={e => setForm(f => ({ ...f, particularites: e.target.value }))} placeholder="Capacités spéciales, résistance, malédiction..." /></div>
             </div>
 

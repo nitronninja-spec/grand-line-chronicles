@@ -28,6 +28,8 @@ interface Fruit {
 }
 
 const FRUIT_TYPES = ['Paramecia', 'Logia', 'Zoan', 'Mythical', 'Inconnu']
+const TAB_ALL = ''
+const FRUIT_TABS = [TAB_ALL, ...FRUIT_TYPES]
 const TYPE_COLORS: Record<string, string> = {
   Paramecia: '#40d060', Logia: '#ff8c40', Zoan: '#a060ff', Mythical: '#d4a017', Inconnu: '#7a9ab8'
 }
@@ -243,7 +245,7 @@ Réponds UNIQUEMENT en JSON valide, sans markdown, sans backticks :
 export default function FruitsPage() {
   const [list, setList] = useState<Fruit[]>([])
   const [filtered, setFiltered] = useState<Fruit[]>([])
-  const [pageTab, setPageTab] = useState(FRUIT_TYPES[0])
+  const [pageTab, setPageTab] = useState(TAB_ALL)
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -266,7 +268,7 @@ export default function FruitsPage() {
     if (q) setSearch(q)
   }, [])
   useEffect(() => {
-    let l = list.filter(f => f.type === pageTab)
+    let l = pageTab === TAB_ALL ? list : list.filter(f => f.type === pageTab)
     if (search) l = l.filter(f => f.nom.toLowerCase().includes(search.toLowerCase()))
     l = l.slice().sort((a, b) => parsePrix(b.prix) - parsePrix(a.prix))
     setFiltered(l)
@@ -284,7 +286,7 @@ export default function FruitsPage() {
 
   function openForm(f?: Fruit) {
     if (f) { setForm({ ...f, photos: f.photos && f.photos.length > 0 ? f.photos : (f.photo ? [f.photo] : []) }); setEditId(f.id) }
-    else { setForm({ nom: '', jp: '', type: pageTab, puissance: 5, emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', color: '#40d060', faiblesses: '', photos: [], statut: '', prix: '' }); setEditId(null) }
+    else { setForm({ nom: '', jp: '', type: pageTab || 'Paramecia', puissance: 5, emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', color: '#40d060', faiblesses: '', photos: [], statut: '', prix: '' }); setEditId(null) }
     setPhotoFiles([])
     setPhotoPreviews([])
     setShowForm(true)
@@ -371,7 +373,7 @@ export default function FruitsPage() {
       </nav>
 
       <div style={S.header}>
-        <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.1em', color: '#7a9ab8', textTransform: 'uppercase', marginBottom: '.4rem' }}>🏴‍☠️ › Fruits du Démon › {pageTab}</div>
+        <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.1em', color: '#7a9ab8', textTransform: 'uppercase', marginBottom: '.4rem' }}>🏴‍☠️ › Fruits du Démon › {pageTab || 'Tous'}</div>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
           <h1 style={{ fontFamily: "'Cinzel Decorative',serif", fontSize: 'clamp(1.8rem,3.5vw,3rem)', fontWeight: 700, backgroundImage: `linear-gradient(135deg,#fff,${tabColor})`, backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>Fruits du Démon</h1>
           <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter un fruit</button>
@@ -379,13 +381,13 @@ export default function FruitsPage() {
 
         {/* Menu par catégorie, comme sur Personnages/Factions */}
         <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          {FRUIT_TYPES.map(t => {
+          {FRUIT_TABS.map(t => {
             const active = pageTab === t
-            const tc = TYPE_COLORS[t]
-            const count = list.filter(f => f.type === t).length
+            const tc = t ? TYPE_COLORS[t] : '#f0c040'
+            const count = t === TAB_ALL ? list.length : list.filter(f => f.type === t).length
             return (
-              <button key={t} onClick={() => setPageTab(t)} style={{ background: active ? `${tc}30` : '#0a1829', border: `1.5px solid ${active ? tc : 'rgba(30,120,200,.2)'}`, borderRadius: 12, padding: '.6rem 1.1rem', fontFamily: "'Cinzel',serif", fontSize: '.68rem', letterSpacing: '.05em', textTransform: 'uppercase', color: active ? tc : '#7a9ab8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '.5rem', boxShadow: active ? `0 0 20px ${tc}55` : 'none', whiteSpace: 'nowrap' }}>
-                {TYPE_EMOJI[t]} {t} <span style={{ opacity: .7 }}>({count})</span>
+              <button key={t || 'tous'} onClick={() => setPageTab(t)} style={{ background: active ? `${tc}30` : '#0a1829', border: `1.5px solid ${active ? tc : 'rgba(30,120,200,.2)'}`, borderRadius: 12, padding: '.6rem 1.1rem', fontFamily: "'Cinzel',serif", fontSize: '.68rem', letterSpacing: '.05em', textTransform: 'uppercase', color: active ? tc : '#7a9ab8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '.5rem', boxShadow: active ? `0 0 20px ${tc}55` : 'none', whiteSpace: 'nowrap' }}>
+                {t ? TYPE_EMOJI[t] : '✨'} {t || 'Tous'} <span style={{ opacity: .7 }}>({count})</span>
               </button>
             )
           })}
