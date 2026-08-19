@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
+import PersonnageSearchSelect from '@/components/PersonnageSearchSelect'
 
 interface Lame {
   id: string
@@ -256,10 +257,7 @@ export default function LamesPage() {
                 <div><label style={S.label}>Couleur accent</label><input type="color" style={{ ...S.input, height: 42, padding: '.3rem' }} value={form.color || '#7a9ab8'} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} /></div>
               </div>
               <div><label style={S.label}>Propriétaire</label>
-                <input style={S.input} list="lame-personnages" value={form.proprietaire || ''} onChange={e => setForm(f => ({ ...f, proprietaire: e.target.value }))} placeholder="Nom du personnage ou Non attribuée" />
-                <datalist id="lame-personnages">
-                  {personnages.map(p => <option key={p.id} value={p.nom} />)}
-                </datalist>
+                <PersonnageSearchSelect personnages={personnages} value={form.proprietaire || ''} onChange={nom => setForm(f => ({ ...f, proprietaire: nom }))} placeholder="Rechercher un personnage ou Non attribuée" inputStyle={S.input} />
               </div>
               <div><label style={S.label}>Description / Histoire</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Cette lame a été forgée..." /></div>
               <div><label style={S.label}>Particularités</label><textarea style={{ ...S.input, minHeight: 70, resize: 'vertical', lineHeight: 1.7 }} value={form.particularites || ''} onChange={e => setForm(f => ({ ...f, particularites: e.target.value }))} placeholder="Capacités spéciales, résistance, malédiction..." /></div>

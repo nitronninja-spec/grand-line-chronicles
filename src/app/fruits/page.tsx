@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
+import PersonnageSearchSelect from '@/components/PersonnageSearchSelect'
 
 interface Fruit {
   id: string
@@ -444,10 +445,7 @@ export default function FruitsPage() {
                 <div><label style={S.label}>Couleur accent</label><input type="color" style={{ ...S.input, height: 42, padding: '.3rem' }} value={form.color || '#40d060'} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} /></div>
               </div>
               <div><label style={S.label}>Propriétaire</label>
-                <input style={S.input} list="fruit-personnages" value={form.proprietaire || ''} onChange={e => setForm(f => ({ ...f, proprietaire: e.target.value }))} placeholder="Nom du personnage ou Non attribué" />
-                <datalist id="fruit-personnages">
-                  {personnages.map(p => <option key={p.id} value={p.nom} />)}
-                </datalist>
+                <PersonnageSearchSelect personnages={personnages} value={form.proprietaire || ''} onChange={nom => setForm(f => ({ ...f, proprietaire: nom }))} placeholder="Rechercher un personnage ou Non attribué" inputStyle={S.input} />
               </div>
               <div><label style={S.label}>Description / Capacités</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Ce fruit permet de..." /></div>
               <div><label style={S.label}>Faiblesses</label><textarea style={{ ...S.input, minHeight: 70, resize: 'vertical', lineHeight: 1.7 }} value={form.faiblesses || ''} onChange={e => setForm(f => ({ ...f, faiblesses: e.target.value }))} placeholder="Faiblesses et limitations..." /></div>

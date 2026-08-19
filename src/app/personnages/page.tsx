@@ -102,6 +102,9 @@ function buildGroupSections(items: Personnage[], factions: FactionRef[]): GroupS
       if (ea !== eb) return ea - eb
       const ro = getRangOrdreForFaction(a, g, factions) - getRangOrdreForFaction(b, g, factions)
       if (ro !== 0) return ro
+      const da = a.statut === 'mort' ? 1 : 0
+      const db = b.statut === 'mort' ? 1 : 0
+      if (da !== db) return da - db
       return a.nom.localeCompare(b.nom)
     })
   }))
@@ -139,7 +142,7 @@ export default function PersonnagesPage() {
   const [lames, setLames] = useState<LinkedItem[]>([])
   const [cristaux, setCristaux] = useState<LinkedItem[]>([])
   const [factionFilter, setFactionFilter] = useState('')
-  const [sortMode, setSortMode] = useState<SortMode>('defaut')
+  const [sortMode, setSortMode] = useState<SortMode>('groupe')
   const [form, setForm] = useState<Partial<Personnage>>({
     nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant',
     prime: '0', condition_prime: 'mort_ou_vif', titre_mondial: '', origine: '', ile: '', factions: [], rangs: [], equipage: '', fruit: 'Aucun',

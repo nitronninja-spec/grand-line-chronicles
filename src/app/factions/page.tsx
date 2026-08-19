@@ -14,14 +14,37 @@ interface Faction {
   gdoc?: string
   miro?: string
   rangs?: Rang[]
+  couleur?: string
 }
 
-interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; factions?: string[]; rang?: string; rangs?: { faction: string; rang: string }[] }
+interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; factions?: string[]; rang?: string; rangs?: { faction: string; rang: string }[]; prime?: string; condition_prime?: string }
 interface LinkedIle { id: string; nom: string; emoji?: string; factions?: string[] }
 
 function memberRangFor(m: Member, factionNom: string): string | undefined {
   if (m.rangs !== undefined) return m.rangs.find(r => r.faction === factionNom)?.rang
   return m.rang
+}
+function parsePrime(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
+// Trie une liste de membres par prime décroissante ; les "Non recherché" ne comptent pas
+// comme une prime et sont toujours relégués en dernier.
+function sortMembersByPrime(items: Member[]) {
+  return items.slice().sort((a, b) => {
+    const na = a.condition_prime === 'non_recherche' ? 1 : 0
+    const nb = b.condition_prime === 'non_recherche' ? 1 : 0
+    if (na !== nb) return na - nb
+    return parsePrime(b.prime) - parsePrime(a.prime)
+  })
+}
+// La prime du "capitaine" d'une faction : le ou les membres au rang le plus haut défini pour
+// cette faction (ordre le plus bas) ; à défaut de rang défini, le membre le mieux payé.
+function captainPrime(faction: Faction, members: Member[]): number {
+  const facMembers = members.filter(m => m.factions?.includes(faction.nom))
+  const rangs = (faction.rangs || []).slice().sort((a, b) => a.ordre - b.ordre)
+  if (rangs.length === 0) return facMembers.length ? Math.max(...facMembers.map(m => parsePrime(m.prime))) : 0
+  const topRang = rangs[0].nom
+  const captains = facMembers.filter(m => memberRangFor(m, faction.nom) === topRang)
+  if (captains.length === 0) return 0
+  return Math.max(...captains.map(m => parsePrime(m.prime)))
 }
 
 const TYPES = ['Pirates', 'Marine', 'Gouvernement', 'Révolutionnaire', 'Peuple', 'Neutre', 'Autre']
@@ -29,11 +52,33 @@ const TYPE_COLORS: Record<string,string> = { Pirates:'#d4a017', Marine:'#00c8ff'
 const TYPE_EMOJI: Record<string,string> = { Pirates:'🏴‍☠️', Marine:'⚓', Gouvernement:'🏛️', 'Révolutionnaire':'✊', Peuple:'👥', Neutre:'🤝', Autre:'⚔️' }
 const MEMBER_TYPE_COLORS: Record<string, string> = { pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', 'allié': '#40d060' }
 const MEMBER_TYPE_LABELS: Record<string, string> = { pj: 'Joueurs', pnj: 'PNJ', antagoniste: 'Antagonistes', 'allié': 'Alliés' }
-type FactionSortMode = 'categorie' | 'az'
+type FactionSortMode = 'categorie' | 'az' | 'prime'
 
-function sortFactions(items: Faction[], mode: FactionSortMode) {
+// Les factions sont réparties en 4 pages, chacune avec sa couleur dominante. Une faction
+// individuelle (surtout côté Pirates/Peuple, où il y a beaucoup d'équipages distincts) peut
+// remplacer cette couleur par la sienne via le champ "couleur".
+type PageTab = 'pirates' | 'marine' | 'peuple' | 'sans_groupe'
+const PAGE_ORDER: PageTab[] = ['pirates', 'marine', 'peuple', 'sans_groupe']
+const PAGE_THEMES: Record<PageTab, { label: string; emoji: string; color: string }> = {
+  pirates: { label: 'Pirates', emoji: '🏴‍☠️', color: '#e03030' },
+  marine: { label: 'Marine · CP · Shichibukai · GM', emoji: '⚓', color: '#3f7fe0' },
+  peuple: { label: 'Peuple', emoji: '👥', color: '#40d060' },
+  sans_groupe: { label: 'Sans groupe', emoji: '✨', color: '#f0c040' },
+}
+function factionPage(f: Faction): PageTab {
+  if (f.type === 'Pirates') return 'pirates'
+  if (f.type === 'Marine' || f.type === 'Gouvernement') return 'marine'
+  if (f.type === 'Peuple') return 'peuple'
+  return 'sans_groupe'
+}
+function factionColor(f: Faction): string {
+  return f.couleur || PAGE_THEMES[factionPage(f)].color
+}
+
+function sortFactions(items: Faction[], mode: FactionSortMode, members: Member[]) {
   return items.slice().sort((a, b) => {
     if (mode === 'az') return a.nom.localeCompare(b.nom)
+    if (mode === 'prime') return captainPrime(b, members) - captainPrime(a, members)
     const ai = TYPES.indexOf(a.type || '')
     const bi = TYPES.indexOf(b.type || '')
     return ((ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)) || a.nom.localeCompare(b.nom)
@@ -63,6 +108,7 @@ export default function FactionsPage() {
   const [linkedIles, setLinkedIles] = useState<LinkedIle[]>([])
   const [rosterFaction, setRosterFaction] = useState<Faction | null>(null)
   const [sortMode, setSortMode] = useState<FactionSortMode>('categorie')
+  const [pageTab, setPageTab] = useState<PageTab>('pirates')
 
   useEffect(() => {
     fetchList(); fetchMembers(); fetchIlesList()
@@ -76,8 +122,34 @@ export default function FactionsPage() {
   }
 
   async function fetchMembers() {
-    const { data } = await supabase.from('personnages').select('id, nom, emoji, type, photos, factions, rang, rangs')
+    const { data } = await supabase.from('personnages').select('id, nom, emoji, type, photos, factions, rang, rangs, prime, condition_prime')
     setMembers(data || [])
+  }
+
+  // Une faction est référencée par son nom (texte) partout ailleurs dans l'app — la renommer
+  // doit donc mettre à jour toutes ces références, sinon les personnages/îles qui la
+  // pointaient se retrouvent orphelins et on a l'impression qu'une "nouvelle" faction est
+  // apparue à côté de l'ancienne.
+  async function cascadeFactionRename(oldNom: string, newNom: string) {
+    const [psFac, ilesFac, childFac, allPsRangs] = await Promise.all([
+      supabase.from('personnages').select('id, factions').contains('factions', [oldNom]),
+      supabase.from('iles').select('id, factions').contains('factions', [oldNom]),
+      supabase.from('factions').select('id, factions_parentes').contains('factions_parentes', [oldNom]),
+      supabase.from('personnages').select('id, rangs'),
+    ])
+    await Promise.all([
+      ...(psFac.data || []).map((p: { id: string; factions?: string[] }) =>
+        supabase.from('personnages').update({ factions: (p.factions || []).map(n => n === oldNom ? newNom : n) }).eq('id', p.id)),
+      supabase.from('personnages').update({ equipage: newNom }).eq('equipage', oldNom),
+      ...(ilesFac.data || []).map((i: { id: string; factions?: string[] }) =>
+        supabase.from('iles').update({ factions: (i.factions || []).map(n => n === oldNom ? newNom : n) }).eq('id', i.id)),
+      ...(childFac.data || []).map((f: { id: string; factions_parentes?: string[] }) =>
+        supabase.from('factions').update({ factions_parentes: (f.factions_parentes || []).map(n => n === oldNom ? newNom : n) }).eq('id', f.id)),
+      ...(allPsRangs.data || [])
+        .filter((p: { id: string; rangs?: { faction: string; rang: string }[] }) => (p.rangs || []).some(r => r.faction === oldNom))
+        .map((p: { id: string; rangs?: { faction: string; rang: string }[] }) =>
+          supabase.from('personnages').update({ rangs: (p.rangs || []).map(r => r.faction === oldNom ? { ...r, faction: newNom } : r) }).eq('id', p.id)),
+    ])
   }
 
   async function fetchIlesList() {
@@ -103,12 +175,15 @@ export default function FactionsPage() {
 
   async function saveForm() {
     if (!form.nom?.trim()) { alert('Le nom est obligatoire !'); return }
-    const data = { ...form, rangs: (form.rangs || []).filter(r => r.nom.trim()) }
+    const newNom = form.nom.trim()
+    const data = { ...form, nom: newNom, rangs: (form.rangs || []).filter(r => r.nom.trim()) }
+    const original = editId ? list.find(f => f.id === editId) : null
     const { error } = editId
       ? await supabase.from('factions').update(data).eq('id', editId)
       : await supabase.from('factions').insert([data])
     if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
-    setShowForm(false); fetchList()
+    if (original && original.nom !== newNom) await cascadeFactionRename(original.nom, newNom)
+    setShowForm(false); fetchList(); fetchMembers(); fetchIlesList()
   }
 
   async function deleteFaction(id: string) {
@@ -124,12 +199,15 @@ export default function FactionsPage() {
   }
 
   const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Journaux','/journaux'],['Lore','/lore'],['Dashboard','/dashboard']]
-  let filtered = typeFilter ? list.filter(f => f.type === typeFilter) : list
+  const theme = PAGE_THEMES[pageTab]
+  let filtered = list.filter(f => factionPage(f) === pageTab)
+  if (typeFilter) filtered = filtered.filter(f => f.type === typeFilter)
   if (search) filtered = filtered.filter(f => f.nom.toLowerCase().includes(search.toLowerCase()))
-  filtered = sortFactions(filtered, sortMode)
+  filtered = sortFactions(filtered, sortMode, members)
+  const typesInTab = TYPES.filter(t => list.some(f => factionPage(f) === pageTab && f.type === t))
 
   return (
-    <div style={S.page}>
+    <div style={{ ...S.page, background: `radial-gradient(ellipse 1400px 500px at 50% 0%, ${theme.color}14, #050d1a 60%)` }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,400;1,400&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#d4a017;border-radius:3px}`}</style>
       <nav style={S.nav}>
         <a href="/" style={S.logo}><span style={{width:30,height:30,background:'linear-gradient(135deg,#d4a017,#f0c040)',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center'}}>☠</span>Grand Line</a>
@@ -141,52 +219,73 @@ export default function FactionsPage() {
       </nav>
 
       <div style={{padding:'2.5rem 2rem 1.5rem',maxWidth:1400,margin:'0 auto'}}>
-        <div style={{fontFamily:"'Cinzel',serif",fontSize:'.6rem',letterSpacing:'.1em',color:'#7a9ab8',textTransform:'uppercase',marginBottom:'.4rem'}}>🏴‍☠️ › Factions</div>
-        <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:'1rem',flexWrap:'wrap',marginBottom:'1.5rem'}}>
+        <div style={{fontFamily:"'Cinzel',serif",fontSize:'.6rem',letterSpacing:'.1em',color:'#7a9ab8',textTransform:'uppercase',marginBottom:'.4rem'}}>🏴‍☠️ › Factions › {theme.label}</div>
+        <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:'1rem',flexWrap:'wrap',marginBottom:'1.25rem'}}>
           <h1 style={{fontFamily:"'Cinzel Decorative',serif",fontSize:'clamp(1.8rem,3.5vw,3rem)',fontWeight:700,background:'linear-gradient(135deg,#fff,#f0c040)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Factions</h1>
           <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter une faction</button>
         </div>
+
+        {/* Menu à 4 pages */}
+        <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap',marginBottom:'1.25rem'}}>
+          {PAGE_ORDER.map(tab => {
+            const t = PAGE_THEMES[tab]
+            const active = pageTab === tab
+            const count = list.filter(f => factionPage(f) === tab).length
+            return (
+              <button key={tab} onClick={() => { setPageTab(tab); setTypeFilter('') }} style={{background:active?`${t.color}22`:'#0a1829',border:`1.5px solid ${active?t.color:'rgba(30,120,200,.2)'}`,borderRadius:12,padding:'.6rem 1.1rem',fontFamily:"'Cinzel',serif",fontSize:'.68rem',letterSpacing:'.05em',textTransform:'uppercase',color:active?t.color:'#7a9ab8',cursor:'pointer',display:'flex',alignItems:'center',gap:'.5rem',boxShadow:active?`0 0 16px ${t.color}33`:'none',whiteSpace:'nowrap'}}>
+                {t.emoji} {t.label} <span style={{opacity:.7}}>({count})</span>
+              </button>
+            )
+          })}
+        </div>
+
         <div style={{display:'flex',gap:'.65rem',marginBottom:'1rem',flexWrap:'wrap'}}>
           <div style={{flex:1,minWidth:220,position:'relative'}}>
             <span style={{position:'absolute',left:'.75rem',top:'50%',transform:'translateY(-50%)',color:'#4a6880'}}>🔍</span>
             <input style={{...S.input,paddingLeft:'2.5rem'}} placeholder="Rechercher une faction..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <div style={{display:'flex',gap:'.3rem',alignItems:'center'}}>
+          <div style={{display:'flex',gap:'.3rem',alignItems:'center',flexWrap:'wrap'}}>
             <span style={{fontFamily:"'Cinzel',serif",fontSize:'.56rem',letterSpacing:'.08em',textTransform:'uppercase',color:'#4a6880'}}>Trier :</span>
-            {([['categorie','Par catégorie'],['az','A→Z']] as [FactionSortMode,string][]).map(([mode,label]) => (
-              <button key={mode} onClick={() => setSortMode(mode)} style={{background:sortMode===mode?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${sortMode===mode?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .7rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.05em',color:sortMode===mode?'#f0c040':'#7a9ab8',cursor:'pointer',whiteSpace:'nowrap'}}>{label}</button>
+            {([['categorie','Par catégorie'],['az','A→Z'],['prime','Prime du capitaine']] as [FactionSortMode,string][]).map(([mode,label]) => (
+              <button key={mode} onClick={() => setSortMode(mode)} style={{background:sortMode===mode?`${theme.color}22`:'#0a1829',border:`1px solid ${sortMode===mode?theme.color:'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .7rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.05em',color:sortMode===mode?theme.color:'#7a9ab8',cursor:'pointer',whiteSpace:'nowrap'}}>{label}</button>
             ))}
           </div>
         </div>
-        <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',marginBottom:'1.25rem'}}>
-          <button onClick={() => setTypeFilter('')} style={{background:typeFilter===''?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${typeFilter===''?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:typeFilter===''?'#f0c040':'#7a9ab8',cursor:'pointer'}}>Toutes</button>
-          {TYPES.map(t => <button key={t} onClick={() => setTypeFilter(t)} style={{background:typeFilter===t?`${TYPE_COLORS[t]}22`:'#0a1829',border:`1px solid ${typeFilter===t?TYPE_COLORS[t]:'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:typeFilter===t?TYPE_COLORS[t]:'#7a9ab8',cursor:'pointer'}}>{t}</button>)}
-        </div>
+        {typesInTab.length > 1 && (
+          <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',marginBottom:'1.25rem'}}>
+            <button onClick={() => setTypeFilter('')} style={{background:typeFilter===''?`${theme.color}22`:'#0a1829',border:`1px solid ${typeFilter===''?theme.color:'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:typeFilter===''?theme.color:'#7a9ab8',cursor:'pointer'}}>Tous types</button>
+            {typesInTab.map(t => <button key={t} onClick={() => setTypeFilter(t)} style={{background:typeFilter===t?`${TYPE_COLORS[t]}22`:'#0a1829',border:`1px solid ${typeFilter===t?TYPE_COLORS[t]:'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:typeFilter===t?TYPE_COLORS[t]:'#7a9ab8',cursor:'pointer'}}>{t}</button>)}
+          </div>
+        )}
       </div>
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))',gap:'1.1rem',padding:'0 2rem 4rem',maxWidth:1400,margin:'0 auto'}}>
-        {filtered.length === 0 && <div style={{gridColumn:'1/-1',textAlign:'center',padding:'5rem 2rem',color:'#4a6880'}}><div style={{fontSize:'4rem',marginBottom:'1rem',opacity:.4}}>⚔️</div><div style={{fontFamily:"'Cinzel',serif",fontSize:'.72rem',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:'1.5rem'}}>Aucune faction</div><button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter la première</button></div>}
+        {filtered.length === 0 && <div style={{gridColumn:'1/-1',textAlign:'center',padding:'5rem 2rem',color:'#4a6880'}}><div style={{fontSize:'4rem',marginBottom:'1rem',opacity:.4}}>{theme.emoji}</div><div style={{fontFamily:"'Cinzel',serif",fontSize:'.72rem',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:'1.5rem'}}>Aucune faction dans « {theme.label} »</div><button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter une faction</button></div>}
         {(() => {
           let lastType: string | undefined | null = undefined
           const nodes: React.ReactNode[] = []
           filtered.forEach(f => {
-            const tc = TYPE_COLORS[f.type||''] || '#a060ff'
+            const tc = factionColor(f)
             if (sortMode === 'categorie' && f.type !== lastType) {
               lastType = f.type
               nodes.push(
                 <div key={`divider-${f.type}-${f.id}`} style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:'.75rem',margin:'.4rem 0'}}>
-                  <div style={{fontFamily:"'Cinzel',serif",fontSize:'.65rem',letterSpacing:'.14em',textTransform:'uppercase',color:tc,whiteSpace:'nowrap'}}>{TYPE_EMOJI[f.type||''] || '⚔️'} {f.type || 'Autre'}</div>
-                  <div style={{flex:1,height:1,background:`${tc}33`}} />
+                  <div style={{fontFamily:"'Cinzel',serif",fontSize:'.65rem',letterSpacing:'.14em',textTransform:'uppercase',color:TYPE_COLORS[f.type||'']||theme.color,whiteSpace:'nowrap'}}>{TYPE_EMOJI[f.type||''] || '⚔️'} {f.type || 'Autre'}</div>
+                  <div style={{flex:1,height:1,background:`${theme.color}33`}} />
                 </div>
               )
             }
+            const cap = captainPrime(f, members)
             nodes.push(
-              <div key={f.id} style={{background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:14,padding:'1.35rem',transition:'all .3s',display:'flex',flexDirection:'column',gap:'.6rem'}}
-                onMouseEnter={e=>{const el=e.currentTarget;el.style.transform='translateY(-5px)';el.style.borderColor=tc;el.style.boxShadow='0 18px 36px rgba(0,0,0,.4)'}}
-                onMouseLeave={e=>{const el=e.currentTarget;el.style.transform='none';el.style.borderColor='rgba(30,120,200,.2)';el.style.boxShadow='none'}}>
+              <div key={f.id} style={{background:'#0d2040',border:`1px solid ${tc}33`,borderRadius:14,padding:'1.35rem',transition:'all .3s',display:'flex',flexDirection:'column',gap:'.6rem'}}
+                onMouseEnter={e=>{const el=e.currentTarget;el.style.transform='translateY(-5px)';el.style.borderColor=tc;el.style.boxShadow=`0 18px 36px rgba(0,0,0,.4)`}}
+                onMouseLeave={e=>{const el=e.currentTarget;el.style.transform='none';el.style.borderColor=`${tc}33`;el.style.boxShadow='none'}}>
                 <div style={{fontSize:'2.5rem',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.emoji||'⚔️'}</div>
                 <div style={{fontFamily:"'Cinzel',serif",fontSize:'1rem',fontWeight:700,color:'#e8eef5',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.nom}</div>
-                <div style={{display:'inline-block',background:`${tc}22`,color:tc,border:`1px solid ${tc}44`,borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.09em',textTransform:'uppercase',width:'fit-content'}}>{f.type}</div>
+                <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap'}}>
+                  <div style={{display:'inline-block',background:`${tc}22`,color:tc,border:`1px solid ${tc}44`,borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.09em',textTransform:'uppercase',width:'fit-content'}}>{f.type}</div>
+                  {cap > 0 && <div style={{display:'inline-block',background:'rgba(240,192,64,.12)',color:'#f0c040',border:'1px solid rgba(240,192,64,.3)',borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.05em',width:'fit-content'}}>⭐ {cap.toLocaleString('fr-FR')}</div>}
+                </div>
                 {f.description && <div style={{fontSize:'.88rem',color:'#7a9ab8',lineHeight:1.6,fontStyle:'italic',flex:1}}>{f.description}</div>}
                 <div style={{fontSize:'.78rem',color:'#4a6880'}}>👥 {members.filter(m => m.factions?.includes(f.nom)).length} membre(s)</div>
                 <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center'}}>
@@ -218,10 +317,19 @@ export default function FactionsPage() {
                 <div><label style={S.label}>Nom *</label><input style={S.input} value={form.nom||''} onChange={e=>setForm(f=>({...f,nom:e.target.value}))} placeholder="Marine Mondiale" /></div>
                 <div><label style={S.label}>Emoji</label><input style={{...S.input,width:70,fontSize:'1.4rem',textAlign:'center'}} value={form.emoji||'⚔️'} onChange={e=>setForm(f=>({...f,emoji:e.target.value}))} /></div>
               </div>
-              <div><label style={S.label}>Type</label>
-                <select style={{...S.input}} value={form.type||'Pirates'} onChange={e=>setForm(f=>({...f,type:e.target.value,emoji:TYPE_EMOJI[e.target.value]||f.emoji}))}>
-                  {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+              <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:'.85rem',alignItems:'end'}}>
+                <div><label style={S.label}>Type</label>
+                  <select style={{...S.input}} value={form.type||'Pirates'} onChange={e=>setForm(f=>({...f,type:e.target.value,emoji:TYPE_EMOJI[e.target.value]||f.emoji}))}>
+                    {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={S.label} title="Remplace la couleur de la page pour cette faction (surtout utile côté Pirates/Peuple, avec beaucoup de groupes distincts)">🎨 Couleur</label>
+                  <div style={{display:'flex',gap:'.4rem',alignItems:'center'}}>
+                    <input type="color" value={form.couleur || PAGE_THEMES[factionPage({ ...form, id:'' } as Faction)].color} onChange={e=>setForm(f=>({...f,couleur:e.target.value}))} style={{width:44,height:38,padding:2,border:'1px solid rgba(30,120,200,.2)',borderRadius:8,background:'#0d2040',cursor:'pointer'}} />
+                    {form.couleur && <button type="button" onClick={()=>setForm(f=>({...f,couleur:undefined}))} title="Revenir à la couleur de la page" style={{background:'none',border:'1px solid rgba(224,48,48,.25)',borderRadius:8,padding:'.5rem .6rem',color:'#ff6060',cursor:'pointer',fontSize:'.8rem'}}>✕</button>}
+                  </div>
+                </div>
               </div>
               <div><label style={S.label}>Description</label><textarea style={{...S.input,minHeight:100,resize:'vertical',lineHeight:1.7}} value={form.description||''} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="Rôle, objectifs, territoire..." /></div>
 
@@ -286,11 +394,11 @@ export default function FactionsPage() {
                 const rangs = (rosterFaction.rangs || []).slice().sort((a,b) => a.ordre - b.ordre)
                 let groups: { label: string; color: string; items: Member[] }[]
                 if (rangs.length > 0) {
-                  groups = rangs.map(r => ({ label: r.nom, color: '#d4a017', items: factionMembers.filter(m => memberRangFor(m, rosterFaction.nom) === r.nom) })).filter(g => g.items.length > 0)
+                  groups = rangs.map(r => ({ label: r.nom, color: '#d4a017', items: sortMembersByPrime(factionMembers.filter(m => memberRangFor(m, rosterFaction.nom) === r.nom)) })).filter(g => g.items.length > 0)
                   const sansRang = factionMembers.filter(m => !rangs.some(r => r.nom === memberRangFor(m, rosterFaction.nom)))
-                  if (sansRang.length > 0) groups.push({ label: 'Sans rang', color: '#7a9ab8', items: sansRang })
+                  if (sansRang.length > 0) groups.push({ label: 'Sans rang', color: '#7a9ab8', items: sortMembersByPrime(sansRang) })
                 } else {
-                  groups = ['pj','pnj','allié','antagoniste'].map(t => ({ label: MEMBER_TYPE_LABELS[t], color: MEMBER_TYPE_COLORS[t], items: factionMembers.filter(m => m.type === t) })).filter(g => g.items.length > 0)
+                  groups = ['pj','pnj','allié','antagoniste'].map(t => ({ label: MEMBER_TYPE_LABELS[t], color: MEMBER_TYPE_COLORS[t], items: sortMembersByPrime(factionMembers.filter(m => m.type === t)) })).filter(g => g.items.length > 0)
                 }
                 return (
                   <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:0,marginBottom:'2rem'}}>
