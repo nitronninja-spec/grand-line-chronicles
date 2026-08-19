@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageCropper from '@/components/ImageCropper'
+import ImageLightbox from '@/components/ImageLightbox'
 
 interface PersonnageRang { faction: string; rang: string }
 interface Personnage {
@@ -38,7 +39,7 @@ const FRUIT_TYPE_ORDER = ['Paramecia', 'Logia', 'Zoan', 'Mythical']
 interface FactionRef { id: string; nom: string; type?: string; rangs?: { nom: string; ordre: number }[] }
 
 const TYPE_COLORS: Record<string, string> = {
-  pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', allié: '#40d060', ambivalent: '#a060ff'
+  pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', allié: '#40d060', ambivalent: '#a060ff', inconnu: '#7a9ab8'
 }
 const STATUT_COLORS: Record<string, string> = {
   vivant: '#40d060', mort: '#ff6060', disparu: '#ffb060', inconnu: '#a0a0c0'
@@ -48,8 +49,13 @@ const CONDITION_PRIME_LABELS: Record<string, string> = {
 }
 const TITRE_MONDIAL: Record<string, { label: string; icon: string; color: string }> = {
   'Empereur': { label: 'Empereur', icon: '👑', color: '#e03030' },
+  'Empereur Déchu': { label: 'Empereur Déchu', icon: '👑', color: '#8a5a3a' },
   'Amiral': { label: 'Amiral', icon: '⚓', color: '#00c8ff' },
+  'Amiral Déchu': { label: 'Amiral Déchu', icon: '⚓', color: '#5a7a8a' },
   'Vice-Amiral': { label: 'Vice-Amiral', icon: '🎖️', color: '#4488ff' },
+  'Shichibukai': { label: 'Shichibukai', icon: '🗡️', color: '#a060ff' },
+  'Shichibukai Déchu': { label: 'Shichibukai Déchu', icon: '🗡️', color: '#6a4a7a' },
+  'Dragon Céleste': { label: 'Dragon Céleste', icon: '🫧', color: '#f0c040' },
 }
 type SortMode = 'defaut' | 'prime' | 'groupe'
 function parsePrime(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
@@ -71,6 +77,15 @@ function personnagePage(p: Personnage, factions: FactionRef[]): PageTab {
   if (type === 'Pirates') return 'pirates'
   if (type === 'Marine' || type === 'Gouvernement') return 'marine'
   if (type === 'Peuple') return 'peuple'
+  return 'sans_groupe'
+}
+// Même répartition par type que personnagePage, appliquée aux factions elles-mêmes — sert à
+// ne proposer, dans le filtre par faction, que les factions du même onglet (ex : sur l'onglet
+// Pirates, ne garder que les factions 100% de type Pirates, pas Marine/Peuple/etc.).
+function factionTabOf(f: FactionRef): PageTab {
+  if (f.type === 'Pirates') return 'pirates'
+  if (f.type === 'Marine' || f.type === 'Gouvernement') return 'marine'
+  if (f.type === 'Peuple') return 'peuple'
   return 'sans_groupe'
 }
 function personnageRangs(p: Personnage): PersonnageRang[] {
@@ -126,9 +141,16 @@ function buildGroupSections(items: Personnage[], factions: FactionRef[]): GroupS
       if (ea !== eb) return ea - eb
       const ro = getRangOrdreForFaction(a, g, factions) - getRangOrdreForFaction(b, g, factions)
       if (ro !== 0) return ro
+      // Un Dragon Céleste passe devant les autres personnages de son même rang — mais ne
+      // saute jamais devant un rang organisationnel supérieur (déjà départagé ci-dessus).
+      const dca = a.titre_mondial === 'Dragon Céleste' ? 0 : 1
+      const dcb = b.titre_mondial === 'Dragon Céleste' ? 0 : 1
+      if (dca !== dcb) return dca - dcb
       const da = a.statut === 'mort' ? 1 : 0
       const db = b.statut === 'mort' ? 1 : 0
       if (da !== db) return da - db
+      const pr = parsePrime(b.prime) - parsePrime(a.prime)
+      if (pr !== 0) return pr
       return a.nom.localeCompare(b.nom)
     })
   }))
@@ -178,6 +200,7 @@ export default function PersonnagesPage() {
   const [dragOver, setDragOver] = useState(false)
   const [cropTarget, setCropTarget] = useState<{ kind: 'new'; index: number; file: File } | { kind: 'existing'; index: number; file: File } | null>(null)
   const [cropLoading, setCropLoading] = useState<number | null>(null)
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const autoOpenedRef = useRef(false)
 
   useEffect(() => {
@@ -461,7 +484,7 @@ export default function PersonnagesPage() {
             const active = pageTab === tab
             const count = list.filter(p => personnagePage(p, factions) === tab).length
             return (
-              <button key={tab} onClick={() => setPageTab(tab)} style={{ background: active ? `${t.color}30` : '#0a1829', border:`1.5px solid ${active ? t.color : 'rgba(30,120,200,.2)'}`, borderRadius:12, padding:'.6rem 1.1rem', fontFamily:"'Cinzel',serif", fontSize:'.68rem', letterSpacing:'.05em', textTransform:'uppercase', color: active ? t.color : '#7a9ab8', cursor:'pointer', display:'flex', alignItems:'center', gap:'.5rem', boxShadow: active ? `0 0 20px ${t.color}55` : 'none', whiteSpace:'nowrap' }}>
+              <button key={tab} onClick={() => { setPageTab(tab); setFactionFilter('') }} style={{ background: active ? `${t.color}30` : '#0a1829', border:`1.5px solid ${active ? t.color : 'rgba(30,120,200,.2)'}`, borderRadius:12, padding:'.6rem 1.1rem', fontFamily:"'Cinzel',serif", fontSize:'.68rem', letterSpacing:'.05em', textTransform:'uppercase', color: active ? t.color : '#7a9ab8', cursor:'pointer', display:'flex', alignItems:'center', gap:'.5rem', boxShadow: active ? `0 0 20px ${t.color}55` : 'none', whiteSpace:'nowrap' }}>
                 {t.emoji} {t.label} <span style={{ opacity:.7 }}>({count})</span>
               </button>
             )
@@ -486,23 +509,27 @@ export default function PersonnagesPage() {
 
         {/* Chips */}
         <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap', marginBottom:'.75rem' }}>
-          {['', 'pj', 'pnj', 'antagoniste', 'allié', 'ambivalent'].map(t => (
+          {['', 'pj', 'pnj', 'antagoniste', 'allié', 'ambivalent', 'inconnu'].map(t => (
             <button key={t} onClick={() => setTypeFilter(t)} style={{ background: typeFilter===t ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${typeFilter===t ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.3rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.07em', textTransform:'uppercase', color: typeFilter===t ? '#f0c040' : '#7a9ab8', cursor:'pointer' }}>
               {t || 'Tous'}
             </button>
           ))}
         </div>
 
-        {/* Filtre par faction */}
-        {factions.length > 0 && (
-          <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap', alignItems:'center', marginBottom:'1.25rem' }}>
-            <span style={{ fontFamily:"'Cinzel',serif", fontSize:'.56rem', letterSpacing:'.1em', textTransform:'uppercase', color:'#4a6880', marginRight:'.2rem' }}>Filtrer par faction :</span>
-            <button onClick={() => setFactionFilter('')} style={{ background: factionFilter==='' ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${factionFilter==='' ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.3rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.07em', textTransform:'uppercase', color: factionFilter==='' ? '#f0c040' : '#7a9ab8', cursor:'pointer' }}>Toutes</button>
-            {factions.map(f => (
-              <button key={f.id} onClick={() => setFactionFilter(f.nom)} style={{ background: factionFilter===f.nom ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${factionFilter===f.nom ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.3rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.07em', textTransform:'uppercase', color: factionFilter===f.nom ? '#f0c040' : '#7a9ab8', cursor:'pointer' }}>{f.nom}</button>
-            ))}
-          </div>
-        )}
+        {/* Filtre par faction — uniquement les factions du même onglet (ex : Pirates pur sur l'onglet Pirates) */}
+        {(() => {
+          const factionsInTab = factions.filter(f => factionTabOf(f) === pageTab)
+          if (factionsInTab.length === 0) return null
+          return (
+            <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap', alignItems:'center', marginBottom:'1.25rem' }}>
+              <span style={{ fontFamily:"'Cinzel',serif", fontSize:'.56rem', letterSpacing:'.1em', textTransform:'uppercase', color:'#4a6880', marginRight:'.2rem' }}>Filtrer par faction :</span>
+              <button onClick={() => setFactionFilter('')} style={{ background: factionFilter==='' ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${factionFilter==='' ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.3rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.07em', textTransform:'uppercase', color: factionFilter==='' ? '#f0c040' : '#7a9ab8', cursor:'pointer' }}>Toutes</button>
+              {factionsInTab.map(f => (
+                <button key={f.id} onClick={() => setFactionFilter(f.nom)} style={{ background: factionFilter===f.nom ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${factionFilter===f.nom ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.3rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.07em', textTransform:'uppercase', color: factionFilter===f.nom ? '#f0c040' : '#7a9ab8', cursor:'pointer' }}>{f.nom}</button>
+              ))}
+            </div>
+          )
+        })()}
       </div>
 
       {/* GRID */}
@@ -604,6 +631,7 @@ export default function PersonnagesPage() {
                     <option value="antagoniste">Antagoniste</option>
                     <option value="allié">Allié</option>
                     <option value="ambivalent">Ambivalent</option>
+                    <option value="inconnu">Inconnu</option>
                   </select>
                 </div>
                 <div>
@@ -645,8 +673,13 @@ export default function PersonnagesPage() {
                   <select style={{ ...S.input }} value={form.titre_mondial||''} onChange={e => setForm(f => ({...f, titre_mondial:e.target.value}))}>
                     <option value="">— Aucun —</option>
                     <option value="Empereur">👑 Empereur (Yonko)</option>
+                    <option value="Empereur Déchu">👑 Empereur Déchu</option>
                     <option value="Amiral">⚓ Amiral</option>
+                    <option value="Amiral Déchu">⚓ Amiral Déchu</option>
                     <option value="Vice-Amiral">🎖️ Vice-Amiral</option>
+                    <option value="Shichibukai">🗡️ Shichibukai</option>
+                    <option value="Shichibukai Déchu">🗡️ Shichibukai Déchu</option>
+                    <option value="Dragon Céleste">🫧 Dragon Céleste</option>
                   </select>
                 </div>
               </div>
@@ -833,7 +866,8 @@ export default function PersonnagesPage() {
               )}
               <button onClick={() => setShowView(false)} style={{ position:'absolute', top:'.9rem', right:'.9rem', background:'rgba(5,13,26,.75)', border:'1px solid rgba(30,120,200,.2)', color:'#7a9ab8', borderRadius:'50%', width:34, height:34, cursor:'pointer', fontSize:'.9rem', zIndex:5 }}>✕</button>
               <div style={{ position:'relative', zIndex:2, display:'flex', gap:'1.25rem', alignItems:'flex-end' }}>
-                <div style={{ width:86, height:86, borderRadius:14, background:'#0d2040', border:'2px solid #d4a017', overflow:'hidden', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'2.8rem' }}>
+                <div style={{ width:86, height:86, borderRadius:14, background:'#0d2040', border:'2px solid #d4a017', overflow:'hidden', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'2.8rem', cursor: selected.photos && selected.photos[0] ? 'zoom-in' : 'default' }}
+                  onClick={() => { if (selected.photos && selected.photos[0]) setLightbox({ images: selected.photos, index: 0 }) }}>
                   {selected.photos && selected.photos[0] ? <img src={selected.photos[0]} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top', display:'block', filter: selected.statut==='mort' ? 'grayscale(1)' : 'none' }} /> : selected.emoji}
                 </div>
                 <div>
@@ -884,7 +918,8 @@ export default function PersonnagesPage() {
                   </div>
                   <div style={{ display:'flex', gap:'.5rem', flexWrap:'wrap', marginBottom:'1.25rem' }}>
                     {selected.photos.map((ph,i) => (
-                      <div key={i} style={{ width:70, height:70, borderRadius:8, overflow:'hidden', border:`2px solid ${i===0?'#d4a017':'rgba(30,120,200,.2)'}` }}>
+                      <div key={i} style={{ width:70, height:70, borderRadius:8, overflow:'hidden', border:`2px solid ${i===0?'#d4a017':'rgba(30,120,200,.2)'}`, cursor:'zoom-in' }}
+                        onClick={() => setLightbox({ images: selected.photos!, index: i })}>
                         <img src={ph} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
                       </div>
                     ))}
@@ -972,6 +1007,7 @@ export default function PersonnagesPage() {
       )}
 
       {cropTarget && <ImageCropper file={cropTarget.file} onCancel={() => setCropTarget(null)} onCropped={onCropDone} />}
+      {lightbox && <ImageLightbox images={lightbox.images} index={lightbox.index} onClose={() => setLightbox(null)} onIndexChange={i => setLightbox(lb => lb ? { ...lb, index: i } : lb)} />}
     </div>
   )
 }

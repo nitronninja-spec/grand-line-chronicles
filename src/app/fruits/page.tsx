@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
 import PersonnageSearchSelect from '@/components/PersonnageSearchSelect'
+import ImageLightbox from '@/components/ImageLightbox'
 
 interface Fruit {
   id: string
@@ -13,14 +14,23 @@ interface Fruit {
   puissance?: number
   emoji?: string
   description?: string
+  capacites?: string
+  lore?: string
   proprietaire?: string
+  ancien_detenteur?: string
   color?: string
   photo?: string
+  photos?: string[]
+  statut?: string
   faiblesses?: string
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  Paramecia: '#40d060', Logia: '#ff8c40', Zoan: '#a060ff', Mythical: '#d4a017'
+  Paramecia: '#40d060', Logia: '#ff8c40', Zoan: '#a060ff', Mythical: '#d4a017', Inconnu: '#7a9ab8'
+}
+const STATUT_FRUIT: Record<string, { label: string; icon: string; color: string }> = {
+  mange: { label: 'Mangé', icon: '🍽️', color: '#40d060' },
+  perdu: { label: 'Perdu', icon: '❓', color: '#e03030' },
 }
 
 const S = {
@@ -225,12 +235,14 @@ export default function FruitsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [photoFile, setPhotoFile] = useState<File | null>(null)
-  const [photoPreview, setPhotoPreview] = useState<string>('')
+  const [photoFiles, setPhotoFiles] = useState<File[]>([])
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
+  const [dragOver, setDragOver] = useState(false)
   const [personnages, setPersonnages] = useState<{ id: string; nom: string }[]>([])
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [form, setForm] = useState<Partial<Fruit>>({
     nom: '', jp: '', type: 'Paramecia', puissance: 5,
-    emoji: '🍎', description: '', proprietaire: '', color: '#40d060', faiblesses: ''
+    emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', color: '#40d060', faiblesses: '', photos: [], statut: ''
   })
 
   const personnageMap = new Map(personnages.map(p => [p.nom, p.id]))
@@ -257,9 +269,10 @@ export default function FruitsPage() {
   }
 
   function openForm(f?: Fruit) {
-    if (f) { setForm(f); setEditId(f.id); setPhotoPreview(f.photo || '') }
-    else { setForm({ nom: '', jp: '', type: 'Paramecia', puissance: 5, emoji: '🍎', description: '', proprietaire: '', color: '#40d060', faiblesses: '' }); setEditId(null); setPhotoPreview('') }
-    setPhotoFile(null)
+    if (f) { setForm({ ...f, photos: f.photos && f.photos.length > 0 ? f.photos : (f.photo ? [f.photo] : []) }); setEditId(f.id) }
+    else { setForm({ nom: '', jp: '', type: 'Paramecia', puissance: 5, emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', color: '#40d060', faiblesses: '', photos: [], statut: '' }); setEditId(null) }
+    setPhotoFiles([])
+    setPhotoPreviews([])
     setShowForm(true)
   }
 
@@ -268,22 +281,37 @@ export default function FruitsPage() {
     setForm(prev => ({ ...prev, ...data }))
   }
 
+  function addPhotoFiles(files: File[]) {
+    const imgFiles = files.filter(f => f.type.startsWith('image/'))
+    setPhotoFiles(prev => [...prev, ...imgFiles])
+    setPhotoPreviews(prev => [...prev, ...imgFiles.map(f => URL.createObjectURL(f))])
+  }
   async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setPhotoFile(file)
-    setPhotoPreview(URL.createObjectURL(file))
+    addPhotoFiles(Array.from(e.target.files || []))
+    e.target.value = ''
+  }
+  function removeExistingPhoto(i: number) {
+    setForm(f => ({ ...f, photos: (f.photos || []).filter((_, j) => j !== i) }))
+  }
+  function removeNewPhoto(i: number) {
+    setPhotoPreviews(p => p.filter((_, j) => j !== i))
+    setPhotoFiles(p => p.filter((_, j) => j !== i))
   }
 
   async function saveForm() {
     if (!form.nom?.trim()) { alert('Le nom est obligatoire !'); return }
     setUploading(true)
-    let photo = form.photo || null
-    if (photoFile) { photo = await uploadImage(photoFile, 'fruits') }
-    const data = { ...form, photo }
-    if (editId) await supabase.from('fruits').update(data).eq('id', editId)
-    else await supabase.from('fruits').insert([data])
+    let photos = form.photos || []
+    for (const file of photoFiles) {
+      const url = await uploadImage(file, 'fruits')
+      if (url) photos = [...photos, url]
+    }
+    const data = { ...form, photos, photo: photos[0] || null }
+    const { error } = editId
+      ? await supabase.from('fruits').update(data).eq('id', editId)
+      : await supabase.from('fruits').insert([data])
     setUploading(false)
+    if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
     setShowForm(false)
     fetchList()
   }
@@ -339,7 +367,7 @@ export default function FruitsPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          {['', 'Paramecia', 'Logia', 'Zoan', 'Mythical'].map(t => (
+          {['', 'Paramecia', 'Logia', 'Zoan', 'Mythical', 'Inconnu'].map(t => (
             <button key={t} onClick={() => setTypeFilter(t)} style={{ background: typeFilter === t ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${typeFilter === t ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: typeFilter === t ? '#f0c040' : '#7a9ab8', cursor: 'pointer' }}>
               {t || 'Tous'}
             </button>
@@ -362,20 +390,46 @@ export default function FruitsPage() {
               onMouseEnter={e => { const el = e.currentTarget; el.style.transform = 'translateY(-6px)'; el.style.borderColor = tc; el.style.boxShadow = `0 18px 36px rgba(0,0,0,.4)` }}
               onMouseLeave={e => { const el = e.currentTarget; el.style.transform = 'none'; el.style.borderColor = 'rgba(30,120,200,.2)'; el.style.boxShadow = 'none' }}>
               <div style={{ height: 3, background: tc }} />
-              <div style={{ width: '100%', height: 160, background: 'linear-gradient(135deg,#0a1829,#050d1a)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem', overflow: 'hidden' }}>
-                {f.photo && <img src={f.photo} alt={f.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
-                <span style={{ position: 'relative', zIndex: 1, opacity: f.photo ? 0.3 : 1 }}>{f.emoji || '🍎'}</span>
+              <div style={{ width: '100%', height: 160, background: 'linear-gradient(135deg,#0a1829,#050d1a)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem', overflow: 'hidden', cursor: (f.photos && f.photos[0]) ? 'zoom-in' : 'default' }}
+                onClick={() => { if (f.photos && f.photos.length > 0) setLightbox({ images: f.photos, index: 0 }) }}>
+                {f.photos && f.photos[0] && <img src={f.photos[0]} alt={f.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
+                {f.emoji && <span style={{ position: 'relative', zIndex: 1, opacity: f.photos && f.photos[0] ? 0.3 : 1 }}>{f.emoji}</span>}
+                {f.photos && f.photos.length > 1 && <span style={{ position: 'absolute', bottom: 8, right: 8, background: 'rgba(5,13,26,.75)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 100, padding: '.15rem .5rem', fontSize: '.62rem', fontFamily: "'Cinzel',serif", color: '#e8eef5' }}>📷 {f.photos.length}</span>}
               </div>
               <div style={{ padding: '1.1rem' }}>
-                <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', marginBottom: '.65rem', background: `${tc}22`, color: tc, border: `1px solid ${tc}44` }}>{f.type}</div>
+                <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '.65rem' }}>
+                  <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: `${tc}22`, color: tc, border: `1px solid ${tc}44` }}>{f.type}</div>
+                  {f.statut && STATUT_FRUIT[f.statut] && (
+                    <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: `${STATUT_FRUIT[f.statut].color}22`, color: STATUT_FRUIT[f.statut].color, border: `1px solid ${STATUT_FRUIT[f.statut].color}44` }}>{STATUT_FRUIT[f.statut].icon} {STATUT_FRUIT[f.statut].label}</div>
+                  )}
+                </div>
                 <div style={{ fontFamily: "'Cinzel',serif", fontSize: '1.05rem', fontWeight: 700, color: '#e8eef5', marginBottom: '.12rem' }}>{f.nom}</div>
                 {f.jp && <div style={{ fontSize: '.78rem', color: '#4a6880', marginBottom: '.65rem' }}>{f.jp}</div>}
                 {f.description && <div style={{ fontSize: '.88rem', color: '#7a9ab8', lineHeight: 1.6, fontStyle: 'italic', marginBottom: '.85rem' }}>{f.description}</div>}
+                {f.capacites && (
+                  <div style={{ marginBottom: '.85rem' }}>
+                    <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.25rem' }}>⚡ Capacités</div>
+                    <div style={{ fontSize: '.85rem', color: '#c8d8e8', lineHeight: 1.6 }}>{f.capacites}</div>
+                  </div>
+                )}
+                {f.lore && (
+                  <div style={{ marginBottom: '.85rem' }}>
+                    <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.25rem' }}>📜 Lore</div>
+                    <div style={{ fontSize: '.85rem', color: '#c8d8e8', lineHeight: 1.6, fontStyle: 'italic' }}>{f.lore}</div>
+                  </div>
+                )}
                 {f.proprietaire && (
                   <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>
                     Propriétaire : {personnageMap.has(f.proprietaire)
                       ? <a href={`/personnages?open=${personnageMap.get(f.proprietaire)}`} style={{ color: '#00c8ff', textDecoration: 'none' }}>{f.proprietaire}</a>
                       : <span style={{ color: '#7a9ab8' }}>{f.proprietaire}</span>}
+                  </div>
+                )}
+                {f.ancien_detenteur && (
+                  <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>
+                    Ancien détenteur : {personnageMap.has(f.ancien_detenteur)
+                      ? <a href={`/personnages?open=${personnageMap.get(f.ancien_detenteur)}`} style={{ color: '#00c8ff', textDecoration: 'none' }}>{f.ancien_detenteur}</a>
+                      : <span style={{ color: '#7a9ab8' }}>{f.ancien_detenteur}</span>}
                   </div>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem', marginBottom: '.85rem' }}>
@@ -409,19 +463,47 @@ export default function FruitsPage() {
               {/* ✨ SCAN IA — seulement à la création */}
               {!editId && <ScanFicheIA onResult={handleScanResult} />}
 
-              {/* Photo du fruit */}
+              {/* Photos du fruit (plusieurs possibles) */}
               <div>
-                <label style={S.label}>🖼️ Image / Photo du fruit</label>
-                <div style={{ border: '2px dashed rgba(30,120,200,.3)', borderRadius: 10, padding: '1.5rem', textAlign: 'center', cursor: 'pointer', background: '#0d2040', position: 'relative' }}>
-                  <input type="file" accept="image/*,.gif" style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} onChange={handlePhoto} />
-                  {photoPreview
-                    ? <img src={photoPreview} style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain', display: 'block', margin: '0 auto', borderRadius: 8 }} />
-                    : <><div style={{ fontSize: '2.5rem', marginBottom: '.5rem' }}>🍎</div><div style={{ fontFamily: "'Cinzel',serif", fontSize: '.65rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#7a9ab8' }}>Clique ou glisse une image</div><div style={{ fontSize: '.78rem', color: '#4a6880', marginTop: '.25rem', fontStyle: 'italic' }}>JPG, PNG, GIF animé — max 5 Mo</div></>}
+                <label style={S.label}>🖼️ Images / Photos du fruit</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '.6rem' }}>
+                  {(form.photos || []).map((src, i) => (
+                    <div key={`existing-${i}`} style={{ aspectRatio: '1', borderRadius: 8, overflow: 'hidden', position: 'relative', border: i === 0 ? '2px solid #d4a017' : '2px solid rgba(30,120,200,.2)', cursor: 'zoom-in' }}
+                      onClick={() => setLightbox({ images: (form.photos || []), index: i })}>
+                      <img src={src} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      <button onClick={e => { e.stopPropagation(); removeExistingPhoto(i) }}
+                        style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(224,48,48,.85)', border: 'none', borderRadius: '50%', width: 20, height: 20, color: '#fff', fontSize: '.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                      {i === 0 && <div style={{ position: 'absolute', bottom: 2, left: 2, background: 'rgba(212,160,23,.85)', borderRadius: 4, fontFamily: "'Cinzel',serif", fontSize: '.45rem', color: '#050d1a', padding: '1px 4px' }}>Principale</div>}
+                    </div>
+                  ))}
+                  {photoPreviews.map((src, i) => (
+                    <div key={`new-${i}`} style={{ aspectRatio: '1', borderRadius: 8, overflow: 'hidden', position: 'relative', border: ((form.photos || []).length === 0 && i === 0) ? '2px solid #d4a017' : '2px solid rgba(30,120,200,.2)' }}>
+                      <img src={src} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      <button onClick={() => removeNewPhoto(i)}
+                        style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(224,48,48,.85)', border: 'none', borderRadius: '50%', width: 20, height: 20, color: '#fff', fontSize: '.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                    </div>
+                  ))}
+                  {((form.photos || []).length + photoPreviews.length) < 8 && (
+                    <label
+                      onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={e => { e.preventDefault(); setDragOver(false); addPhotoFiles(Array.from(e.dataTransfer.files || [])) }}
+                      style={{ aspectRatio: '1', borderRadius: 8, border: dragOver ? '2px dashed #d4a017' : '2px dashed rgba(30,120,200,.3)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: dragOver ? 'rgba(212,160,23,.1)' : '#0d2040', color: '#4a6880', fontSize: '.6rem', fontFamily: "'Cinzel',serif", gap: '.3rem', textAlign: 'center' }}>
+                      <input type="file" accept="image/*,.gif" multiple style={{ display: 'none' }} onChange={handlePhoto} />
+                      <span style={{ fontSize: '1.5rem' }}>➕</span>
+                      <span>Clique ou glisse</span>
+                    </label>
+                  )}
                 </div>
-                {photoPreview && <button onClick={() => { setPhotoPreview(''); setPhotoFile(null) }} style={{ marginTop: '.5rem', background: 'rgba(224,48,48,.12)', border: '1px solid rgba(224,48,48,.3)', borderRadius: 8, padding: '.3rem .75rem', color: '#ff6060', cursor: 'pointer', fontFamily: "'Cinzel',serif", fontSize: '.6rem' }}>✕ Supprimer la photo</button>}
-                <div style={{ marginTop: '.5rem' }}>
+                <div style={{ marginTop: '.65rem' }}>
                   <label style={{ ...S.label, color: '#7a9ab8' }}>Ou URL directe (Imgur, Discord...)</label>
-                  <input style={S.input} placeholder="https://i.imgur.com/exemple.gif" onChange={e => { if (e.target.value) { setPhotoPreview(e.target.value); setForm(f => ({ ...f, photo: e.target.value })) } }} />
+                  <input style={S.input} placeholder="https://i.imgur.com/exemple.gif" onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      const val = (e.target as HTMLInputElement).value.trim()
+                      if (val) { setForm(f => ({ ...f, photos: [...(f.photos || []), val] })); (e.target as HTMLInputElement).value = '' }
+                    }
+                  }} />
                 </div>
               </div>
 
@@ -436,18 +518,31 @@ export default function FruitsPage() {
                     <option value="Logia">Logia</option>
                     <option value="Zoan">Zoan</option>
                     <option value="Mythical">Mythical Zoan</option>
+                    <option value="Inconnu">Inconnu</option>
                   </select>
                 </div>
                 <div><label style={S.label}>Puissance (1-10)</label><input style={S.input} type="number" min="1" max="10" value={form.puissance || 5} onChange={e => setForm(f => ({ ...f, puissance: parseInt(e.target.value) }))} /></div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '.85rem', alignItems: 'end' }}>
-                <div><label style={S.label}>Emoji</label><input style={{ ...S.input, width: 70, fontSize: '1.4rem', textAlign: 'center' }} value={form.emoji || '🍎'} onChange={e => setForm(f => ({ ...f, emoji: e.target.value }))} /></div>
+                <div><label style={S.label}>Emoji (optionnel)</label><input style={{ ...S.input, width: 70, fontSize: '1.4rem', textAlign: 'center' }} value={form.emoji || ''} onChange={e => setForm(f => ({ ...f, emoji: e.target.value }))} placeholder="🍎" /></div>
                 <div><label style={S.label}>Couleur accent</label><input type="color" style={{ ...S.input, height: 42, padding: '.3rem' }} value={form.color || '#40d060'} onChange={e => setForm(f => ({ ...f, color: e.target.value }))} /></div>
+              </div>
+              <div><label style={S.label}>Statut</label>
+                <select style={{ ...S.input }} value={form.statut || ''} onChange={e => setForm(f => ({ ...f, statut: e.target.value }))}>
+                  <option value="">— Disponible —</option>
+                  <option value="mange">🍽️ Mangé</option>
+                  <option value="perdu">❓ Perdu</option>
+                </select>
               </div>
               <div><label style={S.label}>Propriétaire</label>
                 <PersonnageSearchSelect personnages={personnages} value={form.proprietaire || ''} onChange={nom => setForm(f => ({ ...f, proprietaire: nom }))} placeholder="Rechercher un personnage ou Non attribué" inputStyle={S.input} />
               </div>
-              <div><label style={S.label}>Description / Capacités</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Ce fruit permet de..." /></div>
+              <div><label style={S.label}>Ancien détenteur</label>
+                <PersonnageSearchSelect personnages={personnages} value={form.ancien_detenteur || ''} onChange={nom => setForm(f => ({ ...f, ancien_detenteur: nom }))} placeholder="Rechercher un personnage ou Aucun" inputStyle={S.input} />
+              </div>
+              <div><label style={S.label}>Description</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Description générale du fruit..." /></div>
+              <div><label style={S.label}>Capacités</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.capacites || ''} onChange={e => setForm(f => ({ ...f, capacites: e.target.value }))} placeholder="Ce fruit permet de..." /></div>
+              <div><label style={S.label}>Lore</label><textarea style={{ ...S.input, minHeight: 90, resize: 'vertical', lineHeight: 1.7 }} value={form.lore || ''} onChange={e => setForm(f => ({ ...f, lore: e.target.value }))} placeholder="Origine, légendes, histoire du fruit..." /></div>
               <div><label style={S.label}>Faiblesses</label><textarea style={{ ...S.input, minHeight: 70, resize: 'vertical', lineHeight: 1.7 }} value={form.faiblesses || ''} onChange={e => setForm(f => ({ ...f, faiblesses: e.target.value }))} placeholder="Faiblesses et limitations..." /></div>
             </div>
 
@@ -458,6 +553,8 @@ export default function FruitsPage() {
           </div>
         </div>
       )}
+
+      {lightbox && <ImageLightbox images={lightbox.images} index={lightbox.index} onClose={() => setLightbox(null)} onIndexChange={i => setLightbox(lb => lb ? { ...lb, index: i } : lb)} />}
     </div>
   )
 }
