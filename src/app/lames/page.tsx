@@ -26,15 +26,15 @@ interface Lame {
   photos?: string[]
 }
 
-const RANGS = ['Lame de qualité', 'Lame de Grande qualité', 'Lame de 1er Ordre', 'Lame Légendaire', 'Grande Lame']
+const RANGS = ['Grande Lame', 'Lame de qualité', 'Lame de Grande qualité', 'Lame de 1er Ordre', 'Lame Légendaire']
 const RANG_MAX: Record<string, number> = {
-  'Lame de qualité': 100, 'Lame de Grande qualité': 50, 'Lame de 1er Ordre': 20, 'Lame Légendaire': 10, 'Grande Lame': 5
+  'Grande Lame': 200, 'Lame de qualité': 100, 'Lame de Grande qualité': 50, 'Lame de 1er Ordre': 20, 'Lame Légendaire': 10
 }
 const RANG_COLORS: Record<string, string> = {
-  'Lame de qualité': '#7a9ab8', 'Lame de Grande qualité': '#00c8ff', 'Lame de 1er Ordre': '#a060ff', 'Lame Légendaire': '#d4a017', 'Grande Lame': '#e03030'
+  'Grande Lame': '#5a6a78', 'Lame de qualité': '#7a9ab8', 'Lame de Grande qualité': '#00c8ff', 'Lame de 1er Ordre': '#a060ff', 'Lame Légendaire': '#d4a017'
 }
 const RANG_EMOJI: Record<string, string> = {
-  'Lame de qualité': '🗡️', 'Lame de Grande qualité': '⚔️', 'Lame de 1er Ordre': '🔱', 'Lame Légendaire': '✨', 'Grande Lame': '👑'
+  'Grande Lame': '🔪', 'Lame de qualité': '🗡️', 'Lame de Grande qualité': '⚔️', 'Lame de 1er Ordre': '🔱', 'Lame Légendaire': '✨'
 }
 const TAB_ALL = ''
 const LAME_TABS = [TAB_ALL, ...RANGS]
