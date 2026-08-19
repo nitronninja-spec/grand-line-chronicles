@@ -17,7 +17,8 @@ interface ResultGroup {
 const SOURCES: { table: string; col: string; icon: string; label: string; href: (id: string, name: string) => string }[] = [
   { table: 'personnages', col: 'nom', icon: '👤', label: 'Personnages', href: (id) => `/personnages?open=${id}` },
   { table: 'fruits', col: 'nom', icon: '🍎', label: 'Fruits', href: (_id, name) => `/fruits?q=${encodeURIComponent(name)}` },
-  { table: 'despas', col: 'nom', icon: '🦾', label: 'Despas', href: (_id, name) => `/despas?q=${encodeURIComponent(name)}` },
+  { table: 'despas', col: 'nom', icon: '🦾', label: 'DS', href: (_id, name) => `/despa?q=${encodeURIComponent(name)}` },
+  { table: 'pds', col: 'nom', icon: '🧬', label: 'PDS', href: (_id, name) => `/pds?q=${encodeURIComponent(name)}` },
   { table: 'lames', col: 'nom', icon: '⚔️', label: 'Lames', href: (_id, name) => `/lames?q=${encodeURIComponent(name)}` },
   { table: 'cristaux_primordiaux', col: 'nom', icon: '💎', label: 'Cristaux', href: (_id, name) => `/cristaux?q=${encodeURIComponent(name)}` },
   { table: 'iles', col: 'nom', icon: '🏝️', label: 'Îles', href: (_id, name) => `/iles?q=${encodeURIComponent(name)}` },

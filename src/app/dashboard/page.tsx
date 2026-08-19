@@ -8,6 +8,7 @@ interface Stats {
   personnages: number
   fruits: number
   despas: number
+  pds: number
   lames: number
   cristaux_primordiaux: number
   iles: number
@@ -28,7 +29,8 @@ interface RecentItem {
 const SECTIONS = [
   { key: 'personnages', label: 'Personnages', icon: '⚔️', color: '#00c8ff', href: '/personnages', desc: 'Gérer les PJs et PNJs' },
   { key: 'fruits', label: 'Fruits du Démon', icon: '🍎', color: '#d4a017', href: '/fruits', desc: 'Cataloguer les pouvoirs' },
-  { key: 'despas', label: 'Despas', icon: '🦾', color: '#00c8ff', href: '/despas', desc: 'Prothèses artificielles' },
+  { key: 'despas', label: 'DS', icon: '🦾', color: '#7c5cff', href: '/despa', desc: 'Prothèses artificielles' },
+  { key: 'pds', label: 'PDS', icon: '🧬', color: '#40d060', href: '/pds', desc: 'Sujets porteurs d’anomalie' },
   { key: 'lames', label: 'Lames', icon: '⚔️', color: '#7a9ab8', href: '/lames', desc: 'Cataloguer les sabres' },
   { key: 'cristaux_primordiaux', label: 'Cristaux Primordiaux', icon: '💎', color: '#e03030', href: '/cristaux', desc: 'Pierres élémentaires' },
   { key: 'iles', label: 'Îles', icon: '🏝️', color: '#40d060', href: '/iles', desc: 'Cartographier la Grand Line' },
@@ -38,7 +40,7 @@ const SECTIONS = [
 ]
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<Stats>({ personnages: 0, fruits: 0, despas: 0, lames: 0, cristaux_primordiaux: 0, iles: 0, factions: 0, journaux: 0, lore: 0 })
+  const [stats, setStats] = useState<Stats>({ personnages: 0, fruits: 0, despas: 0, pds: 0, lames: 0, cristaux_primordiaux: 0, iles: 0, factions: 0, journaux: 0, lore: 0 })
   const [recents, setRecents] = useState<{ section: string; items: RecentItem[] }[]>([])
   const [loading, setLoading] = useState(true)
   const [time, setTime] = useState(new Date())
@@ -53,14 +55,14 @@ export default function DashboardPage() {
     setLoading(true)
     // [table, statsKey] — la table "sessions" porte les Journaux, d'où le nom différent.
     const tableKeys: [string, keyof Stats][] = [
-      ['personnages', 'personnages'], ['fruits', 'fruits'], ['despas', 'despas'], ['lames', 'lames'],
+      ['personnages', 'personnages'], ['fruits', 'fruits'], ['despas', 'despas'], ['pds', 'pds'], ['lames', 'lames'],
       ['cristaux_primordiaux', 'cristaux_primordiaux'], ['iles', 'iles'], ['factions', 'factions'],
       ['sessions', 'journaux'], ['lore', 'lore'],
     ]
     const results = await Promise.all(
       tableKeys.map(([t]) => supabase.from(t).select('*', { count: 'exact', head: false }).order('created_at', { ascending: false }).limit(3))
     )
-    const newStats: Stats = { personnages: 0, fruits: 0, despas: 0, lames: 0, cristaux_primordiaux: 0, iles: 0, factions: 0, journaux: 0, lore: 0 }
+    const newStats: Stats = { personnages: 0, fruits: 0, despas: 0, pds: 0, lames: 0, cristaux_primordiaux: 0, iles: 0, factions: 0, journaux: 0, lore: 0 }
     const newRecents: { section: string; items: RecentItem[] }[] = []
     results.forEach((r, i) => {
       const [, key] = tableKeys[i]
@@ -79,7 +81,7 @@ export default function DashboardPage() {
   }
 
   const totalEntries = Object.values(stats).reduce((a, b) => a + b, 0)
-  const navLinks = [['Accueil', '/'], ['Personnages', '/personnages'], ['Fruits', '/fruits'], ['Despas', '/despas'], ['Lames', '/lames'], ['Cristaux', '/cristaux'], ['Îles', '/iles'], ['Factions', '/factions'], ['Journaux', '/journaux'], ['Lore', '/lore'], ['Dashboard', '/dashboard']]
+  const navLinks = [['Accueil', '/'], ['Personnages', '/personnages'], ['Fruits', '/fruits'], ['DS', '/despa'], ['PDS', '/pds'],['Lames', '/lames'], ['Cristaux', '/cristaux'], ['Îles', '/iles'], ['Factions', '/factions'], ['Journaux', '/journaux'], ['Lore', '/lore'], ['Dashboard', '/dashboard']]
 
   return (
     <div style={{ minHeight: '100vh', background: '#050d1a', color: '#e8eef5', fontFamily: "'Crimson Pro', Georgia, serif", paddingTop: 60 }}>

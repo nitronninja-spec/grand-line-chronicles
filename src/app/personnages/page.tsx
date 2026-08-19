@@ -395,7 +395,7 @@ export default function PersonnagesPage() {
 
   const navLinks = [
     ['Accueil', '/'], ['Personnages', '/personnages'], ['Fruits', '/fruits'],
-    ['Despas', '/despas'], ['Lames', '/lames'], ['Cristaux', '/cristaux'],
+    ['DS', '/despa'], ['PDS', '/pds'], ['Lames', '/lames'], ['Cristaux', '/cristaux'],
     ['Îles', '/iles'], ['Factions', '/factions'], ['Journaux', '/journaux'],
     ['Lore', '/lore'], ['Dashboard', '/dashboard']
   ]
@@ -931,7 +931,7 @@ export default function PersonnagesPage() {
                   { l:'🏝️ Île', v:selected.ile||'—', c:'#40d060', href: selected.ile ? `/iles?q=${encodeURIComponent(selected.ile)}` : null },
                   { l:'🏴‍☠️ Factions', v:(selected.factions && selected.factions.length > 0) ? selected.factions.join(', ') : '—', c:'#ff8c40', href: null },
                   { l:'🍎 Fruit du Démon', v: fruits.find(fr => fr.proprietaire === selected.nom)?.nom || '—', c:'#f0c040', href: fruits.find(fr => fr.proprietaire === selected.nom) ? `/fruits?q=${encodeURIComponent(fruits.find(fr => fr.proprietaire === selected.nom)!.nom)}` : null },
-                  { l:'🦾 Despa', v: despas.find(d => d.proprietaire === selected.nom)?.nom || '—', c:'#4488ff', href: despas.find(d => d.proprietaire === selected.nom) ? `/despas?q=${encodeURIComponent(despas.find(d => d.proprietaire === selected.nom)!.nom)}` : null },
+                  { l:'🦾 Despa', v: despas.find(d => d.proprietaire === selected.nom)?.nom || '—', c:'#4488ff', href: despas.find(d => d.proprietaire === selected.nom) ? `/despa?q=${encodeURIComponent(despas.find(d => d.proprietaire === selected.nom)!.nom)}` : null },
                   { l:'❤️ Statut', v:selected.statut||'—', c:STATUT_COLORS[selected.statut||''] , href:null},
                 ].map(({l,v,c,href}) => {
                   const tile = (
@@ -1008,7 +1008,7 @@ export default function PersonnagesPage() {
                   chips.push({ icon:'🍎', label: selected.fruit, href:`/fruits?q=${encodeURIComponent(selected.fruit)}` })
                 }
                 linkedFruits.forEach(fr => chips.push({ icon:'🍎', label: fr.nom, href:`/fruits?q=${encodeURIComponent(fr.nom)}` }))
-                linkedDespas.forEach(d => chips.push({ icon:'🦾', label: d.nom, href:`/despas?q=${encodeURIComponent(d.nom)}` }))
+                linkedDespas.forEach(d => chips.push({ icon:'🦾', label: d.nom, href:`/despa?q=${encodeURIComponent(d.nom)}` }))
                 linkedLames.forEach(l => chips.push({ icon:'⚔️', label: l.nom, href:`/lames?q=${encodeURIComponent(l.nom)}` }))
                 linkedCristaux.forEach(c => chips.push({ icon:'💎', label: c.nom, href:`/cristaux?q=${encodeURIComponent(c.nom)}` }))
                 if (selected.ile) chips.push({ icon:'🏝️', label: selected.ile, href:`/iles?q=${encodeURIComponent(selected.ile)}` })

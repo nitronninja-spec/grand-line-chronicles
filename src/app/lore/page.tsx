@@ -168,7 +168,7 @@ export default function LorePage() {
     a.categorie === selected.categorie || parseTags(selected.tags).some(t => parseTags(a.tags).includes(t))
   )).slice(0,6) : []
 
-  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Journaux','/journaux'],['Lore','/lore'],['Dashboard','/dashboard']]
+  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['DS','/despa'],['PDS','/pds'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Journaux','/journaux'],['Lore','/lore'],['Dashboard','/dashboard']]
 
   return (
     <div style={S.page}>

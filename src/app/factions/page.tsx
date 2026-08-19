@@ -313,7 +313,7 @@ export default function FactionsPage() {
     fetchList()
   }
 
-  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['Despas','/despas'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Journaux','/journaux'],['Lore','/lore'],['Dashboard','/dashboard']]
+  const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['DS','/despa'],['PDS','/pds'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Journaux','/journaux'],['Lore','/lore'],['Dashboard','/dashboard']]
   const theme = PAGE_THEMES[pageTab]
   let filtered = list.filter(f => factionPage(f) === pageTab)
   if (typeFilter) filtered = filtered.filter(f => f.type === typeFilter)
