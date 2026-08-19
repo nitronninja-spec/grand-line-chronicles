@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
+import ImageLightbox from '@/components/ImageLightbox'
 
 interface Ile {
   id: string
@@ -17,6 +18,7 @@ interface Ile {
   est_detruite?: boolean
   description?: string
   photo?: string
+  photos?: string[]
   gdoc?: string
   miro?: string
 }
@@ -66,8 +68,10 @@ export default function IlesPage() {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [photoFile, setPhotoFile] = useState<File | null>(null)
-  const [photoPreview, setPhotoPreview] = useState('')
+  const [photoFiles, setPhotoFiles] = useState<File[]>([])
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
+  const [dragOverUpload, setDragOverUpload] = useState(false)
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [factions, setFactions] = useState<{ id: string; nom: string; emoji?: string }[]>([])
   const [personnages, setPersonnages] = useState<{ id: string; nom: string }[]>([])
   const [sortMode, setSortMode] = useState<SortMode>('mer')
@@ -75,7 +79,7 @@ export default function IlesPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [form, setForm] = useState<Partial<Ile>>({
-    nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', factions: [], chef: '', iles_parentes: [], est_archipel: false, est_detruite: false, description: '', gdoc: '', miro: ''
+    nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', factions: [], chef: '', iles_parentes: [], est_archipel: false, est_detruite: false, description: '', gdoc: '', miro: '', photos: []
   })
 
   useEffect(() => {
@@ -108,9 +112,10 @@ export default function IlesPage() {
   }
 
   function openForm(ile?: Ile) {
-    if (ile) { setForm({ ...ile, factions: ile.factions || [], iles_parentes: ile.iles_parentes || [] }); setEditId(ile.id); setPhotoPreview(ile.photo || '') }
-    else { setForm({ nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', factions: [], chef: '', iles_parentes: [], est_archipel: false, est_detruite: false, description: '', gdoc: '', miro: '' }); setEditId(null); setPhotoPreview('') }
-    setPhotoFile(null)
+    if (ile) { setForm({ ...ile, factions: ile.factions || [], iles_parentes: ile.iles_parentes || [], photos: ile.photos && ile.photos.length > 0 ? ile.photos : (ile.photo ? [ile.photo] : []) }); setEditId(ile.id) }
+    else { setForm({ nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', factions: [], chef: '', iles_parentes: [], est_archipel: false, est_detruite: false, description: '', gdoc: '', miro: '', photos: [] }); setEditId(null) }
+    setPhotoFiles([])
+    setPhotoPreviews([])
     setShowForm(true)
   }
 
@@ -144,22 +149,37 @@ export default function IlesPage() {
     fetchList()
   }
 
+  function addPhotoFiles(files: File[]) {
+    const imgFiles = files.filter(f => f.type.startsWith('image/'))
+    setPhotoFiles(prev => [...prev, ...imgFiles])
+    setPhotoPreviews(prev => [...prev, ...imgFiles.map(f => URL.createObjectURL(f))])
+  }
   async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setPhotoFile(file)
-    setPhotoPreview(URL.createObjectURL(file))
+    addPhotoFiles(Array.from(e.target.files || []))
+    e.target.value = ''
+  }
+  function removeExistingPhoto(i: number) {
+    setForm(f => ({ ...f, photos: (f.photos || []).filter((_, j) => j !== i) }))
+  }
+  function removeNewPhoto(i: number) {
+    setPhotoPreviews(p => p.filter((_, j) => j !== i))
+    setPhotoFiles(p => p.filter((_, j) => j !== i))
   }
 
   async function saveForm() {
     if (!form.nom?.trim()) { alert('Le nom est obligatoire !'); return }
     setUploading(true)
-    let photo = form.photo || null
-    if (photoFile) photo = await uploadImage(photoFile, 'iles')
-    const data = { ...form, photo }
-    if (editId) await supabase.from('iles').update(data).eq('id', editId)
-    else await supabase.from('iles').insert([data])
+    let photos = form.photos || []
+    for (const file of photoFiles) {
+      const url = await uploadImage(file, 'iles')
+      if (url) photos = [...photos, url]
+    }
+    const data = { ...form, photos, photo: photos[0] || null }
+    const { error } = editId
+      ? await supabase.from('iles').update(data).eq('id', editId)
+      : await supabase.from('iles').insert([data])
     setUploading(false)
+    if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
     setShowForm(false)
     fetchList()
   }
@@ -212,9 +232,11 @@ export default function IlesPage() {
         onMouseEnter={e=>{const el=e.currentTarget;el.style.borderColor=isDragOver?'#d4a017':isDestroyed?'rgba(224,48,48,.6)':rc;if(!opts.nested){el.style.transform='translateY(-5px)';el.style.boxShadow='0 18px 36px rgba(0,0,0,.4)'}}}
         onMouseLeave={e=>{const el=e.currentTarget;el.style.borderColor=isDragOver?'#d4a017':isDestroyed?'rgba(224,48,48,.35)':'rgba(30,120,200,.2)';if(!opts.nested){el.style.transform='none';el.style.boxShadow='none'}}}>
         {/* Banner */}
-        <div style={{height:opts.nested?90:155,background:isDestroyed?'linear-gradient(135deg,#1a0d0d,#2a1010)':'linear-gradient(135deg,#071828,#0d2440)',position:'relative',display:'flex',alignItems:'center',justifyContent:'center',fontSize:opts.nested?'2.4rem':'4.5rem',overflow:'hidden',filter:isDestroyed?'grayscale(.8)':'none'}}>
-          {ile.photo && <img src={ile.photo} alt={ile.nom} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',display:'block',opacity:.55}} />}
+        <div style={{height:opts.nested?90:155,background:isDestroyed?'linear-gradient(135deg,#1a0d0d,#2a1010)':'linear-gradient(135deg,#071828,#0d2440)',position:'relative',display:'flex',alignItems:'center',justifyContent:'center',fontSize:opts.nested?'2.4rem':'4.5rem',overflow:'hidden',filter:isDestroyed?'grayscale(.8)':'none',cursor:(ile.photos&&ile.photos[0])?'zoom-in':'default'}}
+          onClick={e => { if (ile.photos && ile.photos.length > 0) { e.stopPropagation(); setLightbox({ images: ile.photos, index: 0 }) } }}>
+          {ile.photos && ile.photos[0] && <img src={ile.photos[0]} alt={ile.nom} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',display:'block',opacity:.55}} />}
           <span style={{position:'relative',zIndex:1,opacity:isDestroyed?.5:1}}>{isDestroyed?'💀':(ile.emoji||'🏝️')}</span>
+          {ile.photos && ile.photos.length > 1 && <span style={{position:'absolute',bottom:6,left:6,background:'rgba(5,13,26,.75)',border:'1px solid rgba(255,255,255,.2)',borderRadius:100,padding:'.12rem .45rem',fontSize:'.58rem',fontFamily:"'Cinzel',serif",color:'#e8eef5',zIndex:1}}>📷 {ile.photos.length}</span>}
           <div style={{position:'absolute',top:'.6rem',right:'.6rem',display:'flex',gap:'.35rem'}}>
             {isDestroyed && <div style={{background:'rgba(224,48,48,.28)',border:'1px solid rgba(224,48,48,.5)',borderRadius:100,padding:'.2rem .6rem',fontFamily:"'Cinzel',serif",fontSize:'.5rem',letterSpacing:'.09em',textTransform:'uppercase',color:'#ff6060',zIndex:1}}>☠️ Détruite</div>}
             {isFolder && <div style={{background:'rgba(212,160,23,.22)',border:'1px solid rgba(212,160,23,.44)',borderRadius:100,padding:'.2rem .6rem',fontFamily:"'Cinzel',serif",fontSize:'.5rem',letterSpacing:'.09em',textTransform:'uppercase',color:'#f0c040',zIndex:1}}>📁 Archipel</div>}
@@ -375,19 +397,47 @@ export default function IlesPage() {
               <button onClick={()=>setShowForm(false)} style={{background:'rgba(5,13,26,.75)',border:'1px solid rgba(30,120,200,.2)',color:'#7a9ab8',borderRadius:'50%',width:34,height:34,cursor:'pointer',fontSize:'.9rem'}}>✕</button>
             </div>
             <div style={{padding:'1.75rem',display:'flex',flexDirection:'column',gap:'1.1rem'}}>
-              {/* Photo */}
+              {/* Photos */}
               <div>
-                <label style={S.label}>🖼️ Image / Photo de l'île</label>
-                <div style={{border:'2px dashed rgba(30,120,200,.3)',borderRadius:10,padding:'1.5rem',textAlign:'center',cursor:'pointer',background:'#0d2040',position:'relative'}}>
-                  <input type="file" accept="image/*,.gif" style={{position:'absolute',inset:0,opacity:0,cursor:'pointer',width:'100%',height:'100%'}} onChange={handlePhoto} />
-                  {photoPreview
-                    ? <img src={photoPreview} style={{maxWidth:'100%',maxHeight:160,objectFit:'cover',display:'block',margin:'0 auto',borderRadius:8}} />
-                    : <><div style={{fontSize:'2.5rem',marginBottom:'.5rem'}}>🏝️</div><div style={{fontFamily:"'Cinzel',serif",fontSize:'.65rem',letterSpacing:'.09em',textTransform:'uppercase',color:'#7a9ab8'}}>Clique ou glisse une image</div></>}
+                <label style={S.label}>🖼️ Images / Photos de l'île</label>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'.6rem'}}>
+                  {(form.photos || []).map((src, i) => (
+                    <div key={`existing-${i}`} style={{aspectRatio:'1',borderRadius:8,overflow:'hidden',position:'relative',border:i===0?'2px solid #d4a017':'2px solid rgba(30,120,200,.2)',cursor:'zoom-in'}}
+                      onClick={() => setLightbox({ images: (form.photos || []), index: i })}>
+                      <img src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      <button onClick={e => { e.stopPropagation(); removeExistingPhoto(i) }}
+                        style={{position:'absolute',top:2,right:2,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:20,height:20,color:'#fff',fontSize:'.6rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+                      {i===0 && <div style={{position:'absolute',bottom:2,left:2,background:'rgba(212,160,23,.85)',borderRadius:4,fontFamily:"'Cinzel',serif",fontSize:'.45rem',color:'#050d1a',padding:'1px 4px'}}>Principale</div>}
+                    </div>
+                  ))}
+                  {photoPreviews.map((src, i) => (
+                    <div key={`new-${i}`} style={{aspectRatio:'1',borderRadius:8,overflow:'hidden',position:'relative',border:((form.photos||[]).length===0 && i===0)?'2px solid #d4a017':'2px solid rgba(30,120,200,.2)'}}>
+                      <img src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      <button onClick={() => removeNewPhoto(i)}
+                        style={{position:'absolute',top:2,right:2,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:20,height:20,color:'#fff',fontSize:'.6rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+                    </div>
+                  ))}
+                  {((form.photos||[]).length + photoPreviews.length) < 8 && (
+                    <label
+                      onDragOver={e => { e.preventDefault(); setDragOverUpload(true) }}
+                      onDragLeave={() => setDragOverUpload(false)}
+                      onDrop={e => { e.preventDefault(); setDragOverUpload(false); addPhotoFiles(Array.from(e.dataTransfer.files || [])) }}
+                      style={{aspectRatio:'1',borderRadius:8,border:dragOverUpload?'2px dashed #d4a017':'2px dashed rgba(30,120,200,.3)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',background:dragOverUpload?'rgba(212,160,23,.1)':'#0d2040',color:'#4a6880',fontSize:'.6rem',fontFamily:"'Cinzel',serif",gap:'.3rem',textAlign:'center'}}>
+                      <input type="file" accept="image/*,.gif" multiple style={{display:'none'}} onChange={handlePhoto} />
+                      <span style={{fontSize:'1.5rem'}}>➕</span>
+                      <span>Clique ou glisse</span>
+                    </label>
+                  )}
                 </div>
-                {photoPreview && <button onClick={()=>{setPhotoPreview('');setPhotoFile(null)}} style={{marginTop:'.5rem',background:'rgba(224,48,48,.12)',border:'1px solid rgba(224,48,48,.3)',borderRadius:8,padding:'.3rem .75rem',color:'#ff6060',cursor:'pointer',fontFamily:"'Cinzel',serif",fontSize:'.6rem'}}>✕ Supprimer</button>}
                 <div style={{marginTop:'.65rem'}}>
                   <label style={{...S.label,color:'#7a9ab8'}}>Ou URL directe</label>
-                  <input style={S.input} placeholder="https://i.imgur.com/exemple.jpg" onChange={e=>{if(e.target.value){setPhotoPreview(e.target.value);setForm(f=>({...f,photo:e.target.value}))}}} />
+                  <input style={S.input} placeholder="https://i.imgur.com/exemple.jpg" onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      const val = (e.target as HTMLInputElement).value.trim()
+                      if (val) { setForm(f => ({ ...f, photos: [...(f.photos || []), val] })); (e.target as HTMLInputElement).value = '' }
+                    }
+                  }} />
                 </div>
               </div>
 
@@ -482,6 +532,8 @@ export default function IlesPage() {
           </div>
         </div>
       )}
+
+      {lightbox && <ImageLightbox images={lightbox.images} index={lightbox.index} onClose={() => setLightbox(null)} onIndexChange={i => setLightbox(lb => lb ? { ...lb, index: i } : lb)} />}
     </div>
   )
 }

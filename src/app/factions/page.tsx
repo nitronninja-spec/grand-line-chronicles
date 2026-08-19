@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, uploadImage } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
+import ImageLightbox from '@/components/ImageLightbox'
 
 interface Rang { nom: string; ordre: number }
 
@@ -16,6 +17,7 @@ interface Faction {
   rangs?: Rang[]
   couleur?: string
   ordre_manuel?: number | null
+  photos?: string[]
 }
 
 interface MemberRang { faction: string; rang: string; ordre?: number }
@@ -129,7 +131,7 @@ export default function FactionsPage() {
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string|null>(null)
-  const [form, setForm] = useState<Partial<Faction>>({ nom:'', emoji:'⚔️', type:'Pirates', description:'', gdoc:'', miro:'' })
+  const [form, setForm] = useState<Partial<Faction>>({ nom:'', emoji:'⚔️', type:'Pirates', description:'', gdoc:'', miro:'', photos:[] })
   const [members, setMembers] = useState<Member[]>([])
   const [linkedIles, setLinkedIles] = useState<LinkedIle[]>([])
   const [rosterFaction, setRosterFaction] = useState<Faction | null>(null)
@@ -137,6 +139,11 @@ export default function FactionsPage() {
   const [pageTab, setPageTab] = useState<PageTab>('pirates')
   const [draggingMemberId, setDraggingMemberId] = useState<string | null>(null)
   const [draggingFactionId, setDraggingFactionId] = useState<string | null>(null)
+  const [photoFiles, setPhotoFiles] = useState<File[]>([])
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
+  const [dragOverUpload, setDragOverUpload] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
 
   useEffect(() => {
     fetchList(); fetchMembers(); fetchIlesList()
@@ -236,9 +243,28 @@ export default function FactionsPage() {
   }
 
   function openForm(f?: Faction) {
-    if (f) { setForm({ ...f, rangs: f.rangs || [] }); setEditId(f.id) }
-    else { setForm({ nom:'', emoji:TYPE_EMOJI.Pirates, type:'Pirates', description:'', gdoc:'', miro:'', rangs:[] }); setEditId(null) }
+    if (f) { setForm({ ...f, rangs: f.rangs || [], photos: f.photos || [] }); setEditId(f.id) }
+    else { setForm({ nom:'', emoji:TYPE_EMOJI.Pirates, type:'Pirates', description:'', gdoc:'', miro:'', rangs:[], photos:[] }); setEditId(null) }
+    setPhotoFiles([])
+    setPhotoPreviews([])
     setShowForm(true)
+  }
+
+  function addPhotoFiles(files: File[]) {
+    const imgFiles = files.filter(f => f.type.startsWith('image/'))
+    setPhotoFiles(prev => [...prev, ...imgFiles])
+    setPhotoPreviews(prev => [...prev, ...imgFiles.map(f => URL.createObjectURL(f))])
+  }
+  async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    addPhotoFiles(Array.from(e.target.files || []))
+    e.target.value = ''
+  }
+  function removeExistingPhoto(i: number) {
+    setForm(f => ({ ...f, photos: (f.photos || []).filter((_, j) => j !== i) }))
+  }
+  function removeNewPhoto(i: number) {
+    setPhotoPreviews(p => p.filter((_, j) => j !== i))
+    setPhotoFiles(p => p.filter((_, j) => j !== i))
   }
 
   function addRang() {
@@ -253,12 +279,19 @@ export default function FactionsPage() {
 
   async function saveForm() {
     if (!form.nom?.trim()) { alert('Le nom est obligatoire !'); return }
+    setUploading(true)
+    let photos = form.photos || []
+    for (const file of photoFiles) {
+      const url = await uploadImage(file, 'factions')
+      if (url) photos = [...photos, url]
+    }
     const newNom = form.nom.trim()
-    const data = { ...form, nom: newNom, rangs: (form.rangs || []).filter(r => r.nom.trim()) }
+    const data = { ...form, nom: newNom, rangs: (form.rangs || []).filter(r => r.nom.trim()), photos }
     const original = editId ? list.find(f => f.id === editId) : null
     const { error } = editId
       ? await supabase.from('factions').update(data).eq('id', editId)
       : await supabase.from('factions').insert([data])
+    setUploading(false)
     if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
     if (original && original.nom !== newNom) {
       const failures = await cascadeFactionRename(original.nom, newNom)
@@ -368,7 +401,17 @@ export default function FactionsPage() {
                 onDrop={manual ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderFactions(filtered, fromId, f.id) } : undefined}
                 onMouseEnter={e=>{const el=e.currentTarget;el.style.transform='translateY(-5px)';el.style.borderColor=tc;el.style.boxShadow=`0 18px 36px rgba(0,0,0,.4)`}}
                 onMouseLeave={e=>{const el=e.currentTarget;el.style.transform='none';el.style.borderColor=`${tc}33`;el.style.boxShadow='none'}}>
-                <div style={{fontSize:'2.5rem',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.emoji||'⚔️'}</div>
+                {f.photos && f.photos[0] ? (
+                  <div style={{display:'flex',alignItems:'center',gap:'.75rem'}}>
+                    <div style={{width:56,height:56,borderRadius:10,overflow:'hidden',cursor:'zoom-in',flexShrink:0,border:`1px solid ${tc}44`,position:'relative'}} onClick={e => { e.stopPropagation(); setLightbox({ images: f.photos!, index: 0 }) }}>
+                      <img src={f.photos[0]} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      {f.photos.length > 1 && <span style={{position:'absolute',bottom:1,right:1,background:'rgba(5,13,26,.8)',color:'#e8eef5',fontSize:'.45rem',fontFamily:"'Cinzel',serif",borderRadius:3,padding:'0 3px'}}>+{f.photos.length - 1}</span>}
+                    </div>
+                    <div style={{fontSize:'1.6rem',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.emoji||'⚔️'}</div>
+                  </div>
+                ) : (
+                  <div style={{fontSize:'2.5rem',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.emoji||'⚔️'}</div>
+                )}
                 <div style={{fontFamily:"'Cinzel',serif",fontSize:'1rem',fontWeight:700,color:'#e8eef5',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.nom}</div>
                 <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap'}}>
                   <div style={{display:'inline-block',background:`${tc}22`,color:tc,border:`1px solid ${tc}44`,borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.09em',textTransform:'uppercase',width:'fit-content'}}>{f.type}</div>
@@ -402,6 +445,48 @@ export default function FactionsPage() {
               <button onClick={()=>setShowForm(false)} style={{background:'rgba(5,13,26,.75)',border:'1px solid rgba(30,120,200,.2)',color:'#7a9ab8',borderRadius:'50%',width:34,height:34,cursor:'pointer',fontSize:'.9rem'}}>✕</button>
             </div>
             <div style={{padding:'1.75rem',display:'flex',flexDirection:'column',gap:'1.1rem'}}>
+              <div>
+                <label style={S.label}>🖼️ Images / Photos de la faction</label>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'.6rem'}}>
+                  {(form.photos || []).map((src, i) => (
+                    <div key={`existing-${i}`} style={{aspectRatio:'1',borderRadius:8,overflow:'hidden',position:'relative',border:i===0?'2px solid #d4a017':'2px solid rgba(30,120,200,.2)',cursor:'zoom-in'}}
+                      onClick={() => setLightbox({ images: (form.photos || []), index: i })}>
+                      <img src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      <button onClick={e => { e.stopPropagation(); removeExistingPhoto(i) }}
+                        style={{position:'absolute',top:2,right:2,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:20,height:20,color:'#fff',fontSize:'.6rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+                      {i===0 && <div style={{position:'absolute',bottom:2,left:2,background:'rgba(212,160,23,.85)',borderRadius:4,fontFamily:"'Cinzel',serif",fontSize:'.45rem',color:'#050d1a',padding:'1px 4px'}}>Principale</div>}
+                    </div>
+                  ))}
+                  {photoPreviews.map((src, i) => (
+                    <div key={`new-${i}`} style={{aspectRatio:'1',borderRadius:8,overflow:'hidden',position:'relative',border:((form.photos||[]).length===0 && i===0)?'2px solid #d4a017':'2px solid rgba(30,120,200,.2)'}}>
+                      <img src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      <button onClick={() => removeNewPhoto(i)}
+                        style={{position:'absolute',top:2,right:2,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:20,height:20,color:'#fff',fontSize:'.6rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+                    </div>
+                  ))}
+                  {((form.photos||[]).length + photoPreviews.length) < 8 && (
+                    <label
+                      onDragOver={e => { e.preventDefault(); setDragOverUpload(true) }}
+                      onDragLeave={() => setDragOverUpload(false)}
+                      onDrop={e => { e.preventDefault(); setDragOverUpload(false); addPhotoFiles(Array.from(e.dataTransfer.files || [])) }}
+                      style={{aspectRatio:'1',borderRadius:8,border:dragOverUpload?'2px dashed #d4a017':'2px dashed rgba(30,120,200,.3)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',background:dragOverUpload?'rgba(212,160,23,.1)':'#0d2040',color:'#4a6880',fontSize:'.6rem',fontFamily:"'Cinzel',serif",gap:'.3rem',textAlign:'center'}}>
+                      <input type="file" accept="image/*,.gif" multiple style={{display:'none'}} onChange={handlePhoto} />
+                      <span style={{fontSize:'1.5rem'}}>➕</span>
+                      <span>Clique ou glisse</span>
+                    </label>
+                  )}
+                </div>
+                <div style={{marginTop:'.65rem'}}>
+                  <label style={{...S.label,color:'#7a9ab8'}}>Ou URL directe (Imgur, Discord...)</label>
+                  <input style={S.input} placeholder="https://i.imgur.com/exemple.gif" onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      const val = (e.target as HTMLInputElement).value.trim()
+                      if (val) { setForm(f => ({ ...f, photos: [...(f.photos || []), val] })); (e.target as HTMLInputElement).value = '' }
+                    }
+                  }} />
+                </div>
+              </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:'.85rem',alignItems:'end'}}>
                 <div><label style={S.label}>Nom *</label><input style={S.input} value={form.nom||''} onChange={e=>setForm(f=>({...f,nom:e.target.value}))} placeholder="Marine Mondiale" /></div>
                 <div><label style={S.label}>Emoji</label><input style={{...S.input,width:70,fontSize:'1.4rem',textAlign:'center'}} value={form.emoji||'⚔️'} onChange={e=>setForm(f=>({...f,emoji:e.target.value}))} /></div>
@@ -450,7 +535,7 @@ export default function FactionsPage() {
             </div>
             <div style={{padding:'1.1rem 1.75rem',borderTop:'1px solid rgba(30,120,200,.2)',display:'flex',gap:'.65rem',justifyContent:'flex-end',position:'sticky',bottom:0,background:'#0a1829',borderRadius:'0 0 18px 18px'}}>
               <button style={S.btnCyan} onClick={()=>setShowForm(false)}>Annuler</button>
-              <button style={S.btnGold} onClick={saveForm}>💾 Enregistrer</button>
+              <button style={S.btnGold} onClick={saveForm} disabled={uploading}>{uploading ? '⏳ Upload...' : '💾 Enregistrer'}</button>
             </div>
           </div>
         </div>
@@ -543,6 +628,8 @@ export default function FactionsPage() {
           </div>
         </div>
       )}
+
+      {lightbox && <ImageLightbox images={lightbox.images} index={lightbox.index} onClose={() => setLightbox(null)} onIndexChange={i => setLightbox(lb => lb ? { ...lb, index: i } : lb)} />}
     </div>
   )
 }
