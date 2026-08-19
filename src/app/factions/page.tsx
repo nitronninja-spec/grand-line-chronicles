@@ -73,8 +73,9 @@ function totalPrime(faction: Faction, members: Member[]): number {
 const TYPES = ['Pirates', 'Marine', 'Gouvernement', 'Révolutionnaire', 'Peuple', 'Neutre', 'Autre']
 const TYPE_COLORS: Record<string,string> = { Pirates:'#d4a017', Marine:'#00c8ff', Gouvernement:'#4488ff', 'Révolutionnaire':'#e03030', Peuple:'#40e0a0', Neutre:'#7a9ab8', Autre:'#a060ff' }
 const TYPE_EMOJI: Record<string,string> = { Pirates:'🏴‍☠️', Marine:'⚓', Gouvernement:'🏛️', 'Révolutionnaire':'✊', Peuple:'👥', Neutre:'🤝', Autre:'⚔️' }
-const MEMBER_TYPE_COLORS: Record<string, string> = { pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', 'allié': '#40d060' }
-const MEMBER_TYPE_LABELS: Record<string, string> = { pj: 'Joueurs', pnj: 'PNJ', antagoniste: 'Antagonistes', 'allié': 'Alliés' }
+const MEMBER_TYPE_COLORS: Record<string, string> = { pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', 'allié': '#40d060', ambivalent: '#a060ff', inconnu: '#7a9ab8' }
+const MEMBER_TYPE_LABELS: Record<string, string> = { pj: 'Joueurs', pnj: 'PNJ', antagoniste: 'Antagonistes', 'allié': 'Alliés', ambivalent: 'Ambivalents', inconnu: 'Inconnus' }
+const MEMBER_TYPES = ['pj', 'pnj', 'allié', 'antagoniste', 'ambivalent', 'inconnu']
 type FactionSortMode = 'categorie' | 'az' | 'prime' | 'manuel'
 
 // Les factions sont réparties en 4 pages, chacune avec sa couleur dominante. Une faction
@@ -572,7 +573,12 @@ export default function FactionsPage() {
                   const sansRang = factionMembers.filter(m => !rangs.some(r => r.nom === memberRangFor(m, rosterFaction.nom)))
                   if (sansRang.length > 0) groups.push({ label: 'Sans rang', color: '#7a9ab8', items: sortMembersInTier(sansRang, rosterFaction.nom) })
                 } else {
-                  groups = ['pj','pnj','allié','antagoniste'].map(t => ({ label: MEMBER_TYPE_LABELS[t], color: MEMBER_TYPE_COLORS[t], items: sortMembersInTier(factionMembers.filter(m => m.type === t), rosterFaction.nom) })).filter(g => g.items.length > 0)
+                  groups = MEMBER_TYPES.map(t => ({ label: MEMBER_TYPE_LABELS[t], color: MEMBER_TYPE_COLORS[t], items: sortMembersInTier(factionMembers.filter(m => m.type === t), rosterFaction.nom) })).filter(g => g.items.length > 0)
+                  // Filet de sécurité : un type de personnage non prévu ci-dessus (futur type
+                  // ajouté sans mettre à jour cette liste) ne doit jamais faire disparaître le
+                  // membre de l'organigramme silencieusement.
+                  const autres = factionMembers.filter(m => !MEMBER_TYPES.includes(m.type))
+                  if (autres.length > 0) groups.push({ label: 'Autre', color: '#7a9ab8', items: sortMembersInTier(autres, rosterFaction.nom) })
                 }
                 return (
                   <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:0,marginBottom:'2rem'}}>
