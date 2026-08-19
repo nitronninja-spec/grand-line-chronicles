@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
+import ImageLightbox from '@/components/ImageLightbox'
 
 interface Pdf { nom: string; url: string }
 
@@ -55,7 +56,7 @@ export default function JournauxPage() {
   const [pdfFiles, setPdfFiles] = useState<File[]>([])
   const [form, setForm] = useState<Partial<Journal>>({ num:1, titre:'', date:'', lieu:'', resume:'', photos:[], pdfs:[], personnages:[], gdoc:'', miro:'' })
   const [consult, setConsult] = useState<Journal | null>(null)
-  const [lightbox, setLightbox] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
 
   let filtered = journaux
   if (search) filtered = filtered.filter(j => j.titre.toLowerCase().includes(search.toLowerCase()) || (j.resume||'').toLowerCase().includes(search.toLowerCase()))
@@ -200,14 +201,14 @@ export default function JournauxPage() {
               onClick={() => setConsult(j)}
               onMouseEnter={e=>{e.currentTarget.style.borderColor='#d4a017';e.currentTarget.style.boxShadow='0 6px 20px rgba(0,0,0,.3)'}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(30,120,200,.2)';e.currentTarget.style.boxShadow='none'}}>
-              <div style={{fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.11em',textTransform:'uppercase',color:'#00c8ff',marginBottom:'.35rem'}}>📅 {formatDate(j.date)} {j.lieu?`· ${j.lieu}`:''}</div>
+              {(j.date || j.lieu) && <div style={{fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.11em',textTransform:'uppercase',color:'#00c8ff',marginBottom:'.35rem'}}>{j.date && `📅 ${formatDate(j.date)}`} {j.date && j.lieu ? '· ' : ''}{j.lieu}</div>}
               <div style={{fontFamily:"'Cinzel',serif",fontSize:'.95rem',fontWeight:700,color:'#e8eef5',marginBottom:'.45rem'}}>{j.titre}</div>
               {j.resume && <div style={{fontSize:'.88rem',color:'#7a9ab8',fontStyle:'italic',lineHeight:1.6,marginBottom:'.65rem',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical' as const,overflow:'hidden'}}>{j.resume}</div>}
 
               {j.photos && j.photos.length > 0 && (
                 <div style={{display:'flex',gap:'.4rem',marginBottom:'.65rem'}}>
                   {j.photos.slice(0,4).map((ph,i) => (
-                    <div key={i} onClick={e => { e.stopPropagation(); setLightbox(ph) }} style={{width:52,height:52,borderRadius:6,overflow:'hidden',border:'1px solid rgba(30,120,200,.2)',flexShrink:0}}>
+                    <div key={i} onClick={e => { e.stopPropagation(); setLightbox({ images: j.photos!, index: i }) }} style={{width:52,height:52,borderRadius:6,overflow:'hidden',border:'1px solid rgba(30,120,200,.2)',flexShrink:0,cursor:'zoom-in'}}>
                       <img src={ph} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
                     </div>
                   ))}
@@ -250,7 +251,7 @@ export default function JournauxPage() {
             <div style={{padding:'1.75rem',display:'flex',flexDirection:'column',gap:'1.1rem'}}>
               <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:'.85rem'}}>
                 <div><label style={S.label}>N° Session</label><input style={{...S.input,width:80}} type="number" min="1" value={form.num||1} onChange={e=>setForm(f=>({...f,num:parseInt(e.target.value)}))} /></div>
-                <div><label style={S.label}>Date</label><input style={S.input} type="date" value={form.date||''} onChange={e=>setForm(f=>({...f,date:e.target.value}))} /></div>
+                <div><label style={S.label}>Date (optionnel)</label><input style={S.input} type="date" value={form.date||''} onChange={e=>setForm(f=>({...f,date:e.target.value}))} /></div>
               </div>
               <div><label style={S.label}>Titre *</label><input style={S.input} value={form.titre||''} onChange={e=>setForm(f=>({...f,titre:e.target.value}))} placeholder="L'Appel du Large" /></div>
               <div><label style={S.label}>Lieu / Île</label><input style={S.input} value={form.lieu||''} onChange={e=>setForm(f=>({...f,lieu:e.target.value}))} placeholder="Port Crimson" /></div>
@@ -346,7 +347,7 @@ export default function JournauxPage() {
               <div style={{position:'absolute',bottom:0,left:0,right:0,height:90,background:'linear-gradient(to top,#0a1829,transparent)'}} />
               <button onClick={()=>setConsult(null)} style={{position:'absolute',top:'.9rem',right:'.9rem',background:'rgba(5,13,26,.75)',border:'1px solid rgba(30,120,200,.2)',color:'#7a9ab8',borderRadius:'50%',width:34,height:34,cursor:'pointer',fontSize:'.9rem',zIndex:5}}>✕</button>
               <div style={{position:'relative',zIndex:2}}>
-                <div style={{fontFamily:"'Cinzel',serif",fontSize:'.6rem',letterSpacing:'.11em',textTransform:'uppercase',color:'#00c8ff',marginBottom:'.35rem'}}>Session {consult.num} · 📅 {formatDate(consult.date)} {consult.lieu?`· ${consult.lieu}`:''}</div>
+                <div style={{fontFamily:"'Cinzel',serif",fontSize:'.6rem',letterSpacing:'.11em',textTransform:'uppercase',color:'#00c8ff',marginBottom:'.35rem'}}>Session {consult.num}{consult.date && ` · 📅 ${formatDate(consult.date)}`}{consult.lieu?` · ${consult.lieu}`:''}</div>
                 <div style={{fontFamily:"'Cinzel Decorative',serif",fontSize:'1.5rem',fontWeight:700,color:'#fff'}}>{consult.titre}</div>
               </div>
             </div>
@@ -369,7 +370,7 @@ export default function JournauxPage() {
                   <div style={{fontFamily:"'Cinzel',serif",fontSize:'.68rem',letterSpacing:'.13em',textTransform:'uppercase',color:'#00c8ff',marginBottom:'.6rem',display:'flex',alignItems:'center',gap:'.5rem'}}>📸 Galerie ({consult.photos.length}) <div style={{flex:1,height:1,background:'rgba(30,120,200,.2)'}} /></div>
                   <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap',marginBottom:'1.5rem'}}>
                     {consult.photos.map((ph,i) => (
-                      <div key={i} onClick={() => setLightbox(ph)} style={{width:90,height:90,borderRadius:8,overflow:'hidden',border:'1px solid rgba(30,120,200,.2)',cursor:'pointer'}}>
+                      <div key={i} onClick={() => setLightbox({ images: consult.photos!, index: i })} style={{width:90,height:90,borderRadius:8,overflow:'hidden',border:'1px solid rgba(30,120,200,.2)',cursor:'zoom-in'}}>
                         <img src={ph} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
                       </div>
                     ))}
@@ -404,12 +405,7 @@ export default function JournauxPage() {
         </div>
       )}
 
-      {/* ===== LIGHTBOX ===== */}
-      {lightbox && (
-        <div style={{...S.overlay, zIndex:300}} onClick={() => setLightbox(null)}>
-          <img src={lightbox} style={{maxWidth:'90vw',maxHeight:'90vh',objectFit:'contain',borderRadius:8,boxShadow:'0 20px 60px rgba(0,0,0,.6)'}} />
-        </div>
-      )}
+      {lightbox && <ImageLightbox images={lightbox.images} index={lightbox.index} onClose={() => setLightbox(null)} onIndexChange={i => setLightbox(lb => lb ? { ...lb, index: i } : lb)} />}
     </div>
   )
 }
