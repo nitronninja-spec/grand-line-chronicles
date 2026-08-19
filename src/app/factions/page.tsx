@@ -15,20 +15,30 @@ interface Faction {
   miro?: string
   rangs?: Rang[]
   couleur?: string
+  ordre_manuel?: number | null
 }
 
-interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; factions?: string[]; rang?: string; rangs?: { faction: string; rang: string }[]; prime?: string; condition_prime?: string }
+interface MemberRang { faction: string; rang: string; ordre?: number }
+interface Member { id: string; nom: string; emoji?: string; type: string; photos?: string[]; factions?: string[]; rang?: string; rangs?: MemberRang[]; prime?: string; condition_prime?: string }
 interface LinkedIle { id: string; nom: string; emoji?: string; factions?: string[] }
 
 function memberRangFor(m: Member, factionNom: string): string | undefined {
   if (m.rangs !== undefined) return m.rangs.find(r => r.faction === factionNom)?.rang
   return m.rang
 }
+function memberOrdreFor(m: Member, factionNom: string): number | undefined {
+  return m.rangs?.find(r => r.faction === factionNom)?.ordre
+}
 function parsePrime(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
-// Trie une liste de membres par prime décroissante ; les "Non recherché" ne comptent pas
-// comme une prime et sont toujours relégués en dernier.
-function sortMembersByPrime(items: Member[]) {
+// Trie une liste de membres (au sein d'un même rang) par ordre manuel s'il a été fixé par
+// glisser-déposer, sinon par prime décroissante ; les "Non recherché" ne comptent pas comme
+// une prime et sont toujours relégués en dernier — le classement manuel est un raffinement
+// secondaire, il ne fait jamais sortir un membre de son groupe de rang.
+function sortMembersInTier(items: Member[], factionNom: string) {
   return items.slice().sort((a, b) => {
+    const oa = memberOrdreFor(a, factionNom) ?? Infinity
+    const ob = memberOrdreFor(b, factionNom) ?? Infinity
+    if (oa !== ob) return oa - ob
     const na = a.condition_prime === 'non_recherche' ? 1 : 0
     const nb = b.condition_prime === 'non_recherche' ? 1 : 0
     if (na !== nb) return na - nb
@@ -46,13 +56,18 @@ function captainPrime(faction: Faction, members: Member[]): number {
   if (captains.length === 0) return 0
   return Math.max(...captains.map(m => parsePrime(m.prime)))
 }
+// Somme des primes de tous les membres — n'a pas vraiment de sens pour les factions de
+// type Peuple (ce ne sont pas des équipages de primes), donc on ne l'affiche pas pour elles.
+function totalPrime(faction: Faction, members: Member[]): number {
+  return members.filter(m => m.factions?.includes(faction.nom)).reduce((sum, m) => sum + parsePrime(m.prime), 0)
+}
 
 const TYPES = ['Pirates', 'Marine', 'Gouvernement', 'Révolutionnaire', 'Peuple', 'Neutre', 'Autre']
 const TYPE_COLORS: Record<string,string> = { Pirates:'#d4a017', Marine:'#00c8ff', Gouvernement:'#4488ff', 'Révolutionnaire':'#e03030', Peuple:'#40e0a0', Neutre:'#7a9ab8', Autre:'#a060ff' }
 const TYPE_EMOJI: Record<string,string> = { Pirates:'🏴‍☠️', Marine:'⚓', Gouvernement:'🏛️', 'Révolutionnaire':'✊', Peuple:'👥', Neutre:'🤝', Autre:'⚔️' }
 const MEMBER_TYPE_COLORS: Record<string, string> = { pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', 'allié': '#40d060' }
 const MEMBER_TYPE_LABELS: Record<string, string> = { pj: 'Joueurs', pnj: 'PNJ', antagoniste: 'Antagonistes', 'allié': 'Alliés' }
-type FactionSortMode = 'categorie' | 'az' | 'prime'
+type FactionSortMode = 'categorie' | 'az' | 'prime' | 'manuel'
 
 // Les factions sont réparties en 4 pages, chacune avec sa couleur dominante. Une faction
 // individuelle (surtout côté Pirates/Peuple, où il y a beaucoup d'équipages distincts) peut
@@ -79,6 +94,11 @@ function sortFactions(items: Faction[], mode: FactionSortMode, members: Member[]
   return items.slice().sort((a, b) => {
     if (mode === 'az') return a.nom.localeCompare(b.nom)
     if (mode === 'prime') return captainPrime(b, members) - captainPrime(a, members)
+    if (mode === 'manuel') {
+      const oa = a.ordre_manuel ?? Infinity
+      const ob = b.ordre_manuel ?? Infinity
+      return oa !== ob ? oa - ob : a.nom.localeCompare(b.nom)
+    }
     const ai = TYPES.indexOf(a.type || '')
     const bi = TYPES.indexOf(b.type || '')
     return ((ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)) || a.nom.localeCompare(b.nom)
@@ -109,6 +129,8 @@ export default function FactionsPage() {
   const [rosterFaction, setRosterFaction] = useState<Faction | null>(null)
   const [sortMode, setSortMode] = useState<FactionSortMode>('categorie')
   const [pageTab, setPageTab] = useState<PageTab>('pirates')
+  const [draggingMemberId, setDraggingMemberId] = useState<string | null>(null)
+  const [draggingFactionId, setDraggingFactionId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchList(); fetchMembers(); fetchIlesList()
@@ -130,31 +152,81 @@ export default function FactionsPage() {
   // doit donc mettre à jour toutes ces références, sinon les personnages/îles qui la
   // pointaient se retrouvent orphelins et on a l'impression qu'une "nouvelle" faction est
   // apparue à côté de l'ancienne.
-  async function cascadeFactionRename(oldNom: string, newNom: string) {
-    const [psFac, ilesFac, childFac, allPsRangs] = await Promise.all([
-      supabase.from('personnages').select('id, factions').contains('factions', [oldNom]),
+  // Séquentiel et un seul update par personnage concerné (au lieu de plusieurs appels
+  // parallèles par personne) : avec beaucoup de membres (ex. "Kami", "Equipage Enma
+  // Kurojin"), des dizaines de requêtes simultanées pouvaient faire échouer certaines
+  // d'entre elles silencieusement (aucune erreur n'était vérifiée), laissant une partie
+  // des membres sur l'ancien nom — ce qui donnait l'impression qu'un doublon de faction
+  // avait été créé. On vérifie maintenant chaque erreur et on prévient si besoin.
+  async function cascadeFactionRename(oldNom: string, newNom: string): Promise<number> {
+    const [psAll, ilesFac, childFac] = await Promise.all([
+      supabase.from('personnages').select('id, factions, equipage, rangs'),
       supabase.from('iles').select('id, factions').contains('factions', [oldNom]),
       supabase.from('factions').select('id, factions_parentes').contains('factions_parentes', [oldNom]),
-      supabase.from('personnages').select('id, rangs'),
     ])
-    await Promise.all([
-      ...(psFac.data || []).map((p: { id: string; factions?: string[] }) =>
-        supabase.from('personnages').update({ factions: (p.factions || []).map(n => n === oldNom ? newNom : n) }).eq('id', p.id)),
-      supabase.from('personnages').update({ equipage: newNom }).eq('equipage', oldNom),
-      ...(ilesFac.data || []).map((i: { id: string; factions?: string[] }) =>
-        supabase.from('iles').update({ factions: (i.factions || []).map(n => n === oldNom ? newNom : n) }).eq('id', i.id)),
-      ...(childFac.data || []).map((f: { id: string; factions_parentes?: string[] }) =>
-        supabase.from('factions').update({ factions_parentes: (f.factions_parentes || []).map(n => n === oldNom ? newNom : n) }).eq('id', f.id)),
-      ...(allPsRangs.data || [])
-        .filter((p: { id: string; rangs?: { faction: string; rang: string }[] }) => (p.rangs || []).some(r => r.faction === oldNom))
-        .map((p: { id: string; rangs?: { faction: string; rang: string }[] }) =>
-          supabase.from('personnages').update({ rangs: (p.rangs || []).map(r => r.faction === oldNom ? { ...r, faction: newNom } : r) }).eq('id', p.id)),
-    ])
+    let failures = 0
+    for (const p of (psAll.data || []) as { id: string; factions?: string[]; equipage?: string; rangs?: { faction: string; rang: string }[] }[]) {
+      const hasFaction = (p.factions || []).includes(oldNom)
+      const hasEquipage = p.equipage === oldNom
+      const hasRang = (p.rangs || []).some(r => r.faction === oldNom)
+      if (!hasFaction && !hasEquipage && !hasRang) continue
+      const patch: { factions?: string[]; equipage?: string; rangs?: { faction: string; rang: string }[] } = {}
+      if (hasFaction) patch.factions = (p.factions || []).map(n => n === oldNom ? newNom : n)
+      if (hasEquipage) patch.equipage = newNom
+      if (hasRang) patch.rangs = (p.rangs || []).map(r => r.faction === oldNom ? { ...r, faction: newNom } : r)
+      const { error } = await supabase.from('personnages').update(patch).eq('id', p.id)
+      if (error) failures++
+    }
+    for (const i of (ilesFac.data || []) as { id: string; factions?: string[] }[]) {
+      const { error } = await supabase.from('iles').update({ factions: (i.factions || []).map(n => n === oldNom ? newNom : n) }).eq('id', i.id)
+      if (error) failures++
+    }
+    for (const f of (childFac.data || []) as { id: string; factions_parentes?: string[] }[]) {
+      const { error } = await supabase.from('factions').update({ factions_parentes: (f.factions_parentes || []).map(n => n === oldNom ? newNom : n) }).eq('id', f.id)
+      if (error) failures++
+    }
+    return failures
   }
 
   async function fetchIlesList() {
     const { data } = await supabase.from('iles').select('id, nom, emoji, factions')
     setLinkedIles(data || [])
+  }
+
+  // Réordonne les membres d'un même rang par glisser-déposer : ne touche que l'entrée de
+  // rang correspondant à cette faction, sans jamais faire sortir un membre de son groupe.
+  async function reorderMembers(tierItems: Member[], factionNom: string, fromId: string, toId: string) {
+    const fromIdx = tierItems.findIndex(m => m.id === fromId)
+    const toIdx = tierItems.findIndex(m => m.id === toId)
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+    const reordered = tierItems.slice()
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    for (let i = 0; i < reordered.length; i++) {
+      const m = reordered[i]
+      const newRangs = (m.rangs || []).map(r => r.faction === factionNom ? { ...r, ordre: i } : r)
+      await supabase.from('personnages').update({ rangs: newRangs }).eq('id', m.id)
+    }
+    fetchMembers()
+  }
+
+  // Réordonne les factions de l'onglet courant par glisser-déposer (mode de tri "manuel").
+  async function reorderFactions(currentOrder: Faction[], fromId: string, toId: string) {
+    const fromIdx = currentOrder.findIndex(f => f.id === fromId)
+    const toIdx = currentOrder.findIndex(f => f.id === toId)
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+    const reordered = currentOrder.slice()
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    let failures = 0
+    for (let i = 0; i < reordered.length; i++) {
+      if (reordered[i].ordre_manuel !== i) {
+        const { error } = await supabase.from('factions').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        if (error) failures++
+      }
+    }
+    if (failures > 0) alert(`Le nouvel ordre n'a pas pu être enregistré (colonne "ordre_manuel" manquante ? voir supabase-migration-14.sql).`)
+    fetchList()
   }
 
   function openForm(f?: Faction) {
@@ -182,7 +254,10 @@ export default function FactionsPage() {
       ? await supabase.from('factions').update(data).eq('id', editId)
       : await supabase.from('factions').insert([data])
     if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
-    if (original && original.nom !== newNom) await cascadeFactionRename(original.nom, newNom)
+    if (original && original.nom !== newNom) {
+      const failures = await cascadeFactionRename(original.nom, newNom)
+      if (failures > 0) alert(`La faction a été renommée, mais ${failures} mise${failures>1?'s':''} à jour de membres/liens a échoué. Vérifie "${newNom}" et relance le renommage si besoin.`)
+    }
     setShowForm(false); fetchList(); fetchMembers(); fetchIlesList()
   }
 
@@ -246,7 +321,7 @@ export default function FactionsPage() {
           </div>
           <div style={{display:'flex',gap:'.3rem',alignItems:'center',flexWrap:'wrap'}}>
             <span style={{fontFamily:"'Cinzel',serif",fontSize:'.56rem',letterSpacing:'.08em',textTransform:'uppercase',color:'#4a6880'}}>Trier :</span>
-            {([['categorie','Par catégorie'],['az','A→Z'],['prime','Prime du capitaine']] as [FactionSortMode,string][]).map(([mode,label]) => (
+            {([['categorie','Par catégorie'],['az','A→Z'],['prime','Prime du capitaine'],['manuel','Manuel (glisser-déposer)']] as [FactionSortMode,string][]).map(([mode,label]) => (
               <button key={mode} onClick={() => setSortMode(mode)} style={{background:sortMode===mode?`${theme.color}22`:'#0a1829',border:`1px solid ${sortMode===mode?theme.color:'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .7rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.05em',color:sortMode===mode?theme.color:'#7a9ab8',cursor:'pointer',whiteSpace:'nowrap'}}>{label}</button>
             ))}
           </div>
@@ -276,15 +351,23 @@ export default function FactionsPage() {
               )
             }
             const cap = captainPrime(f, members)
+            const tot = f.type !== 'Peuple' ? totalPrime(f, members) : 0
+            const manual = sortMode === 'manuel'
             nodes.push(
-              <div key={f.id} style={{background:'#0d2040',border:`1px solid ${tc}33`,borderRadius:14,padding:'1.35rem',transition:'all .3s',display:'flex',flexDirection:'column',gap:'.6rem'}}
+              <div key={f.id} style={{background:'#0d2040',border:`1px solid ${manual && draggingFactionId===f.id ? '#d4a017' : tc+'33'}`,borderRadius:14,padding:'1.35rem',transition:'all .3s',display:'flex',flexDirection:'column',gap:'.6rem',opacity:manual && draggingFactionId===f.id?.4:1,cursor:manual?'grab':undefined}}
+                draggable={manual}
+                onDragStart={manual ? e => { setDraggingFactionId(f.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', f.id) } : undefined}
+                onDragEnd={() => setDraggingFactionId(null)}
+                onDragOver={manual ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+                onDrop={manual ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderFactions(filtered, fromId, f.id) } : undefined}
                 onMouseEnter={e=>{const el=e.currentTarget;el.style.transform='translateY(-5px)';el.style.borderColor=tc;el.style.boxShadow=`0 18px 36px rgba(0,0,0,.4)`}}
                 onMouseLeave={e=>{const el=e.currentTarget;el.style.transform='none';el.style.borderColor=`${tc}33`;el.style.boxShadow='none'}}>
                 <div style={{fontSize:'2.5rem',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.emoji||'⚔️'}</div>
                 <div style={{fontFamily:"'Cinzel',serif",fontSize:'1rem',fontWeight:700,color:'#e8eef5',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.nom}</div>
                 <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap'}}>
                   <div style={{display:'inline-block',background:`${tc}22`,color:tc,border:`1px solid ${tc}44`,borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.09em',textTransform:'uppercase',width:'fit-content'}}>{f.type}</div>
-                  {cap > 0 && <div style={{display:'inline-block',background:'rgba(240,192,64,.12)',color:'#f0c040',border:'1px solid rgba(240,192,64,.3)',borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.05em',width:'fit-content'}}>⭐ {cap.toLocaleString('fr-FR')}</div>}
+                  {cap > 0 && <div title="Prime du capitaine" style={{display:'inline-block',background:'rgba(240,192,64,.12)',color:'#f0c040',border:'1px solid rgba(240,192,64,.3)',borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.05em',width:'fit-content'}}>⭐ {cap.toLocaleString('fr-FR')}</div>}
+                  {tot > 0 && <div title="Prime totale de la faction" style={{display:'inline-block',background:'rgba(224,48,48,.12)',color:'#ff8080',border:'1px solid rgba(224,48,48,.3)',borderRadius:100,padding:'.15rem .65rem',fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.05em',width:'fit-content'}}>💰 {tot.toLocaleString('fr-FR')}</div>}
                 </div>
                 {f.description && <div style={{fontSize:'.88rem',color:'#7a9ab8',lineHeight:1.6,fontStyle:'italic',flex:1}}>{f.description}</div>}
                 <div style={{fontSize:'.78rem',color:'#4a6880'}}>👥 {members.filter(m => m.factions?.includes(f.nom)).length} membre(s)</div>
@@ -392,18 +475,19 @@ export default function FactionsPage() {
                 if (factionMembers.length === 0) return <div style={{textAlign:'center',padding:'2rem',color:'#4a6880',fontStyle:'italic',fontSize:'.88rem',marginBottom:'1.5rem'}}>Aucun membre pour l&apos;instant.</div>
                 const tc = TYPE_COLORS[rosterFaction.type||''] || '#a060ff'
                 const rangs = (rosterFaction.rangs || []).slice().sort((a,b) => a.ordre - b.ordre)
-                let groups: { label: string; color: string; items: Member[] }[]
+                let groups: { label: string; color: string; items: Member[]; draggable?: boolean }[]
                 if (rangs.length > 0) {
-                  groups = rangs.map(r => ({ label: r.nom, color: '#d4a017', items: sortMembersByPrime(factionMembers.filter(m => memberRangFor(m, rosterFaction.nom) === r.nom)) })).filter(g => g.items.length > 0)
+                  groups = rangs.map(r => ({ label: r.nom, color: '#d4a017', items: sortMembersInTier(factionMembers.filter(m => memberRangFor(m, rosterFaction.nom) === r.nom), rosterFaction.nom), draggable: true })).filter(g => g.items.length > 0)
                   const sansRang = factionMembers.filter(m => !rangs.some(r => r.nom === memberRangFor(m, rosterFaction.nom)))
-                  if (sansRang.length > 0) groups.push({ label: 'Sans rang', color: '#7a9ab8', items: sortMembersByPrime(sansRang) })
+                  if (sansRang.length > 0) groups.push({ label: 'Sans rang', color: '#7a9ab8', items: sortMembersInTier(sansRang, rosterFaction.nom) })
                 } else {
-                  groups = ['pj','pnj','allié','antagoniste'].map(t => ({ label: MEMBER_TYPE_LABELS[t], color: MEMBER_TYPE_COLORS[t], items: sortMembersByPrime(factionMembers.filter(m => m.type === t)) })).filter(g => g.items.length > 0)
+                  groups = ['pj','pnj','allié','antagoniste'].map(t => ({ label: MEMBER_TYPE_LABELS[t], color: MEMBER_TYPE_COLORS[t], items: sortMembersInTier(factionMembers.filter(m => m.type === t), rosterFaction.nom) })).filter(g => g.items.length > 0)
                 }
                 return (
                   <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:0,marginBottom:'2rem'}}>
                     <div style={{background:`${tc}22`,border:`1px solid ${tc}66`,borderRadius:12,padding:'.75rem 1.5rem',fontFamily:"'Cinzel',serif",fontSize:'.85rem',fontWeight:700,color:tc,marginBottom:'0'}}>{rosterFaction.emoji} {rosterFaction.nom}</div>
                     <div style={{width:2,height:20,background:'rgba(30,120,200,.3)'}} />
+                    {rangs.length > 0 && <div style={{fontSize:'.68rem',color:'#4a6880',fontStyle:'italic',marginBottom:'.5rem'}}>Glisse un membre pour ajuster son ordre au sein de son rang.</div>}
                     {groups.map((g, gi) => (
                       <div key={g.label} style={{width:'100%'}}>
                         <div style={{display:'flex',alignItems:'center',gap:'.5rem',margin:'0 0 .6rem'}}>
@@ -413,7 +497,13 @@ export default function FactionsPage() {
                         </div>
                         <div style={{display:'flex',gap:'.75rem',flexWrap:'wrap',justifyContent:'center',marginBottom: gi < groups.length-1 ? '1.25rem' : 0}}>
                           {g.items.map(m => (
-                            <a key={m.id} href={`/personnages?open=${m.id}`} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'.4rem',textDecoration:'none',width:84}}>
+                            <a key={m.id} href={`/personnages?open=${m.id}`} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'.4rem',textDecoration:'none',width:84,cursor:g.draggable?'grab':'pointer',opacity:draggingMemberId===m.id?.4:1}}
+                              draggable={!!g.draggable}
+                              onDragStart={g.draggable ? e => { setDraggingMemberId(m.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', m.id) } : undefined}
+                              onDragEnd={() => setDraggingMemberId(null)}
+                              onDragOver={g.draggable ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+                              onDrop={g.draggable ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderMembers(g.items, rosterFaction.nom, fromId, m.id) } : undefined}
+                            >
                               <div style={{width:56,height:56,borderRadius:'50%',overflow:'hidden',background:'#0d2040',border:`2px solid ${MEMBER_TYPE_COLORS[m.type]||'#7a9ab8'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1.6rem'}}>
                                 {m.photos && m.photos[0] ? <img src={m.photos[0]} style={{width:'100%',height:'100%',objectFit:'cover'}} /> : (m.emoji||'👤')}
                               </div>

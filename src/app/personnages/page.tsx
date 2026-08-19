@@ -35,7 +35,7 @@ interface Personnage {
 
 interface LinkedItem { id: string; nom: string; proprietaire?: string; type?: string }
 const FRUIT_TYPE_ORDER = ['Paramecia', 'Logia', 'Zoan', 'Mythical']
-interface FactionRef { id: string; nom: string; rangs?: { nom: string; ordre: number }[] }
+interface FactionRef { id: string; nom: string; type?: string; rangs?: { nom: string; ordre: number }[] }
 
 const TYPE_COLORS: Record<string, string> = {
   pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', allié: '#40d060', ambivalent: '#a060ff'
@@ -53,6 +53,26 @@ const TITRE_MONDIAL: Record<string, { label: string; icon: string; color: string
 }
 type SortMode = 'defaut' | 'prime' | 'groupe'
 function parsePrime(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
+
+// Même répartition en 4 pages à couleur dominante que sur la page Factions — mais avec un
+// effet beaucoup plus marqué : c'est ici toute la page qui prend la couleur, pas juste un
+// léger fond derrière la grille.
+type PageTab = 'pirates' | 'marine' | 'peuple' | 'sans_groupe'
+const PAGE_ORDER: PageTab[] = ['pirates', 'marine', 'peuple', 'sans_groupe']
+const PAGE_THEMES: Record<PageTab, { label: string; emoji: string; color: string }> = {
+  pirates: { label: 'Pirates', emoji: '🏴‍☠️', color: '#e03030' },
+  marine: { label: 'Marine · CP · Shichibukai · GM', emoji: '⚓', color: '#3f7fe0' },
+  peuple: { label: 'Peuple', emoji: '👥', color: '#40d060' },
+  sans_groupe: { label: 'Sans groupe', emoji: '✨', color: '#f0c040' },
+}
+function personnagePage(p: Personnage, factions: FactionRef[]): PageTab {
+  const primaryNom = p.equipage || (p.factions || [])[0]
+  const type = factions.find(f => f.nom === primaryNom)?.type
+  if (type === 'Pirates') return 'pirates'
+  if (type === 'Marine' || type === 'Gouvernement') return 'marine'
+  if (type === 'Peuple') return 'peuple'
+  return 'sans_groupe'
+}
 function personnageRangs(p: Personnage): PersonnageRang[] {
   if (p.rangs !== undefined) return p.rangs
   if (p.rang) return [{ faction: p.equipage || '', rang: p.rang }]
@@ -86,7 +106,11 @@ function buildGroupSections(items: Personnage[], factions: FactionRef[]): GroupS
     })
   })
   const names = Array.from(map.keys())
-  const hasEmperor = (g: string) => (map.get(g) || []).some(p => p.titre_mondial === 'Empereur')
+  // Un Empereur fait remonter son groupe en haut de la liste — sauf pour les groupes de type
+  // Peuple, qui restent classés normalement avec les autres peuples (ex: "D" ne doit pas
+  // sauter en tête juste parce qu'il compte un Empereur parmi ses membres).
+  const isPeuple = (g: string) => factions.find(f => f.nom === g)?.type === 'Peuple'
+  const hasEmperor = (g: string) => !isPeuple(g) && (map.get(g) || []).some(p => p.titre_mondial === 'Empereur')
   names.sort((a, b) => {
     if (a === '' || b === '') return a === '' ? 1 : (b === '' ? -1 : 0)
     const ea = hasEmperor(a) ? 0 : 1
@@ -143,6 +167,7 @@ export default function PersonnagesPage() {
   const [cristaux, setCristaux] = useState<LinkedItem[]>([])
   const [factionFilter, setFactionFilter] = useState('')
   const [sortMode, setSortMode] = useState<SortMode>('groupe')
+  const [pageTab, setPageTab] = useState<PageTab>('pirates')
   const [form, setForm] = useState<Partial<Personnage>>({
     nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant',
     prime: '0', condition_prime: 'mort_ou_vif', titre_mondial: '', origine: '', ile: '', factions: [], rangs: [], equipage: '', fruit: 'Aucun',
@@ -184,7 +209,7 @@ export default function PersonnagesPage() {
   }
 
   async function fetchFactions() {
-    const { data } = await supabase.from('factions').select('id, nom, rangs').order('nom', { ascending: true })
+    const { data } = await supabase.from('factions').select('id, nom, type, rangs').order('nom', { ascending: true })
     setFactions(data || [])
   }
 
@@ -202,12 +227,12 @@ export default function PersonnagesPage() {
   }
 
   useEffect(() => {
-    let l = list
+    let l = list.filter(p => personnagePage(p, factions) === pageTab)
     if (search) l = l.filter(p => p.nom.toLowerCase().includes(search.toLowerCase()) || (p.surnom||'').toLowerCase().includes(search.toLowerCase()))
     if (typeFilter) l = l.filter(p => p.type === typeFilter)
     if (factionFilter) l = l.filter(p => p.factions?.includes(factionFilter))
     setFiltered(l)
-  }, [list, search, typeFilter, factionFilter])
+  }, [list, search, typeFilter, factionFilter, pageTab, factions])
 
   async function fetchList() {
     const { data } = await supabase.from('personnages').select('*').order('created_at', { ascending: false })
@@ -319,6 +344,7 @@ export default function PersonnagesPage() {
     ['Îles', '/iles'], ['Factions', '/factions'], ['Journaux', '/journaux'],
     ['Lore', '/lore'], ['Dashboard', '/dashboard']
   ]
+  const pageTheme = PAGE_THEMES[pageTab]
 
   function renderCard(p: Personnage, key: string) {
     const isMort = p.statut === 'mort'
@@ -393,7 +419,7 @@ export default function PersonnagesPage() {
   }
 
   return (
-    <div style={S.page}>
+    <div style={{ ...S.page, background: `radial-gradient(ellipse 1800px 1100px at 50% -5%, ${pageTheme.color}4d, ${pageTheme.color}1a 45%, #050d1a 78%)` }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,400;1,400&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -419,13 +445,27 @@ export default function PersonnagesPage() {
       {/* HEADER */}
       <div style={S.header}>
         <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.6rem', letterSpacing:'.1em', color:'#7a9ab8', textTransform:'uppercase', marginBottom:'.4rem' }}>
-          🏴‍☠️ › Personnages
+          🏴‍☠️ › Personnages › {pageTheme.label}
         </div>
-        <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', gap:'1rem', flexWrap:'wrap', marginBottom:'1.5rem' }}>
-          <h1 style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'clamp(1.8rem,3.5vw,3rem)', fontWeight:700, background:'linear-gradient(135deg,#fff,#f0c040)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
+        <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', gap:'1rem', flexWrap:'wrap', marginBottom:'1.25rem' }}>
+          <h1 style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'clamp(1.8rem,3.5vw,3rem)', fontWeight:700, background:`linear-gradient(135deg,#fff,${pageTheme.color})`, WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
             Personnages
           </h1>
           <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter un personnage</button>
+        </div>
+
+        {/* Menu à 4 pages */}
+        <div style={{ display:'flex', gap:'.5rem', flexWrap:'wrap', marginBottom:'1.25rem' }}>
+          {PAGE_ORDER.map(tab => {
+            const t = PAGE_THEMES[tab]
+            const active = pageTab === tab
+            const count = list.filter(p => personnagePage(p, factions) === tab).length
+            return (
+              <button key={tab} onClick={() => setPageTab(tab)} style={{ background: active ? `${t.color}30` : '#0a1829', border:`1.5px solid ${active ? t.color : 'rgba(30,120,200,.2)'}`, borderRadius:12, padding:'.6rem 1.1rem', fontFamily:"'Cinzel',serif", fontSize:'.68rem', letterSpacing:'.05em', textTransform:'uppercase', color: active ? t.color : '#7a9ab8', cursor:'pointer', display:'flex', alignItems:'center', gap:'.5rem', boxShadow: active ? `0 0 20px ${t.color}55` : 'none', whiteSpace:'nowrap' }}>
+                {t.emoji} {t.label} <span style={{ opacity:.7 }}>({count})</span>
+              </button>
+            )
+          })}
         </div>
 
         {/* Search */}
