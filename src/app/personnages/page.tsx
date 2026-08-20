@@ -34,6 +34,7 @@ interface Personnage {
   gdoc?: string
   miro?: string
   fav?: boolean
+  ordre_manuel?: number | null
 }
 
 interface LinkedItem { id: string; nom: string; proprietaire?: string; type?: string }
@@ -72,7 +73,7 @@ const FALLBACK_TITRE_MONDIAL: CategoryDetail[] = [
   { value: 'Shichibukai Déchu', label: 'Shichibukai Déchu', emoji: '🗡️', color: '#6a4a7a' },
   { value: 'Dragon Céleste', label: 'Dragon Céleste', emoji: '🫧', color: '#f0c040' },
 ]
-type SortMode = 'defaut' | 'prime' | 'groupe'
+type SortMode = 'defaut' | 'prime' | 'groupe' | 'manuel'
 function parsePrime(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
 
 // Même répartition en 4 pages à couleur dominante que sur la page Factions — mais avec un
@@ -141,6 +142,7 @@ function personnageRangs(p: Personnage): PersonnageRang[] {
 }
 function sortPersonnages(items: Personnage[], mode: SortMode) {
   if (mode === 'prime') return items.slice().sort((a, b) => parsePrime(b.prime) - parsePrime(a.prime))
+  if (mode === 'manuel') return items.slice().sort((a, b) => (a.ordre_manuel ?? Infinity) - (b.ordre_manuel ?? Infinity))
   return items
 }
 function getRangOrdreForFaction(p: Personnage, factionNom: string, factions: FactionRef[]): number {
@@ -236,6 +238,7 @@ export default function PersonnagesPage() {
   const [cristaux, setCristaux] = useState<LinkedItem[]>([])
   const [factionFilter, setFactionFilter] = useState('')
   const [sortMode, setSortMode] = useState<SortMode>('groupe')
+  const [draggingId, setDraggingId] = useState<string | null>(null)
   const [pageTab, setPageTab] = useState<PageTab>('pirates')
   const [form, setForm] = useState<Partial<Personnage>>({
     nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant',
@@ -320,6 +323,27 @@ export default function PersonnagesPage() {
   async function fetchList() {
     const { data } = await supabase.from('personnages').select('*').order('created_at', { ascending: false })
     setList(data || [])
+  }
+
+  // Réordonne par glisser-déposer, au niveau de la page — un 3e axe d'ordre manuel en plus
+  // des deux déjà existants (par faction via reorderMembers, par rang au sein d'une faction),
+  // même patron que reorderFactions (factions/page.tsx).
+  async function reorderItems(currentOrder: Personnage[], fromId: string, toId: string) {
+    const fromIdx = currentOrder.findIndex(x => x.id === fromId)
+    const toIdx = currentOrder.findIndex(x => x.id === toId)
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+    const reordered = currentOrder.slice()
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    let failures = 0
+    for (let i = 0; i < reordered.length; i++) {
+      if (reordered[i].ordre_manuel !== i) {
+        const { error } = await supabase.from('personnages').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        if (error) failures++
+      }
+    }
+    if (failures > 0) alert(`Le nouvel ordre n'a pas pu être enregistré entièrement.`)
+    fetchList()
   }
 
   function openForm(p?: Personnage) {
@@ -433,8 +457,14 @@ export default function PersonnagesPage() {
     const isMort = p.statut === 'mort'
     const tm = p.titre_mondial ? TITRE_MONDIAL[p.titre_mondial] : null
     const linkedDespa = despas.find(d => d.proprietaire === p.nom)
+    const manual = sortMode === 'manuel'
     return (
-      <div key={key} style={{ ...S.card, ...(tm ? { border:`2px solid ${tm.color}`, boxShadow:`0 0 22px ${tm.color}33` } : {}) }}
+      <div key={key} style={{ ...S.card, ...(tm ? { border:`2px solid ${tm.color}`, boxShadow:`0 0 22px ${tm.color}33` } : {}), ...(manual && draggingId===p.id ? { opacity:.4, borderColor:'#00c8ff' } : {}), cursor: manual ? 'grab' : undefined }}
+        draggable={manual}
+        onDragStart={manual ? e => { setDraggingId(p.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', p.id) } : undefined}
+        onDragEnd={() => setDraggingId(null)}
+        onDragOver={manual ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+        onDrop={manual ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderItems(sortPersonnages(filtered, sortMode), fromId, p.id) } : undefined}
         onMouseEnter={e => { const el = e.currentTarget; el.style.transform='translateY(-7px)'; if(!tm) el.style.borderColor='#d4a017'; el.style.boxShadow= tm ? `0 0 30px ${tm.color}55` : '0 20px 40px rgba(0,0,0,.5)' }}
         onMouseLeave={e => { const el = e.currentTarget; el.style.transform='none'; if(!tm) el.style.borderColor='rgba(30,120,200,.2)'; el.style.boxShadow= tm ? `0 0 22px ${tm.color}33` : 'none' }}
       >
@@ -564,7 +594,7 @@ export default function PersonnagesPage() {
         {/* Tri */}
         <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap', alignItems:'center', marginBottom:'.75rem' }}>
           <span style={{ fontFamily:"'Cinzel',serif", fontSize:'.56rem', letterSpacing:'.1em', textTransform:'uppercase', color:'#4a6880', marginRight:'.2rem' }}>Trier :</span>
-          {([['defaut','Par défaut'],['prime','Par prime'],['groupe','Par groupe']] as [SortMode,string][]).map(([m,l]) => (
+          {([['defaut','Par défaut'],['prime','Par prime'],['groupe','Par groupe'],['manuel','Manuel (glisser-déposer)']] as [SortMode,string][]).map(([m,l]) => (
             <button key={m} onClick={() => setSortMode(m)} style={{ background: sortMode===m ? 'rgba(0,200,255,.15)' : '#0a1829', border: `1px solid ${sortMode===m ? '#00c8ff' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.3rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.07em', textTransform:'uppercase', color: sortMode===m ? '#00c8ff' : '#7a9ab8', cursor:'pointer' }}>{l}</button>
           ))}
         </div>
