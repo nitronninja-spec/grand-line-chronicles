@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
+import { fetchCategoryFull, fetchCategoryDetails, CategoryFull, CategoryDetail } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageLightbox from '@/components/ImageLightbox'
 
@@ -70,12 +71,23 @@ function totalPrime(faction: Faction, members: Member[]): number {
   return members.filter(m => belongsToFaction(m, faction.nom)).reduce((sum, m) => sum + parsePrime(m.prime), 0)
 }
 
-const TYPES = ['Pirates', 'Marine', 'Gouvernement', 'Révolutionnaire', 'Peuple', 'Neutre', 'Autre']
-const TYPE_COLORS: Record<string,string> = { Pirates:'#d4a017', Marine:'#00c8ff', Gouvernement:'#4488ff', 'Révolutionnaire':'#e03030', Peuple:'#40e0a0', Neutre:'#7a9ab8', Autre:'#a060ff' }
-const TYPE_EMOJI: Record<string,string> = { Pirates:'🏴‍☠️', Marine:'⚓', Gouvernement:'🏛️', 'Révolutionnaire':'✊', Peuple:'👥', Neutre:'🤝', Autre:'⚔️' }
-const MEMBER_TYPE_COLORS: Record<string, string> = { pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', 'allié': '#40d060', ambivalent: '#a060ff', inconnu: '#7a9ab8' }
-const MEMBER_TYPE_LABELS: Record<string, string> = { pj: 'Joueurs', pnj: 'PNJ', antagoniste: 'Antagonistes', 'allié': 'Alliés', ambivalent: 'Ambivalents', inconnu: 'Inconnus' }
-const MEMBER_TYPES = ['pj', 'pnj', 'allié', 'antagoniste', 'ambivalent', 'inconnu']
+const FALLBACK_TYPE_FULL: CategoryFull[] = [
+  { value: 'Pirates', emoji: '🏴‍☠️', color: '#d4a017', cap: null },
+  { value: 'Marine', emoji: '⚓', color: '#00c8ff', cap: null },
+  { value: 'Gouvernement', emoji: '🏛️', color: '#4488ff', cap: null },
+  { value: 'Révolutionnaire', emoji: '✊', color: '#e03030', cap: null },
+  { value: 'Peuple', emoji: '👥', color: '#40e0a0', cap: null },
+  { value: 'Neutre', emoji: '🤝', color: '#7a9ab8', cap: null },
+  { value: 'Autre', emoji: '⚔️', color: '#a060ff', cap: null },
+]
+const FALLBACK_MEMBER_TYPE_DETAILS: CategoryDetail[] = [
+  { value: 'pj', label: 'Joueurs', emoji: '', color: '#00c8ff' },
+  { value: 'pnj', label: 'PNJ', emoji: '', color: '#d4a017' },
+  { value: 'allié', label: 'Alliés', emoji: '', color: '#40d060' },
+  { value: 'antagoniste', label: 'Antagonistes', emoji: '', color: '#e03030' },
+  { value: 'ambivalent', label: 'Ambivalents', emoji: '', color: '#a060ff' },
+  { value: 'inconnu', label: 'Inconnus', emoji: '', color: '#7a9ab8' },
+]
 type FactionSortMode = 'categorie' | 'az' | 'prime' | 'manuel'
 
 // Les factions sont réparties en 4 pages, chacune avec sa couleur dominante. Une faction
@@ -99,7 +111,7 @@ function factionColor(f: Faction): string {
   return f.couleur || PAGE_THEMES[factionPage(f)].color
 }
 
-function sortFactions(items: Faction[], mode: FactionSortMode, members: Member[]) {
+function sortFactions(items: Faction[], mode: FactionSortMode, members: Member[], types: string[]) {
   return items.slice().sort((a, b) => {
     if (mode === 'az') return a.nom.localeCompare(b.nom)
     if (mode === 'prime') return captainPrime(b, members) - captainPrime(a, members)
@@ -108,8 +120,8 @@ function sortFactions(items: Faction[], mode: FactionSortMode, members: Member[]
       const ob = b.ordre_manuel ?? Infinity
       return oa !== ob ? oa - ob : a.nom.localeCompare(b.nom)
     }
-    const ai = TYPES.indexOf(a.type || '')
-    const bi = TYPES.indexOf(b.type || '')
+    const ai = types.indexOf(a.type || '')
+    const bi = types.indexOf(b.type || '')
     return ((ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)) || a.nom.localeCompare(b.nom)
   })
 }
@@ -145,9 +157,20 @@ export default function FactionsPage() {
   const [dragOverUpload, setDragOverUpload] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
+  const [typeFull, setTypeFull] = useState<CategoryFull[]>(FALLBACK_TYPE_FULL)
+  const [memberTypeDetails, setMemberTypeDetails] = useState<CategoryDetail[]>(FALLBACK_MEMBER_TYPE_DETAILS)
+
+  const TYPES = typeFull.map(t => t.value)
+  const TYPE_COLORS: Record<string, string> = Object.fromEntries(typeFull.map(t => [t.value, t.color]))
+  const TYPE_EMOJI: Record<string, string> = Object.fromEntries(typeFull.map(t => [t.value, t.emoji]))
+  const MEMBER_TYPES = memberTypeDetails.map(t => t.value)
+  const MEMBER_TYPE_COLORS: Record<string, string> = Object.fromEntries(memberTypeDetails.map(t => [t.value, t.color]))
+  const MEMBER_TYPE_LABELS: Record<string, string> = Object.fromEntries(memberTypeDetails.map(t => [t.value, t.label]))
 
   useEffect(() => {
     fetchList(); fetchMembers(); fetchIlesList()
+    fetchCategoryFull('factions', 'type', FALLBACK_TYPE_FULL).then(setTypeFull)
+    fetchCategoryDetails('personnages', 'type', FALLBACK_MEMBER_TYPE_DETAILS).then(setMemberTypeDetails)
     const q = new URLSearchParams(window.location.search).get('q')
     if (q) setSearch(q)
   }, [])
@@ -318,7 +341,7 @@ export default function FactionsPage() {
   let filtered = list.filter(f => factionPage(f) === pageTab)
   if (typeFilter) filtered = filtered.filter(f => f.type === typeFilter)
   if (search) filtered = filtered.filter(f => f.nom.toLowerCase().includes(search.toLowerCase()))
-  filtered = sortFactions(filtered, sortMode, members)
+  filtered = sortFactions(filtered, sortMode, members, TYPES)
   const typesInTab = TYPES.filter(t => list.some(f => factionPage(f) === pageTab && f.type === t))
 
   return (
