@@ -12,16 +12,17 @@ export async function fetchCategoryValues(contentType: string, dimension: string
   return data.map(d => d.value as string)
 }
 
-export interface CategoryFull { value: string; emoji: string; color: string }
+export interface CategoryFull { value: string; emoji: string; color: string; cap: number | null }
 
-// Variante brute (emoji et couleur séparés, non combinés dans un libellé) pour les pages qui
-// construisent leurs propres dictionnaires Record<valeur, couleur|emoji> (ex: Journaux).
+// Variante brute (emoji, couleur et plafond séparés, non combinés dans un libellé) pour les
+// pages qui construisent leurs propres dictionnaires Record<valeur, couleur|emoji|plafond>
+// (ex: Journaux, Lames).
 export async function fetchCategoryFull(contentType: string, dimension: string, fallback: CategoryFull[]): Promise<CategoryFull[]> {
-  const { data, error } = await supabase.from('categories').select('value,emoji,color')
+  const { data, error } = await supabase.from('categories').select('value,emoji,color,cap')
     .eq('content_type', contentType).eq('dimension', dimension).eq('actif', true)
     .order('ordre', { ascending: true })
   if (error || !data || data.length === 0) return fallback
-  return data.map(d => ({ value: d.value as string, emoji: (d.emoji as string) || '', color: (d.color as string) || '#7a9ab8' }))
+  return data.map(d => ({ value: d.value as string, emoji: (d.emoji as string) || '', color: (d.color as string) || '#7a9ab8', cap: (d.cap as number) ?? null }))
 }
 
 export interface CategoryRow { id: string; label: string; color: string }

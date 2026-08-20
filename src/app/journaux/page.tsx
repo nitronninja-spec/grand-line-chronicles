@@ -34,8 +34,8 @@ function sortJournaux(items: Journal[], mode: SortMode) {
 
 // Deux publications distinctes de l'univers — jamais fusionnées avec le concept de "session".
 const FALLBACK_CATEGORY_FULL: CategoryFull[] = [
-  { value: 'Le Hérault', emoji: '📰', color: '#d4a017' },
-  { value: 'Marine News', emoji: '⚓', color: '#3f7fe0' },
+  { value: 'Le Hérault', emoji: '📰', color: '#d4a017', cap: null },
+  { value: 'Marine News', emoji: '⚓', color: '#3f7fe0', cap: null },
 ]
 const TAB_ALL = ''
 

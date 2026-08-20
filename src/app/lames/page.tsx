@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
+import { fetchCategoryFull, CategoryFull } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import PersonnageSearchSelect from '@/components/PersonnageSearchSelect'
 import ImageLightbox from '@/components/ImageLightbox'
@@ -26,19 +27,14 @@ interface Lame {
   photos?: string[]
 }
 
-const RANGS = ['Grande Lame', 'Lame de qualité', 'Lame de Grande qualité', 'Lame de 1er Ordre', 'Lame Légendaire']
-const RANG_MAX: Record<string, number> = {
-  'Grande Lame': 200, 'Lame de qualité': 100, 'Lame de Grande qualité': 50, 'Lame de 1er Ordre': 20, 'Lame Légendaire': 10
-}
-const RANG_COLORS: Record<string, string> = {
-  'Grande Lame': '#5a6a78', 'Lame de qualité': '#7a9ab8', 'Lame de Grande qualité': '#00c8ff', 'Lame de 1er Ordre': '#a060ff', 'Lame Légendaire': '#d4a017'
-}
-const RANG_EMOJI: Record<string, string> = {
-  'Grande Lame': '🔪', 'Lame de qualité': '🗡️', 'Lame de Grande qualité': '⚔️', 'Lame de 1er Ordre': '🔱', 'Lame Légendaire': '✨'
-}
+const FALLBACK_RANG_FULL: CategoryFull[] = [
+  { value: 'Grande Lame', emoji: '🔪', color: '#5a6a78', cap: 200 },
+  { value: 'Lame de qualité', emoji: '🗡️', color: '#7a9ab8', cap: 100 },
+  { value: 'Lame de Grande qualité', emoji: '⚔️', color: '#00c8ff', cap: 50 },
+  { value: 'Lame de 1er Ordre', emoji: '🔱', color: '#a060ff', cap: 20 },
+  { value: 'Lame Légendaire', emoji: '✨', color: '#d4a017', cap: 10 },
+]
 const TAB_ALL = ''
-const LAME_TABS = [TAB_ALL, ...RANGS]
-function rangLabel(r: string) { return RANG_MAX[r] ? `[${RANG_MAX[r]}] ${r}` : r }
 function parsePrix(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
 
 const S = {
@@ -70,14 +66,23 @@ export default function LamesPage() {
   const [dragOver, setDragOver] = useState(false)
   const [personnages, setPersonnages] = useState<{ id: string; nom: string }[]>([])
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
+  const [rangFull, setRangFull] = useState<CategoryFull[]>(FALLBACK_RANG_FULL)
   const [form, setForm] = useState<Partial<Lame>>({
     nom: '', jp: '', rang: 'Lame de qualité', puissance: 5, emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', prix: '', particularites: '', color: '#7a9ab8', photos: []
   })
+
+  const RANGS = rangFull.map(r => r.value)
+  const RANG_MAX: Record<string, number> = Object.fromEntries(rangFull.filter(r => r.cap != null).map(r => [r.value, r.cap as number]))
+  const RANG_COLORS: Record<string, string> = Object.fromEntries(rangFull.map(r => [r.value, r.color]))
+  const RANG_EMOJI: Record<string, string> = Object.fromEntries(rangFull.map(r => [r.value, r.emoji]))
+  const LAME_TABS = [TAB_ALL, ...RANGS]
+  function rangLabel(r: string) { return RANG_MAX[r] ? `[${RANG_MAX[r]}] ${r}` : r }
 
   const personnageMap = new Map(personnages.map(p => [p.nom, p.id]))
 
   useEffect(() => {
     fetchList(); fetchPersonnages()
+    fetchCategoryFull('lames', 'rang', FALLBACK_RANG_FULL).then(setRangFull)
     const q = new URLSearchParams(window.location.search).get('q')
     if (q) setSearch(q)
   }, [])
