@@ -12,6 +12,18 @@ export async function fetchCategoryValues(contentType: string, dimension: string
   return data.map(d => d.value as string)
 }
 
+export interface CategoryFull { value: string; emoji: string; color: string }
+
+// Variante brute (emoji et couleur séparés, non combinés dans un libellé) pour les pages qui
+// construisent leurs propres dictionnaires Record<valeur, couleur|emoji> (ex: Journaux).
+export async function fetchCategoryFull(contentType: string, dimension: string, fallback: CategoryFull[]): Promise<CategoryFull[]> {
+  const { data, error } = await supabase.from('categories').select('value,emoji,color')
+    .eq('content_type', contentType).eq('dimension', dimension).eq('actif', true)
+    .order('ordre', { ascending: true })
+  if (error || !data || data.length === 0) return fallback
+  return data.map(d => ({ value: d.value as string, emoji: (d.emoji as string) || '', color: (d.color as string) || '#7a9ab8' }))
+}
+
 export interface CategoryRow { id: string; label: string; color: string }
 
 // Variante pour les pages qui affichent aussi la couleur par catégorie (ex: Lore) — même

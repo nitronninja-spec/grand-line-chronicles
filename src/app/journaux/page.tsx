@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
+import { fetchCategoryFull, CategoryFull } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageLightbox from '@/components/ImageLightbox'
 
@@ -32,11 +33,11 @@ function sortJournaux(items: Journal[], mode: SortMode) {
 }
 
 // Deux publications distinctes de l'univers — jamais fusionnées avec le concept de "session".
-const CATEGORIES = ['Le Hérault', 'Marine News']
-const CATEGORY_COLORS: Record<string, string> = { 'Le Hérault': '#d4a017', 'Marine News': '#3f7fe0' }
-const CATEGORY_EMOJI: Record<string, string> = { 'Le Hérault': '📰', 'Marine News': '⚓' }
+const FALLBACK_CATEGORY_FULL: CategoryFull[] = [
+  { value: 'Le Hérault', emoji: '📰', color: '#d4a017' },
+  { value: 'Marine News', emoji: '⚓', color: '#3f7fe0' },
+]
 const TAB_ALL = ''
-const JOURNAL_TABS = [TAB_ALL, ...CATEGORIES]
 
 const S = {
   page: { minHeight:'100vh', background:'#050d1a', color:'#e8eef5', fontFamily:"'Crimson Pro',Georgia,serif", paddingTop:60 } as React.CSSProperties,
@@ -68,6 +69,12 @@ export default function JournauxPage() {
   const [form, setForm] = useState<Partial<Journal>>({ num:1, titre:'', date:'', lieu:'', resume:'', photos:[], pdfs:[], personnages:[], gdoc:'', miro:'', categorie:'Le Hérault' })
   const [consult, setConsult] = useState<Journal | null>(null)
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
+  const [categoryFull, setCategoryFull] = useState<CategoryFull[]>(FALLBACK_CATEGORY_FULL)
+
+  const CATEGORIES = categoryFull.map(c => c.value)
+  const CATEGORY_COLORS: Record<string, string> = Object.fromEntries(categoryFull.map(c => [c.value, c.color]))
+  const CATEGORY_EMOJI: Record<string, string> = Object.fromEntries(categoryFull.map(c => [c.value, c.emoji]))
+  const JOURNAL_TABS = [TAB_ALL, ...CATEGORIES]
 
   let filtered = journaux
   if (pageTab !== TAB_ALL) filtered = filtered.filter(j => j.categorie === pageTab)
@@ -78,6 +85,7 @@ export default function JournauxPage() {
 
   useEffect(() => {
     fetchJournaux(); fetchPersonnages()
+    fetchCategoryFull('journaux', 'categorie', FALLBACK_CATEGORY_FULL).then(setCategoryFull)
     const q = new URLSearchParams(window.location.search).get('q')
     if (q) setSearch(q)
   }, [])
