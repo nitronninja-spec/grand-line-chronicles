@@ -442,7 +442,7 @@ export default function PersonnagesPage() {
         <div style={{ width:'100%', height:195, overflow:'hidden', background:'linear-gradient(135deg,#0a1829,#050d1a)', position:'relative', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'5rem', cursor:'pointer' }}
           onClick={() => { setSelected(p); setShowView(true) }}>
           {p.photos && p.photos[0]
-            ? <img src={p.photos[0]} alt={p.nom} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top', display:'block', position:'absolute', inset:0, filter: isMort ? 'grayscale(1)' : 'none', opacity: isMort ? .5 : 1 }} />
+            ? <img loading="lazy" src={p.photos[0]} alt={p.nom} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top', display:'block', position:'absolute', inset:0, filter: isMort ? 'grayscale(1)' : 'none', opacity: isMort ? .5 : 1 }} />
             : null}
           <span style={{ position:'relative', zIndex:1, opacity: p.photos && p.photos[0] ? 0 : 1 }}>{p.emoji || '👤'}</span>
           {isMort && <span style={{ position:'absolute', fontSize:'3.2rem', opacity:.85, zIndex:2, filter:'drop-shadow(0 2px 6px rgba(0,0,0,.8))' }}>☠️</span>}
@@ -638,7 +638,7 @@ export default function PersonnagesPage() {
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'.6rem', marginBottom:'.65rem' }}>
                   {(form.photos || []).map((src, i) => (
                     <div key={`existing-${i}`} style={{ aspectRatio:'1', borderRadius:8, overflow:'hidden', position:'relative', border: i===0?'2px solid #d4a017':'2px solid rgba(30,120,200,.2)' }}>
-                      <img src={src} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block', opacity: cropLoading===i?.4:1 }} />
+                      <img loading="lazy" src={src} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block', opacity: cropLoading===i?.4:1 }} />
                       {cropLoading===i && <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.2rem' }}>⏳</div>}
                       <button onClick={() => cropExistingPhoto(i)} title="Recadrer"
                         style={{ position:'absolute', top:2, left:2, background:'rgba(0,200,255,.85)', border:'none', borderRadius:'50%', width:20, height:20, color:'#050d1a', fontSize:'.6rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✂️</button>
@@ -649,7 +649,7 @@ export default function PersonnagesPage() {
                   ))}
                   {photoPreviews.map((src, i) => (
                     <div key={`new-${i}`} style={{ aspectRatio:'1', borderRadius:8, overflow:'hidden', position:'relative', border: ((form.photos||[]).length===0 && i===0) ? '2px solid #d4a017' : '2px solid rgba(30,120,200,.2)' }}>
-                      <img src={src} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+                      <img loading="lazy" src={src} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
                       <button onClick={() => setCropTarget({ kind:'new', index:i, file:photoFiles[i] })} title="Recadrer"
                         style={{ position:'absolute', top:2, left:2, background:'rgba(0,200,255,.85)', border:'none', borderRadius:'50%', width:20, height:20, color:'#050d1a', fontSize:'.6rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✂️</button>
                       <button onClick={() => removeNewPhoto(i)}
@@ -901,7 +901,7 @@ export default function PersonnagesPage() {
             {/* Header avec photo */}
             <div style={{ position:'relative', height:280, background:'linear-gradient(135deg,#071828,#0d2440)', borderRadius:'18px 18px 0 0', overflow:'hidden', display:'flex', alignItems:'flex-end', padding:'1.75rem' }}>
               {selected.photos && selected.photos[0] && (
-                <img src={selected.photos[0]} style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'top center', opacity:.42, display:'block', filter: selected.statut==='mort' ? 'grayscale(1)' : 'none' }} />
+                <img loading="lazy" src={selected.photos[0]} style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'top center', opacity:.42, display:'block', filter: selected.statut==='mort' ? 'grayscale(1)' : 'none' }} />
               )}
               {(!selected.photos || !selected.photos[0]) && (
                 <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13rem', opacity:.07, filter:'blur(2px)' }}>{selected.emoji}</div>
@@ -916,7 +916,7 @@ export default function PersonnagesPage() {
               <div style={{ position:'relative', zIndex:2, display:'flex', gap:'1.25rem', alignItems:'flex-end' }}>
                 <div style={{ width:86, height:86, borderRadius:14, background:'#0d2040', border:'2px solid #d4a017', overflow:'hidden', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'2.8rem', cursor: selected.photos && selected.photos[0] ? 'zoom-in' : 'default' }}
                   onClick={() => { if (selected.photos && selected.photos[0]) setLightbox({ images: selected.photos, index: 0 }) }}>
-                  {selected.photos && selected.photos[0] ? <img src={selected.photos[0]} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top', display:'block', filter: selected.statut==='mort' ? 'grayscale(1)' : 'none' }} /> : selected.emoji}
+                  {selected.photos && selected.photos[0] ? <img loading="lazy" src={selected.photos[0]} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top', display:'block', filter: selected.statut==='mort' ? 'grayscale(1)' : 'none' }} /> : selected.emoji}
                 </div>
                 <div>
                   <div style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'1.85rem', fontWeight:700, color:'#fff', textDecoration: selected.statut==='mort' ? 'line-through' : 'none', marginBottom:'.15rem' }}>{selected.statut==='mort' && '☠️ '}{selected.nom}</div>
@@ -969,7 +969,7 @@ export default function PersonnagesPage() {
                     {selected.photos.map((ph,i) => (
                       <div key={i} style={{ width:70, height:70, borderRadius:8, overflow:'hidden', border:`2px solid ${i===0?'#d4a017':'rgba(30,120,200,.2)'}`, cursor:'zoom-in' }}
                         onClick={() => setLightbox({ images: selected.photos!, index: i })}>
-                        <img src={ph} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+                        <img loading="lazy" src={ph} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
                       </div>
                     ))}
                   </div>

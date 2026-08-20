@@ -245,7 +245,7 @@ export default function IlesPage() {
         {/* Banner */}
         <div style={{height:opts.nested?90:155,background:isDestroyed?'linear-gradient(135deg,#1a0d0d,#2a1010)':'linear-gradient(135deg,#071828,#0d2440)',position:'relative',display:'flex',alignItems:'center',justifyContent:'center',fontSize:opts.nested?'2.4rem':'4.5rem',overflow:'hidden',filter:isDestroyed?'grayscale(.8)':'none',cursor:(ile.photos&&ile.photos[0])?'zoom-in':'default'}}
           onClick={e => { if (ile.photos && ile.photos.length > 0) { e.stopPropagation(); setLightbox({ images: ile.photos, index: 0 }) } }}>
-          {ile.photos && ile.photos[0] && <img src={ile.photos[0]} alt={ile.nom} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',display:'block',opacity:.55}} />}
+          {ile.photos && ile.photos[0] && <img loading="lazy" src={ile.photos[0]} alt={ile.nom} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',display:'block',opacity:.55}} />}
           <span style={{position:'relative',zIndex:1,opacity:isDestroyed?.5:1}}>{isDestroyed?'💀':(ile.emoji||'🏝️')}</span>
           {ile.photos && ile.photos.length > 1 && <span style={{position:'absolute',bottom:6,left:6,background:'rgba(5,13,26,.75)',border:'1px solid rgba(255,255,255,.2)',borderRadius:100,padding:'.12rem .45rem',fontSize:'.58rem',fontFamily:"'Cinzel',serif",color:'#e8eef5',zIndex:1}}>📷 {ile.photos.length}</span>}
           <div style={{position:'absolute',top:'.6rem',right:'.6rem',display:'flex',gap:'.35rem'}}>
@@ -415,7 +415,7 @@ export default function IlesPage() {
                   {(form.photos || []).map((src, i) => (
                     <div key={`existing-${i}`} style={{aspectRatio:'1',borderRadius:8,overflow:'hidden',position:'relative',border:i===0?'2px solid #d4a017':'2px solid rgba(30,120,200,.2)',cursor:'zoom-in'}}
                       onClick={() => setLightbox({ images: (form.photos || []), index: i })}>
-                      <img src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      <img loading="lazy" src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
                       <button onClick={e => { e.stopPropagation(); removeExistingPhoto(i) }}
                         style={{position:'absolute',top:2,right:2,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:20,height:20,color:'#fff',fontSize:'.6rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
                       {i===0 && <div style={{position:'absolute',bottom:2,left:2,background:'rgba(212,160,23,.85)',borderRadius:4,fontFamily:"'Cinzel',serif",fontSize:'.45rem',color:'#050d1a',padding:'1px 4px'}}>Principale</div>}
@@ -423,7 +423,7 @@ export default function IlesPage() {
                   ))}
                   {photoPreviews.map((src, i) => (
                     <div key={`new-${i}`} style={{aspectRatio:'1',borderRadius:8,overflow:'hidden',position:'relative',border:((form.photos||[]).length===0 && i===0)?'2px solid #d4a017':'2px solid rgba(30,120,200,.2)'}}>
-                      <img src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      <img loading="lazy" src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
                       <button onClick={() => removeNewPhoto(i)}
                         style={{position:'absolute',top:2,right:2,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:20,height:20,color:'#fff',fontSize:'.6rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
                     </div>

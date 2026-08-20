@@ -428,7 +428,7 @@ export default function FactionsPage() {
                 {f.photos && f.photos[0] ? (
                   <div style={{display:'flex',alignItems:'center',gap:'.75rem'}}>
                     <div style={{width:56,height:56,borderRadius:10,overflow:'hidden',cursor:'zoom-in',flexShrink:0,border:`1px solid ${tc}44`,position:'relative'}} onClick={e => { e.stopPropagation(); setLightbox({ images: f.photos!, index: 0 }) }}>
-                      <img src={f.photos[0]} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      <img loading="lazy" src={f.photos[0]} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
                       {f.photos.length > 1 && <span style={{position:'absolute',bottom:1,right:1,background:'rgba(5,13,26,.8)',color:'#e8eef5',fontSize:'.45rem',fontFamily:"'Cinzel',serif",borderRadius:3,padding:'0 3px'}}>+{f.photos.length - 1}</span>}
                     </div>
                     <div style={{fontSize:'1.6rem',cursor:'pointer'}} onClick={() => setRosterFaction(f)}>{f.emoji||'⚔️'}</div>
@@ -475,7 +475,7 @@ export default function FactionsPage() {
                   {(form.photos || []).map((src, i) => (
                     <div key={`existing-${i}`} style={{aspectRatio:'1',borderRadius:8,overflow:'hidden',position:'relative',border:i===0?'2px solid #d4a017':'2px solid rgba(30,120,200,.2)',cursor:'zoom-in'}}
                       onClick={() => setLightbox({ images: (form.photos || []), index: i })}>
-                      <img src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      <img loading="lazy" src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
                       <button onClick={e => { e.stopPropagation(); removeExistingPhoto(i) }}
                         style={{position:'absolute',top:2,right:2,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:20,height:20,color:'#fff',fontSize:'.6rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
                       {i===0 && <div style={{position:'absolute',bottom:2,left:2,background:'rgba(212,160,23,.85)',borderRadius:4,fontFamily:"'Cinzel',serif",fontSize:'.45rem',color:'#050d1a',padding:'1px 4px'}}>Principale</div>}
@@ -483,7 +483,7 @@ export default function FactionsPage() {
                   ))}
                   {photoPreviews.map((src, i) => (
                     <div key={`new-${i}`} style={{aspectRatio:'1',borderRadius:8,overflow:'hidden',position:'relative',border:((form.photos||[]).length===0 && i===0)?'2px solid #d4a017':'2px solid rgba(30,120,200,.2)'}}>
-                      <img src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      <img loading="lazy" src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
                       <button onClick={() => removeNewPhoto(i)}
                         style={{position:'absolute',top:2,right:2,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:20,height:20,color:'#fff',fontSize:'.6rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
                     </div>
@@ -625,7 +625,7 @@ export default function FactionsPage() {
                               onDrop={g.draggable ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderMembers(g.items, rosterFaction.nom, fromId, m.id) } : undefined}
                             >
                               <div style={{width:56,height:56,borderRadius:'50%',overflow:'hidden',background:'#0d2040',border:`2px solid ${MEMBER_TYPE_COLORS[m.type]||'#7a9ab8'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1.6rem'}}>
-                                {m.photos && m.photos[0] ? <img src={m.photos[0]} style={{width:'100%',height:'100%',objectFit:'cover'}} /> : (m.emoji||'👤')}
+                                {m.photos && m.photos[0] ? <img loading="lazy" src={m.photos[0]} style={{width:'100%',height:'100%',objectFit:'cover'}} /> : (m.emoji||'👤')}
                               </div>
                               <span style={{fontSize:'.68rem',color:'#c8d8e8',textAlign:'center',lineHeight:1.2}}>{m.nom}</span>
                             </a>

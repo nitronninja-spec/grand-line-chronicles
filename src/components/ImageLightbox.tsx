@@ -36,7 +36,7 @@ export default function ImageLightbox({ images, index, onClose, onIndexChange }:
           style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.2)', color: '#e8eef5', borderRadius: '50%', width: 46, height: 46, cursor: 'pointer', fontSize: '1.3rem', zIndex: 2 }}>‹</button>
       )}
 
-      <img src={images[index]} alt="" style={{ maxWidth: '100%', maxHeight: '86vh', objectFit: 'contain', borderRadius: 10, boxShadow: '0 30px 80px rgba(0,0,0,.7)' }} onClick={e => e.stopPropagation()} />
+      <img loading="lazy" src={images[index]} alt="" style={{ maxWidth: '100%', maxHeight: '86vh', objectFit: 'contain', borderRadius: 10, boxShadow: '0 30px 80px rgba(0,0,0,.7)' }} onClick={e => e.stopPropagation()} />
 
       {images.length > 1 && (
         <button onClick={() => onIndexChange((index + 1) % images.length)}

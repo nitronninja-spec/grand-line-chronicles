@@ -137,7 +137,7 @@ export default function ImageCropper({ file, onCancel, onCropped }: Props) {
         onDoubleClick={resetView}
       >
         {imgUrl && (
-          <img src={imgUrl} onLoad={handleImgLoad} draggable={false} alt="Aperçu à recadrer"
+          <img loading="lazy" src={imgUrl} onLoad={handleImgLoad} draggable={false} alt="Aperçu à recadrer"
             style={{ position: 'absolute', left: vw / 2 - dispW / 2 + pan.x, top: vh / 2 - dispH / 2 + pan.y, width: dispW, height: dispH, userSelect: 'none', pointerEvents: 'none' }} />
         )}
         {/* Grille des tiers */}

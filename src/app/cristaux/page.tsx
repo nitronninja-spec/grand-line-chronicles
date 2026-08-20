@@ -209,7 +209,7 @@ export default function CristauxPage() {
               <div style={{ height: 3, background: ec }} />
               <div style={{ width: '100%', height: 160, background: 'linear-gradient(135deg,#0a1829,#050d1a)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem', overflow: 'hidden', cursor: (c.photos && c.photos[0]) ? 'zoom-in' : 'default' }}
                 onClick={() => { if (c.photos && c.photos.length > 0) setLightbox({ images: c.photos, index: 0 }) }}>
-                {c.photos && c.photos[0] && <img src={c.photos[0]} alt={c.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
+                {c.photos && c.photos[0] && <img loading="lazy" src={c.photos[0]} alt={c.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
                 <span style={{ position: 'relative', zIndex: 1, opacity: c.photos && c.photos[0] ? 0.3 : 1 }}>{c.emoji || '💎'}</span>
                 {c.photos && c.photos.length > 1 && <span style={{ position: 'absolute', bottom: 8, right: 8, background: 'rgba(5,13,26,.75)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 100, padding: '.15rem .5rem', fontSize: '.62rem', fontFamily: "'Cinzel',serif", color: '#e8eef5' }}>📷 {c.photos.length}</span>}
               </div>
@@ -259,7 +259,7 @@ export default function CristauxPage() {
                   {(form.photos || []).map((src, i) => (
                     <div key={`existing-${i}`} style={{ aspectRatio: '1', borderRadius: 8, overflow: 'hidden', position: 'relative', border: i === 0 ? '2px solid #d4a017' : '2px solid rgba(30,120,200,.2)', cursor: 'zoom-in' }}
                       onClick={() => setLightbox({ images: (form.photos || []), index: i })}>
-                      <img src={src} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      <img loading="lazy" src={src} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                       <button onClick={e => { e.stopPropagation(); removeExistingPhoto(i) }}
                         style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(224,48,48,.85)', border: 'none', borderRadius: '50%', width: 20, height: 20, color: '#fff', fontSize: '.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                       {i === 0 && <div style={{ position: 'absolute', bottom: 2, left: 2, background: 'rgba(212,160,23,.85)', borderRadius: 4, fontFamily: "'Cinzel',serif", fontSize: '.45rem', color: '#050d1a', padding: '1px 4px' }}>Principale</div>}
@@ -267,7 +267,7 @@ export default function CristauxPage() {
                   ))}
                   {photoPreviews.map((src, i) => (
                     <div key={`new-${i}`} style={{ aspectRatio: '1', borderRadius: 8, overflow: 'hidden', position: 'relative', border: ((form.photos || []).length === 0 && i === 0) ? '2px solid #d4a017' : '2px solid rgba(30,120,200,.2)' }}>
-                      <img src={src} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      <img loading="lazy" src={src} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                       <button onClick={() => removeNewPhoto(i)}
                         style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(224,48,48,.85)', border: 'none', borderRadius: '50%', width: 20, height: 20, color: '#fff', fontSize: '.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                     </div>

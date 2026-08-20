@@ -73,7 +73,7 @@ function PhotoGrid({ photos, previews, onRemoveExisting, onRemoveNew, onAdd, dra
       {photos.map((src, i) => (
         <div key={`existing-${i}`} style={{ aspectRatio: '1', borderRadius: 8, overflow: 'hidden', position: 'relative', border: i === 0 ? `2px solid ${THEME}` : '2px solid rgba(30,120,200,.2)', cursor: 'zoom-in' }}
           onClick={() => openLightbox(i)}>
-          <img src={src} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          <img loading="lazy" src={src} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           <button onClick={e => { e.stopPropagation(); onRemoveExisting(i) }}
             style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(224,48,48,.85)', border: 'none', borderRadius: '50%', width: 20, height: 20, color: '#fff', fontSize: '.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
           {i === 0 && <div style={{ position: 'absolute', bottom: 2, left: 2, background: `${THEME}dd`, borderRadius: 4, fontFamily: "'Cinzel',serif", fontSize: '.45rem', color: '#050d1a', padding: '1px 4px' }}>Couverture</div>}
@@ -81,7 +81,7 @@ function PhotoGrid({ photos, previews, onRemoveExisting, onRemoveNew, onAdd, dra
       ))}
       {previews.map((src, i) => (
         <div key={`new-${i}`} style={{ aspectRatio: '1', borderRadius: 8, overflow: 'hidden', position: 'relative', border: (photos.length === 0 && i === 0) ? `2px solid ${THEME}` : '2px solid rgba(30,120,200,.2)' }}>
-          <img src={src} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          <img loading="lazy" src={src} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           <button onClick={() => onRemoveNew(i)}
             style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(224,48,48,.85)', border: 'none', borderRadius: '50%', width: 20, height: 20, color: '#fff', fontSize: '.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
         </div>
@@ -282,7 +282,7 @@ export default function PdsPage() {
               <div style={{ height: 3, background: tc }} />
               <div style={{ width: '100%', height: 160, background: 'linear-gradient(135deg,#0a1829,#050d1a)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem', overflow: 'hidden', cursor: (p.photos && p.photos[0]) ? 'zoom-in' : 'default' }}
                 onClick={() => { if (p.photos && p.photos.length > 0) setLightbox({ images: p.photos, index: 0 }) }}>
-                {p.photos && p.photos[0] && <img src={p.photos[0]} alt={p.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
+                {p.photos && p.photos[0] && <img loading="lazy" src={p.photos[0]} alt={p.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
                 {p.emoji && <span style={{ position: 'relative', zIndex: 1, opacity: p.photos && p.photos[0] ? 0.3 : 1 }}>{p.emoji}</span>}
                 {p.photos && p.photos.length > 1 && <span style={{ position: 'absolute', bottom: 8, right: 8, background: 'rgba(5,13,26,.75)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 100, padding: '.15rem .5rem', fontSize: '.62rem', fontFamily: "'Cinzel',serif", color: '#e8eef5' }}>📷 {p.photos.length}</span>}
               </div>
@@ -317,7 +317,7 @@ export default function PdsPage() {
                     {p.sujet_photos && p.sujet_photos[0] ? (
                       <div style={{ width: 52, height: 52, borderRadius: 8, overflow: 'hidden', flexShrink: 0, border: `2px solid ${tc}`, cursor: 'zoom-in', position: 'relative' }}
                         onClick={e => { e.stopPropagation(); setLightbox({ images: p.sujet_photos!, index: 0 }) }}>
-                        <img src={p.sujet_photos[0]} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        <img loading="lazy" src={p.sujet_photos[0]} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                         {p.sujet_photos.length > 1 && <span style={{ position: 'absolute', bottom: 0, right: 0, background: 'rgba(5,13,26,.85)', color: '#e8eef5', fontSize: '.42rem', fontFamily: "'Cinzel',serif", padding: '0 3px' }}>+{p.sujet_photos.length - 1}</span>}
                       </div>
                     ) : (

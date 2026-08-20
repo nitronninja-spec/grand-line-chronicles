@@ -178,7 +178,7 @@ export default function JournauxPage() {
         {j.photos && j.photos.length > 0 ? (
           <div style={{width:'100%',height:150,position:'relative',overflow:'hidden',cursor:'zoom-in'}}
             onClick={e => { e.stopPropagation(); setLightbox({ images: j.photos!, index: 0 }) }}>
-            <img src={j.photos[0]} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+            <img loading="lazy" src={j.photos[0]} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
             <div style={{position:'absolute',inset:0,background:'linear-gradient(to top,#0d2040,transparent 55%)'}} />
             {j.photos.length > 1 && <span style={{position:'absolute',bottom:8,right:10,background:'rgba(5,13,26,.75)',border:'1px solid rgba(255,255,255,.2)',borderRadius:100,padding:'.15rem .55rem',fontSize:'.62rem',fontFamily:"'Cinzel',serif",color:'#e8eef5'}}>📷 {j.photos.length}</span>}
           </div>
@@ -337,13 +337,13 @@ export default function JournauxPage() {
                 <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'.6rem',marginBottom:'.65rem'}}>
                   {(form.photos || []).map((src,i) => (
                     <div key={`existing-${i}`} style={{aspectRatio:'1',borderRadius:8,overflow:'hidden',position:'relative',border:'1px solid rgba(30,120,200,.2)'}}>
-                      <img src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      <img loading="lazy" src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
                       <button onClick={() => setForm(f => ({...f, photos: (f.photos||[]).filter((_,j) => j!==i)}))} style={{position:'absolute',top:2,right:2,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:20,height:20,color:'#fff',fontSize:'.6rem',cursor:'pointer'}}>✕</button>
                     </div>
                   ))}
                   {photoPreviews.map((src,i) => (
                     <div key={`new-${i}`} style={{aspectRatio:'1',borderRadius:8,overflow:'hidden',position:'relative',border:'2px solid #d4a017'}}>
-                      <img src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      <img loading="lazy" src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
                       <button onClick={() => { setPhotoPreviews(p => p.filter((_,j) => j!==i)); setPhotoFiles(p => p.filter((_,j) => j!==i)) }} style={{position:'absolute',top:2,right:2,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:20,height:20,color:'#fff',fontSize:'.6rem',cursor:'pointer'}}>✕</button>
                     </div>
                   ))}
@@ -398,7 +398,7 @@ export default function JournauxPage() {
         <div style={S.overlay} onClick={e=>{if(e.target===e.currentTarget)setConsult(null)}}>
           <div style={{...S.modal, maxWidth:760}}>
             <div style={{position:'relative',height:consult.photos && consult.photos[0] ? 220 : 100,background:'linear-gradient(135deg,#071828,#0d2440)',borderRadius:'18px 18px 0 0',overflow:'hidden',display:'flex',alignItems:'flex-end',padding:'1.5rem'}}>
-              {consult.photos && consult.photos[0] && <img src={consult.photos[0]} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:.5,display:'block'}} />}
+              {consult.photos && consult.photos[0] && <img loading="lazy" src={consult.photos[0]} style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:.5,display:'block'}} />}
               <div style={{position:'absolute',bottom:0,left:0,right:0,height:90,background:'linear-gradient(to top,#0a1829,transparent)'}} />
               <button onClick={()=>setConsult(null)} style={{position:'absolute',top:'.9rem',right:'.9rem',background:'rgba(5,13,26,.75)',border:'1px solid rgba(30,120,200,.2)',color:'#7a9ab8',borderRadius:'50%',width:34,height:34,cursor:'pointer',fontSize:'.9rem',zIndex:5}}>✕</button>
               <div style={{position:'relative',zIndex:2}}>
@@ -429,7 +429,7 @@ export default function JournauxPage() {
                   <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap',marginBottom:'1.5rem'}}>
                     {consult.photos.map((ph,i) => (
                       <div key={i} onClick={() => setLightbox({ images: consult.photos!, index: i })} style={{width:90,height:90,borderRadius:8,overflow:'hidden',border:'1px solid rgba(30,120,200,.2)',cursor:'zoom-in'}}>
-                        <img src={ph} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                        <img loading="lazy" src={ph} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
                       </div>
                     ))}
                   </div>
