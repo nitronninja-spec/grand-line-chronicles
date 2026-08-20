@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
+import { fetchCategoryFull, fetchCategoryDetails, CategoryFull, CategoryDetail } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageCropper from '@/components/ImageCropper'
 import ImageLightbox from '@/components/ImageLightbox'
@@ -39,24 +40,38 @@ interface LinkedItem { id: string; nom: string; proprietaire?: string; type?: st
 const FRUIT_TYPE_ORDER = ['Paramecia', 'Logia', 'Zoan', 'Mythical']
 interface FactionRef { id: string; nom: string; type?: string; rangs?: { nom: string; ordre: number }[] }
 
-const TYPE_COLORS: Record<string, string> = {
-  pj: '#00c8ff', pnj: '#d4a017', antagoniste: '#e03030', allié: '#40d060', ambivalent: '#a060ff', inconnu: '#7a9ab8'
+const FALLBACK_TYPE_FULL: CategoryFull[] = [
+  { value: 'pj', emoji: '', color: '#00c8ff', cap: null },
+  { value: 'pnj', emoji: '', color: '#d4a017', cap: null },
+  { value: 'antagoniste', emoji: '', color: '#e03030', cap: null },
+  { value: 'allié', emoji: '', color: '#40d060', cap: null },
+  { value: 'ambivalent', emoji: '', color: '#a060ff', cap: null },
+  { value: 'inconnu', emoji: '', color: '#7a9ab8', cap: null },
+]
+// Libellés du formulaire (au singulier, par personnage) — volontairement distincts des
+// libellés pluriels utilisés côté Factions pour les en-têtes d'organigramme (même valeurs,
+// deux textes différents selon le contexte), donc non pilotés par categories.label.
+const TYPE_SELECT_LABELS: Record<string, string> = {
+  pj: 'PJ — Joueur', pnj: 'PNJ', antagoniste: 'Antagoniste', allié: 'Allié', ambivalent: 'Ambivalent', inconnu: 'Inconnu'
 }
-const STATUT_COLORS: Record<string, string> = {
-  vivant: '#40d060', mort: '#ff6060', disparu: '#ffb060', inconnu: '#a0a0c0'
-}
+const FALLBACK_STATUT_DETAILS: CategoryDetail[] = [
+  { value: 'vivant', label: 'Vivant', emoji: '', color: '#40d060' },
+  { value: 'mort', label: 'Mort', emoji: '', color: '#ff6060' },
+  { value: 'disparu', label: 'Disparu', emoji: '', color: '#ffb060' },
+  { value: 'inconnu', label: 'Inconnu', emoji: '', color: '#a0a0c0' },
+]
 const CONDITION_PRIME_LABELS: Record<string, string> = {
   mort_ou_vif: 'Mort ou Vif', mort_uniquement: 'Mort uniquement', vif_uniquement: 'Vif uniquement', non_recherche: 'Non recherché'
 }
-const TITRE_MONDIAL: Record<string, { label: string; icon: string; color: string }> = {
-  'Empereur': { label: 'Empereur', icon: '👑', color: '#e03030' },
-  'Empereur Déchu': { label: 'Empereur Déchu', icon: '👑', color: '#8a5a3a' },
-  'Amiral': { label: 'Amiral', icon: '⚓', color: '#00c8ff' },
-  'Amiral Déchu': { label: 'Amiral Déchu', icon: '⚓', color: '#5a7a8a' },
-  'Shichibukai': { label: 'Shichibukai', icon: '🗡️', color: '#a060ff' },
-  'Shichibukai Déchu': { label: 'Shichibukai Déchu', icon: '🗡️', color: '#6a4a7a' },
-  'Dragon Céleste': { label: 'Dragon Céleste', icon: '🫧', color: '#f0c040' },
-}
+const FALLBACK_TITRE_MONDIAL: CategoryDetail[] = [
+  { value: 'Empereur', label: 'Empereur', emoji: '👑', color: '#e03030' },
+  { value: 'Empereur Déchu', label: 'Empereur Déchu', emoji: '👑', color: '#8a5a3a' },
+  { value: 'Amiral', label: 'Amiral', emoji: '⚓', color: '#00c8ff' },
+  { value: 'Amiral Déchu', label: 'Amiral Déchu', emoji: '⚓', color: '#5a7a8a' },
+  { value: 'Shichibukai', label: 'Shichibukai', emoji: '🗡️', color: '#a060ff' },
+  { value: 'Shichibukai Déchu', label: 'Shichibukai Déchu', emoji: '🗡️', color: '#6a4a7a' },
+  { value: 'Dragon Céleste', label: 'Dragon Céleste', emoji: '🫧', color: '#f0c040' },
+]
 type SortMode = 'defaut' | 'prime' | 'groupe'
 function parsePrime(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
 
@@ -234,9 +249,22 @@ export default function PersonnagesPage() {
   const [cropLoading, setCropLoading] = useState<number | null>(null)
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const autoOpenedRef = useRef(false)
+  const [typeFull, setTypeFull] = useState<CategoryFull[]>(FALLBACK_TYPE_FULL)
+  const [statutDetails, setStatutDetails] = useState<CategoryDetail[]>(FALLBACK_STATUT_DETAILS)
+  const [titreMondialDetails, setTitreMondialDetails] = useState<CategoryDetail[]>(FALLBACK_TITRE_MONDIAL)
+
+  const types = typeFull.map(t => t.value)
+  const TYPE_COLORS: Record<string, string> = Object.fromEntries(typeFull.map(t => [t.value, t.color]))
+  const STATUT_COLORS: Record<string, string> = Object.fromEntries(statutDetails.map(s => [s.value, s.color]))
+  const TITRE_MONDIAL: Record<string, { label: string; icon: string; color: string }> = Object.fromEntries(
+    titreMondialDetails.map(t => [t.value, { label: t.label, icon: t.emoji, color: t.color }])
+  )
 
   useEffect(() => {
     fetchList(); fetchIles(); fetchFactions(); fetchLinkedCatalogs()
+    fetchCategoryFull('personnages', 'type', FALLBACK_TYPE_FULL).then(setTypeFull)
+    fetchCategoryDetails('personnages', 'statut', FALLBACK_STATUT_DETAILS).then(setStatutDetails)
+    fetchCategoryDetails('personnages', 'titre_mondial', FALLBACK_TITRE_MONDIAL).then(setTitreMondialDetails)
     const params = new URLSearchParams(window.location.search)
     const q = params.get('q')
     if (q) setSearch(q)
@@ -543,7 +571,7 @@ export default function PersonnagesPage() {
 
         {/* Chips */}
         <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap', marginBottom:'.75rem' }}>
-          {['', 'pj', 'pnj', 'antagoniste', 'allié', 'ambivalent', 'inconnu'].map(t => (
+          {['', ...types].map(t => (
             <button key={t} onClick={() => setTypeFilter(t)} style={{ background: typeFilter===t ? 'rgba(212,160,23,.15)' : '#0a1829', border: `1px solid ${typeFilter===t ? '#d4a017' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.3rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.07em', textTransform:'uppercase', color: typeFilter===t ? '#f0c040' : '#7a9ab8', cursor:'pointer' }}>
               {t || 'Tous'}
             </button>
@@ -660,21 +688,13 @@ export default function PersonnagesPage() {
                 <div>
                   <label style={S.label}>Type</label>
                   <select style={{ ...S.input }} value={form.type||'pnj'} onChange={e => setForm(f => ({...f, type:e.target.value}))}>
-                    <option value="pj">PJ — Joueur</option>
-                    <option value="pnj">PNJ</option>
-                    <option value="antagoniste">Antagoniste</option>
-                    <option value="allié">Allié</option>
-                    <option value="ambivalent">Ambivalent</option>
-                    <option value="inconnu">Inconnu</option>
+                    {types.map(t => <option key={t} value={t}>{TYPE_SELECT_LABELS[t] || t}</option>)}
                   </select>
                 </div>
                 <div>
                   <label style={S.label}>Statut</label>
                   <select style={{ ...S.input }} value={form.statut||'vivant'} onChange={e => setForm(f => ({...f, statut:e.target.value}))}>
-                    <option value="vivant">Vivant</option>
-                    <option value="mort">Mort</option>
-                    <option value="disparu">Disparu</option>
-                    <option value="inconnu">Inconnu</option>
+                    {statutDetails.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 </div>
               </div>
@@ -706,13 +726,7 @@ export default function PersonnagesPage() {
                   <label style={S.label}>👑 Titre mondial</label>
                   <select style={{ ...S.input }} value={form.titre_mondial||''} onChange={e => setForm(f => ({...f, titre_mondial:e.target.value}))}>
                     <option value="">— Aucun —</option>
-                    <option value="Empereur">👑 Empereur (Yonko)</option>
-                    <option value="Empereur Déchu">👑 Empereur Déchu</option>
-                    <option value="Amiral">⚓ Amiral</option>
-                    <option value="Amiral Déchu">⚓ Amiral Déchu</option>
-                    <option value="Shichibukai">🗡️ Shichibukai</option>
-                    <option value="Shichibukai Déchu">🗡️ Shichibukai Déchu</option>
-                    <option value="Dragon Céleste">🫧 Dragon Céleste</option>
+                    {titreMondialDetails.map(t => <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}
                   </select>
                 </div>
               </div>
