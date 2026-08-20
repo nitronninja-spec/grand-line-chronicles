@@ -26,6 +26,7 @@ interface Fruit {
   statut?: string
   prix?: string
   faiblesses?: string
+  ordre_manuel?: number | null
 }
 
 const TAB_ALL = ''
@@ -257,6 +258,8 @@ export default function FruitsPage() {
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [typeDetails, setTypeDetails] = useState<CategoryDetail[]>(FALLBACK_TYPE_DETAILS)
   const [statutDetails, setStatutDetails] = useState<CategoryDetail[]>(FALLBACK_STATUT_DETAILS)
+  const [sortMode, setSortMode] = useState<'defaut' | 'manuel'>('defaut')
+  const [draggingId, setDraggingId] = useState<string | null>(null)
   const [form, setForm] = useState<Partial<Fruit>>({
     nom: '', jp: '', type: 'Paramecia', puissance: 5,
     emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', color: '#40d060', faiblesses: '', photos: [], statut: '', prix: ''
@@ -283,13 +286,34 @@ export default function FruitsPage() {
   useEffect(() => {
     let l = pageTab === TAB_ALL ? list : list.filter(f => f.type === pageTab)
     if (search) l = l.filter(f => f.nom.toLowerCase().includes(search.toLowerCase()))
-    l = l.slice().sort((a, b) => parsePrix(b.prix) - parsePrix(a.prix))
+    l = l.slice().sort((a, b) => sortMode === 'manuel'
+      ? (a.ordre_manuel ?? Infinity) - (b.ordre_manuel ?? Infinity) || parsePrix(b.prix) - parsePrix(a.prix)
+      : parsePrix(b.prix) - parsePrix(a.prix))
     setFiltered(l)
-  }, [list, pageTab, search])
+  }, [list, pageTab, search, sortMode])
 
   async function fetchList() {
     const { data } = await supabase.from('fruits').select('*').order('created_at', { ascending: false })
     setList(data || [])
+  }
+
+  // Réordonne par glisser-déposer — même patron que reorderFactions (factions/page.tsx).
+  async function reorderItems(currentOrder: Fruit[], fromId: string, toId: string) {
+    const fromIdx = currentOrder.findIndex(x => x.id === fromId)
+    const toIdx = currentOrder.findIndex(x => x.id === toId)
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+    const reordered = currentOrder.slice()
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    let failures = 0
+    for (let i = 0; i < reordered.length; i++) {
+      if (reordered[i].ordre_manuel !== i) {
+        const { error } = await supabase.from('fruits').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        if (error) failures++
+      }
+    }
+    if (failures > 0) alert(`Le nouvel ordre n'a pas pu être enregistré entièrement.`)
+    fetchList()
   }
 
   async function fetchPersonnages() {
@@ -412,7 +436,15 @@ export default function FruitsPage() {
             <input style={{ ...S.input, paddingLeft: '2.5rem' }} placeholder="Rechercher un fruit..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
         </div>
-        <div style={{ fontSize: '.72rem', color: '#4a6880', fontStyle: 'italic', marginBottom: '1.25rem' }}>Classés par prix décroissant.</div>
+        <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '.5rem' }}>
+          <span style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.08em', textTransform: 'uppercase', color: '#4a6880', marginRight: '.2rem' }}>Tri :</span>
+          {(['defaut', 'manuel'] as const).map(m => (
+            <button key={m} onClick={() => setSortMode(m)} style={{ background: sortMode === m ? 'rgba(0,200,255,.15)' : '#0a1829', border: `1px solid ${sortMode === m ? '#00c8ff' : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: sortMode === m ? '#00c8ff' : '#7a9ab8', cursor: 'pointer' }}>
+              {m === 'defaut' ? 'Par prix' : 'Manuel (glisser-déposer)'}
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: '.72rem', color: '#4a6880', fontStyle: 'italic', marginBottom: '1.25rem' }}>{sortMode === 'manuel' ? 'Glisse une carte pour la réordonner.' : 'Classés par prix décroissant.'}</div>
       </div>
 
       <div style={S.grid}>
@@ -426,7 +458,12 @@ export default function FruitsPage() {
         {filtered.map(f => {
           const tc = TYPE_COLORS[f.type] || '#a060ff'
           return (
-            <div key={f.id} style={{ background: '#0d2040', border: `1px solid rgba(30,120,200,.2)`, borderRadius: 14, overflow: 'hidden', transition: 'all .3s', position: 'relative' }}
+            <div key={f.id} style={{ background: '#0d2040', border: `1px solid ${sortMode === 'manuel' && draggingId === f.id ? '#00c8ff' : 'rgba(30,120,200,.2)'}`, borderRadius: 14, overflow: 'hidden', transition: 'all .3s', position: 'relative', opacity: sortMode === 'manuel' && draggingId === f.id ? .4 : 1, cursor: sortMode === 'manuel' ? 'grab' : undefined }}
+              draggable={sortMode === 'manuel'}
+              onDragStart={sortMode === 'manuel' ? e => { setDraggingId(f.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', f.id) } : undefined}
+              onDragEnd={() => setDraggingId(null)}
+              onDragOver={sortMode === 'manuel' ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+              onDrop={sortMode === 'manuel' ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderItems(filtered, fromId, f.id) } : undefined}
               onMouseEnter={e => { const el = e.currentTarget; el.style.transform = 'translateY(-6px)'; el.style.borderColor = tc; el.style.boxShadow = `0 18px 36px rgba(0,0,0,.4)` }}
               onMouseLeave={e => { const el = e.currentTarget; el.style.transform = 'none'; el.style.borderColor = 'rgba(30,120,200,.2)'; el.style.boxShadow = 'none' }}>
               <div style={{ height: 3, background: tc }} />

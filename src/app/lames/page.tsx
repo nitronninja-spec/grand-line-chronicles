@@ -25,6 +25,7 @@ interface Lame {
   color?: string
   photo?: string
   photos?: string[]
+  ordre_manuel?: number | null
 }
 
 const FALLBACK_RANG_FULL: CategoryFull[] = [
@@ -67,6 +68,8 @@ export default function LamesPage() {
   const [personnages, setPersonnages] = useState<{ id: string; nom: string }[]>([])
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [rangFull, setRangFull] = useState<CategoryFull[]>(FALLBACK_RANG_FULL)
+  const [sortMode, setSortMode] = useState<'defaut' | 'manuel'>('defaut')
+  const [draggingId, setDraggingId] = useState<string | null>(null)
   const [form, setForm] = useState<Partial<Lame>>({
     nom: '', jp: '', rang: 'Lame de qualité', puissance: 5, emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', prix: '', particularites: '', color: '#7a9ab8', photos: []
   })
@@ -89,9 +92,30 @@ export default function LamesPage() {
   useEffect(() => {
     let l = pageTab === TAB_ALL ? list : list.filter(l2 => l2.rang === pageTab)
     if (search) l = l.filter(l2 => l2.nom.toLowerCase().includes(search.toLowerCase()))
-    l = l.slice().sort((a, b) => parsePrix(b.prix) - parsePrix(a.prix))
+    l = l.slice().sort((a, b) => sortMode === 'manuel'
+      ? (a.ordre_manuel ?? Infinity) - (b.ordre_manuel ?? Infinity) || parsePrix(b.prix) - parsePrix(a.prix)
+      : parsePrix(b.prix) - parsePrix(a.prix))
     setFiltered(l)
-  }, [list, pageTab, search])
+  }, [list, pageTab, search, sortMode])
+
+  // Réordonne par glisser-déposer — même patron que reorderFactions (factions/page.tsx).
+  async function reorderItems(currentOrder: Lame[], fromId: string, toId: string) {
+    const fromIdx = currentOrder.findIndex(x => x.id === fromId)
+    const toIdx = currentOrder.findIndex(x => x.id === toId)
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+    const reordered = currentOrder.slice()
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    let failures = 0
+    for (let i = 0; i < reordered.length; i++) {
+      if (reordered[i].ordre_manuel !== i) {
+        const { error } = await supabase.from('lames').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        if (error) failures++
+      }
+    }
+    if (failures > 0) alert(`Le nouvel ordre n'a pas pu être enregistré entièrement.`)
+    fetchList()
+  }
 
   async function fetchList() {
     const { data } = await supabase.from('lames').select('*').order('created_at', { ascending: false })
@@ -209,7 +233,15 @@ export default function LamesPage() {
             <input style={{ ...S.input, paddingLeft: '2.5rem' }} placeholder="Rechercher une lame..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
         </div>
-        <div style={{ fontSize: '.72rem', color: '#4a6880', fontStyle: 'italic', marginBottom: '1.25rem' }}>Classées par prix décroissant.</div>
+        <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '.5rem' }}>
+          <span style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.08em', textTransform: 'uppercase', color: '#4a6880', marginRight: '.2rem' }}>Tri :</span>
+          {(['defaut', 'manuel'] as const).map(m => (
+            <button key={m} onClick={() => setSortMode(m)} style={{ background: sortMode === m ? 'rgba(0,200,255,.15)' : '#0a1829', border: `1px solid ${sortMode === m ? '#00c8ff' : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: sortMode === m ? '#00c8ff' : '#7a9ab8', cursor: 'pointer' }}>
+              {m === 'defaut' ? 'Par prix' : 'Manuel (glisser-déposer)'}
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: '.72rem', color: '#4a6880', fontStyle: 'italic', marginBottom: '1.25rem' }}>{sortMode === 'manuel' ? 'Glisse une carte pour la réordonner.' : 'Classées par prix décroissant.'}</div>
       </div>
 
       <div style={S.grid}>
@@ -223,7 +255,12 @@ export default function LamesPage() {
         {filtered.map(l => {
           const rc = RANG_COLORS[l.rang] || '#a060ff'
           return (
-            <div key={l.id} style={{ background: '#0d2040', border: `1px solid rgba(30,120,200,.2)`, borderRadius: 14, overflow: 'hidden', transition: 'all .3s', position: 'relative' }}
+            <div key={l.id} style={{ background: '#0d2040', border: `1px solid ${sortMode === 'manuel' && draggingId === l.id ? '#00c8ff' : 'rgba(30,120,200,.2)'}`, borderRadius: 14, overflow: 'hidden', transition: 'all .3s', position: 'relative', opacity: sortMode === 'manuel' && draggingId === l.id ? .4 : 1, cursor: sortMode === 'manuel' ? 'grab' : undefined }}
+              draggable={sortMode === 'manuel'}
+              onDragStart={sortMode === 'manuel' ? e => { setDraggingId(l.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', l.id) } : undefined}
+              onDragEnd={() => setDraggingId(null)}
+              onDragOver={sortMode === 'manuel' ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+              onDrop={sortMode === 'manuel' ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderItems(filtered, fromId, l.id) } : undefined}
               onMouseEnter={e => { const el = e.currentTarget; el.style.transform = 'translateY(-6px)'; el.style.borderColor = rc; el.style.boxShadow = `0 18px 36px rgba(0,0,0,.4)` }}
               onMouseLeave={e => { const el = e.currentTarget; el.style.transform = 'none'; el.style.borderColor = 'rgba(30,120,200,.2)'; el.style.boxShadow = 'none' }}>
               <div style={{ height: 3, background: rc }} />

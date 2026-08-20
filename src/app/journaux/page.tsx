@@ -20,14 +20,16 @@ interface Journal {
   gdoc?: string
   miro?: string
   categorie?: string
+  ordre_manuel?: number | null
 }
 
-type SortMode = 'num' | 'date' | 'date-desc'
+type SortMode = 'num' | 'date' | 'date-desc' | 'manuel'
 
 function sortJournaux(items: Journal[], mode: SortMode) {
   return items.slice().sort((a, b) => {
     if (mode === 'date') return (a.date || '').localeCompare(b.date || '')
     if (mode === 'date-desc') return (b.date || '').localeCompare(a.date || '')
+    if (mode === 'manuel') return (a.ordre_manuel ?? Infinity) - (b.ordre_manuel ?? Infinity)
     return (a.num || 0) - (b.num || 0)
   })
 }
@@ -70,6 +72,7 @@ export default function JournauxPage() {
   const [consult, setConsult] = useState<Journal | null>(null)
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [categoryFull, setCategoryFull] = useState<CategoryFull[]>(FALLBACK_CATEGORY_FULL)
+  const [draggingId, setDraggingId] = useState<string | null>(null)
 
   const CATEGORIES = categoryFull.map(c => c.value)
   const CATEGORY_COLORS: Record<string, string> = Object.fromEntries(categoryFull.map(c => [c.value, c.color]))
@@ -93,6 +96,25 @@ export default function JournauxPage() {
   async function fetchJournaux() {
     const { data } = await supabase.from('sessions').select('*').order('num', { ascending: true })
     setJournaux(data || [])
+  }
+
+  // Réordonne par glisser-déposer — même patron que reorderFactions (factions/page.tsx).
+  async function reorderItems(currentOrder: Journal[], fromId: string, toId: string) {
+    const fromIdx = currentOrder.findIndex(x => x.id === fromId)
+    const toIdx = currentOrder.findIndex(x => x.id === toId)
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+    const reordered = currentOrder.slice()
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    let failures = 0
+    for (let i = 0; i < reordered.length; i++) {
+      if (reordered[i].ordre_manuel !== i) {
+        const { error } = await supabase.from('sessions').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        if (error) failures++
+      }
+    }
+    if (failures > 0) alert(`Le nouvel ordre n'a pas pu être enregistré entièrement.`)
+    fetchJournaux()
   }
 
   async function fetchPersonnages() {
@@ -168,9 +190,15 @@ export default function JournauxPage() {
 
   function renderCard(j: Journal) {
     const cc = j.categorie ? (CATEGORY_COLORS[j.categorie] || '#7a9ab8') : '#7a9ab8'
+    const manual = sortMode === 'manuel'
     return (
-      <div key={j.id} style={{background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:14,overflow:'hidden',transition:'all .3s',cursor:'pointer',display:'flex',flexDirection:'column'}}
+      <div key={j.id} style={{background:'#0d2040',border:`1px solid ${manual && draggingId===j.id ? '#00c8ff' : 'rgba(30,120,200,.2)'}`,borderRadius:14,overflow:'hidden',transition:'all .3s',cursor:'pointer',display:'flex',flexDirection:'column',opacity:manual&&draggingId===j.id?.4:1}}
         onClick={() => setConsult(j)}
+        draggable={manual}
+        onDragStart={manual ? e => { setDraggingId(j.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', j.id) } : undefined}
+        onDragEnd={() => setDraggingId(null)}
+        onDragOver={manual ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+        onDrop={manual ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderItems(sorted, fromId, j.id) } : undefined}
         onMouseEnter={e=>{const el=e.currentTarget;el.style.transform='translateY(-6px)';el.style.borderColor=cc;el.style.boxShadow='0 18px 36px rgba(0,0,0,.4)'}}
         onMouseLeave={e=>{const el=e.currentTarget;el.style.transform='none';el.style.borderColor='rgba(30,120,200,.2)';el.style.boxShadow='none'}}>
         <div style={{height:3,background:cc}} />
@@ -263,7 +291,7 @@ export default function JournauxPage() {
           </div>
           <div style={{display:'flex',gap:'.3rem',alignItems:'center'}}>
             <span style={{fontFamily:"'Cinzel',serif",fontSize:'.56rem',letterSpacing:'.08em',textTransform:'uppercase',color:'#4a6880'}}>Trier :</span>
-            {([['num','N° Session'],['date','Date ↑'],['date-desc','Date ↓']] as [SortMode,string][]).map(([mode,label]) => (
+            {([['num','N° Session'],['date','Date ↑'],['date-desc','Date ↓'],['manuel','Manuel (glisser-déposer)']] as [SortMode,string][]).map(([mode,label]) => (
               <button key={mode} onClick={() => setSortMode(mode)} style={{background:sortMode===mode?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${sortMode===mode?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .7rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.05em',color:sortMode===mode?'#f0c040':'#7a9ab8',cursor:'pointer',whiteSpace:'nowrap'}}>{label}</button>
             ))}
           </div>

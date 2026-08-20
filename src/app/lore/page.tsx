@@ -13,6 +13,7 @@ interface LoreArticle {
   tags?: string
   photos?: string[]
   modifie?: string
+  ordre_manuel?: number | null
 }
 
 // "Magie" reste dans le repli pour les fiches déjà existantes en base (aucune actuellement),
@@ -89,6 +90,8 @@ export default function LorePage() {
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
   const [lightbox, setLightbox] = useState<string|null>(null)
   const [cats, setCats] = useState<CategoryRow[]>(FALLBACK_CATS)
+  const [sortMode, setSortMode] = useState<'defaut' | 'manuel'>('defaut')
+  const [draggingId, setDraggingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchArticles()
@@ -100,6 +103,26 @@ export default function LorePage() {
   async function fetchArticles() {
     const { data } = await supabase.from('lore').select('*').order('modifie', { ascending: false })
     setArticles(data || [])
+  }
+
+  // Réordonne par glisser-déposer, au sein d'une même catégorie — même patron que
+  // reorderFactions (factions/page.tsx).
+  async function reorderItems(currentOrder: LoreArticle[], fromId: string, toId: string) {
+    const fromIdx = currentOrder.findIndex(x => x.id === fromId)
+    const toIdx = currentOrder.findIndex(x => x.id === toId)
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+    const reordered = currentOrder.slice()
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    let failures = 0
+    for (let i = 0; i < reordered.length; i++) {
+      if (reordered[i].ordre_manuel !== i) {
+        const { error } = await supabase.from('lore').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        if (error) failures++
+      }
+    }
+    if (failures > 0) alert(`Le nouvel ordre n'a pas pu être enregistré entièrement.`)
+    fetchArticles()
   }
 
   function newArticle() {
@@ -213,15 +236,26 @@ export default function LorePage() {
       <div style={{display:'grid',gridTemplateColumns:'280px 1fr',gap:'1.25rem',padding:'0 2rem 4rem',maxWidth:1400,margin:'0 auto'}}>
         {/* Sidebar groupée par catégorie */}
         <div style={{display:'flex',flexDirection:'column',gap:'.2rem'}}>
-          <div style={{fontFamily:"'Cinzel',serif",fontSize:'.65rem',letterSpacing:'.15em',textTransform:'uppercase',color:'#4a6880',padding:'.5rem .75rem',borderBottom:'1px solid rgba(30,120,200,.2)',marginBottom:'.25rem'}}>📚 Articles ({filtered.length})</div>
+          <div style={{fontFamily:"'Cinzel',serif",fontSize:'.65rem',letterSpacing:'.15em',textTransform:'uppercase',color:'#4a6880',padding:'.5rem .75rem',borderBottom:'1px solid rgba(30,120,200,.2)',marginBottom:'.25rem',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'.4rem'}}>
+            <span>📚 Articles ({filtered.length})</span>
+            <button onClick={() => setSortMode(m => m === 'manuel' ? 'defaut' : 'manuel')} title="Tri manuel (glisser-déposer)" style={{background:sortMode==='manuel'?'rgba(0,200,255,.15)':'none',border:`1px solid ${sortMode==='manuel'?'#00c8ff':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.2rem .5rem',color:sortMode==='manuel'?'#00c8ff':'#4a6880',cursor:'pointer',fontSize:'.6rem'}}>⠿</button>
+          </div>
           {cats.map(cat => {
-            const inCat = filtered.filter(a => a.categorie === cat.id)
+            let inCat = filtered.filter(a => a.categorie === cat.id)
+            if (sortMode === 'manuel') inCat = inCat.slice().sort((a, b) => (a.ordre_manuel ?? Infinity) - (b.ordre_manuel ?? Infinity))
             if (inCat.length === 0) return null
             return (
               <div key={cat.id} style={{marginBottom:'.5rem'}}>
                 <div style={{fontFamily:"'Cinzel',serif",fontSize:'.55rem',letterSpacing:'.1em',textTransform:'uppercase',color:cat.color,padding:'.4rem .75rem .3rem'}}>{cat.label}</div>
                 {inCat.map(a => (
-                  <button key={a.id} onClick={() => selectArticle(a)} style={{width:'100%',textAlign:'left',background:selected?.id===a.id?'rgba(212,160,23,.15)':'none',border:`1px solid ${selected?.id===a.id?'#d4a017':'transparent'}`,borderRadius:9,padding:'.6rem .85rem',cursor:'pointer',transition:'all .2s',display:'flex',alignItems:'center',gap:'.65rem'}}>
+                  <button key={a.id} onClick={() => selectArticle(a)}
+                    draggable={sortMode === 'manuel'}
+                    onDragStart={sortMode === 'manuel' ? e => { setDraggingId(a.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', a.id) } : undefined}
+                    onDragEnd={() => setDraggingId(null)}
+                    onDragOver={sortMode === 'manuel' ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+                    onDrop={sortMode === 'manuel' ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderItems(inCat, fromId, a.id) } : undefined}
+                    style={{width:'100%',textAlign:'left',background:selected?.id===a.id?'rgba(212,160,23,.15)':'none',border:`1px solid ${selected?.id===a.id?'#d4a017':'transparent'}`,borderRadius:9,padding:'.6rem .85rem',cursor:sortMode==='manuel'?'grab':'pointer',transition:'all .2s',display:'flex',alignItems:'center',gap:'.65rem',opacity:sortMode==='manuel'&&draggingId===a.id?.4:1}}>
+                    {sortMode === 'manuel' && <span style={{color:'#4a6880',fontSize:'.7rem',flexShrink:0}}>⠿</span>}
                     {a.photos && a.photos[0]
                       ? <img loading="lazy" src={a.photos[0]} style={{width:26,height:26,borderRadius:6,objectFit:'cover',flexShrink:0}} />
                       : <span style={{fontSize:'1.1rem',flexShrink:0,width:26,textAlign:'center'}}>{a.emoji||'📄'}</span>}

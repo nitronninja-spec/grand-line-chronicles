@@ -22,6 +22,7 @@ interface Ile {
   photos?: string[]
   gdoc?: string
   miro?: string
+  ordre_manuel?: number | null
 }
 
 const FALLBACK_REGION_FULL: CategoryFull[] = [
@@ -35,7 +36,7 @@ const FALLBACK_REGION_FULL: CategoryFull[] = [
   { value: 'Région inconnue', emoji: '', color: '#7a9ab8', cap: null },
 ]
 const PEUPLE = 'Peuple'
-type SortMode = 'mer' | 'mer-rev' | 'az' | 'za'
+type SortMode = 'mer' | 'mer-rev' | 'az' | 'za' | 'manuel'
 
 // "regions" inclut "Région inconnue" en dernière position — comme son index y est toujours
 // le plus grand, elle finit toujours en fin de liste, exactement comme le repli -1→999 d'avant.
@@ -43,6 +44,7 @@ function sortIles(items: Ile[], mode: SortMode, regions: string[]) {
   return items.slice().sort((a, b) => {
     if (mode === 'az') return a.nom.localeCompare(b.nom)
     if (mode === 'za') return b.nom.localeCompare(a.nom)
+    if (mode === 'manuel') return (a.ordre_manuel ?? Infinity) - (b.ordre_manuel ?? Infinity)
     const ai = regions.indexOf(a.region || '')
     const bi = regions.indexOf(b.region || '')
     const oa = ai === -1 ? 999 : ai
@@ -110,6 +112,26 @@ export default function IlesPage() {
   async function fetchList() {
     const { data } = await supabase.from('iles').select('*').order('created_at', { ascending: false })
     setList(data || [])
+  }
+
+  // Réordonne par glisser-déposer — même patron que reorderFactions (factions/page.tsx).
+  // Scopé au niveau top (les îles rangées dans un archipel ne sont pas réordonnées ici).
+  async function reorderItems(currentOrder: Ile[], fromId: string, toId: string) {
+    const fromIdx = currentOrder.findIndex(x => x.id === fromId)
+    const toIdx = currentOrder.findIndex(x => x.id === toId)
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+    const reordered = currentOrder.slice()
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    let failures = 0
+    for (let i = 0; i < reordered.length; i++) {
+      if (reordered[i].ordre_manuel !== i) {
+        const { error } = await supabase.from('iles').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        if (error) failures++
+      }
+    }
+    if (failures > 0) alert(`Le nouvel ordre n'a pas pu être enregistré entièrement.`)
+    fetchList()
   }
 
   async function fetchFactions() {
@@ -235,10 +257,14 @@ export default function IlesPage() {
         draggable
         onDragStart={e => { setDraggingId(ile.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', ile.id) }}
         onDragEnd={() => { setDraggingId(null); setDragOverId(null) }}
-        onDragOver={isFolder ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+        onDragOver={(isFolder || sortMode === 'manuel') ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
         onDragEnter={isFolder ? () => setDragOverId(ile.id) : undefined}
         onDragLeave={isFolder ? () => setDragOverId(prev => prev === ile.id ? null : prev) : undefined}
-        onDrop={isFolder ? e => { e.preventDefault(); e.stopPropagation(); setDragOverId(null); addToFolder(ile, e.dataTransfer.getData('text/plain')) } : undefined}
+        onDrop={isFolder
+          ? e => { e.preventDefault(); e.stopPropagation(); setDragOverId(null); addToFolder(ile, e.dataTransfer.getData('text/plain')) }
+          : sortMode === 'manuel'
+            ? e => { e.preventDefault(); e.stopPropagation(); const fromId = e.dataTransfer.getData('text/plain'); reorderItems(topLevel, fromId, ile.id) }
+            : undefined}
         style={{background:'#0d2040',border:`1px solid ${isDragOver?'#d4a017':isDestroyed?'rgba(224,48,48,.35)':'rgba(30,120,200,.2)'}`,borderRadius:14,overflow:'hidden',transition:'all .2s',marginLeft:opts.nested?'1.5rem':0,cursor:'grab',opacity:isDestroyed?.7:1}}
         onMouseEnter={e=>{const el=e.currentTarget;el.style.borderColor=isDragOver?'#d4a017':isDestroyed?'rgba(224,48,48,.6)':rc;if(!opts.nested){el.style.transform='translateY(-5px)';el.style.boxShadow='0 18px 36px rgba(0,0,0,.4)'}}}
         onMouseLeave={e=>{const el=e.currentTarget;el.style.borderColor=isDragOver?'#d4a017':isDestroyed?'rgba(224,48,48,.35)':'rgba(30,120,200,.2)';if(!opts.nested){el.style.transform='none';el.style.boxShadow='none'}}}>
@@ -341,7 +367,7 @@ export default function IlesPage() {
           </div>
           <div style={{display:'flex',gap:'.3rem',alignItems:'center'}}>
             <span style={{fontFamily:"'Cinzel',serif",fontSize:'.56rem',letterSpacing:'.08em',textTransform:'uppercase',color:'#4a6880'}}>Trier :</span>
-            {([['mer','🌊 Ordre des mers'],['mer-rev','🌊 Inversé'],['az','A→Z'],['za','Z→A']] as [SortMode,string][]).map(([mode,label]) => (
+            {([['mer','🌊 Ordre des mers'],['mer-rev','🌊 Inversé'],['az','A→Z'],['za','Z→A'],['manuel','Manuel (glisser-déposer)']] as [SortMode,string][]).map(([mode,label]) => (
               <button key={mode} onClick={() => setSortMode(mode)} style={{background:sortMode===mode?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${sortMode===mode?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .7rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.05em',color:sortMode===mode?'#f0c040':'#7a9ab8',cursor:'pointer',whiteSpace:'nowrap'}}>{label}</button>
             ))}
           </div>

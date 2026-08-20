@@ -20,6 +20,7 @@ interface Cristal {
   photo?: string
   photos?: string[]
   prix?: string
+  ordre_manuel?: number | null
 }
 
 const CATEGORY_PALETTE = ['#e03030', '#00c8ff', '#40d060', '#f0c040', '#a060ff', '#ff8c40', '#40e0a0', '#ff6090', '#7a9ab8', '#d4a017']
@@ -63,6 +64,8 @@ export default function CristauxPage() {
   })
 
   const [catSuggestions, setCatSuggestions] = useState<string[]>([])
+  const [sortMode, setSortMode] = useState<'defaut' | 'manuel'>('defaut')
+  const [draggingId, setDraggingId] = useState<string | null>(null)
   // Union des catégories déjà utilisées sur des fiches et de celles ajoutées via
   // Dashboard → Personnalisation (qui peuvent ne porter encore aucune fiche).
   const categories = Array.from(new Set([...list.map(c => c.categorie).filter(Boolean), ...catSuggestions])).sort()
@@ -77,8 +80,28 @@ export default function CristauxPage() {
   useEffect(() => {
     let l = categoryFilter ? list.filter(c => c.categorie === categoryFilter) : list
     if (search) l = l.filter(c => c.nom.toLowerCase().includes(search.toLowerCase()))
+    if (sortMode === 'manuel') l = l.slice().sort((a, b) => (a.ordre_manuel ?? Infinity) - (b.ordre_manuel ?? Infinity))
     setFiltered(l)
-  }, [list, categoryFilter, search])
+  }, [list, categoryFilter, search, sortMode])
+
+  // Réordonne par glisser-déposer — même patron que reorderFactions (factions/page.tsx).
+  async function reorderItems(currentOrder: Cristal[], fromId: string, toId: string) {
+    const fromIdx = currentOrder.findIndex(x => x.id === fromId)
+    const toIdx = currentOrder.findIndex(x => x.id === toId)
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+    const reordered = currentOrder.slice()
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    let failures = 0
+    for (let i = 0; i < reordered.length; i++) {
+      if (reordered[i].ordre_manuel !== i) {
+        const { error } = await supabase.from('cristaux_primordiaux').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        if (error) failures++
+      }
+    }
+    if (failures > 0) alert(`Le nouvel ordre n'a pas pu être enregistré entièrement.`)
+    fetchList()
+  }
 
   async function fetchList() {
     const { data } = await supabase.from('cristaux_primordiaux').select('*').order('created_at', { ascending: false })
@@ -190,6 +213,14 @@ export default function CristauxPage() {
           ))}
           {categories.length === 0 && <span style={{ fontSize: '.78rem', color: '#4a6880', fontStyle: 'italic' }}>Les catégories apparaîtront ici dès que tu en crées une.</span>}
         </div>
+        <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.08em', textTransform: 'uppercase', color: '#4a6880', marginRight: '.2rem' }}>Tri :</span>
+          {(['defaut', 'manuel'] as const).map(m => (
+            <button key={m} onClick={() => setSortMode(m)} style={{ background: sortMode === m ? 'rgba(0,200,255,.15)' : '#0a1829', border: `1px solid ${sortMode === m ? '#00c8ff' : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: sortMode === m ? '#00c8ff' : '#7a9ab8', cursor: 'pointer' }}>
+              {m === 'defaut' ? 'Par défaut' : 'Manuel (glisser-déposer)'}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={S.grid}>
@@ -203,7 +234,12 @@ export default function CristauxPage() {
         {filtered.map(c => {
           const ec = c.categorie ? categoryColor(c.categorie) : '#a060ff'
           return (
-            <div key={c.id} style={{ background: '#0d2040', border: `1px solid rgba(30,120,200,.2)`, borderRadius: 14, overflow: 'hidden', transition: 'all .3s', position: 'relative' }}
+            <div key={c.id} style={{ background: '#0d2040', border: `1px solid ${sortMode === 'manuel' && draggingId === c.id ? '#00c8ff' : 'rgba(30,120,200,.2)'}`, borderRadius: 14, overflow: 'hidden', transition: 'all .3s', position: 'relative', opacity: sortMode === 'manuel' && draggingId === c.id ? .4 : 1, cursor: sortMode === 'manuel' ? 'grab' : undefined }}
+              draggable={sortMode === 'manuel'}
+              onDragStart={sortMode === 'manuel' ? e => { setDraggingId(c.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.id) } : undefined}
+              onDragEnd={() => setDraggingId(null)}
+              onDragOver={sortMode === 'manuel' ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+              onDrop={sortMode === 'manuel' ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderItems(filtered, fromId, c.id) } : undefined}
               onMouseEnter={e => { const el = e.currentTarget; el.style.transform = 'translateY(-6px)'; el.style.borderColor = ec; el.style.boxShadow = `0 18px 36px rgba(0,0,0,.4)` }}
               onMouseLeave={e => { const el = e.currentTarget; el.style.transform = 'none'; el.style.borderColor = 'rgba(30,120,200,.2)'; el.style.boxShadow = 'none' }}>
               <div style={{ height: 3, background: ec }} />
