@@ -19,7 +19,6 @@ interface Journal {
   gdoc?: string
   miro?: string
   categorie?: string
-  scene?: string
 }
 
 type SortMode = 'num' | 'date' | 'date-desc'
@@ -38,21 +37,6 @@ const CATEGORY_COLORS: Record<string, string> = { 'Le Hérault': '#d4a017', 'Mar
 const CATEGORY_EMOJI: Record<string, string> = { 'Le Hérault': '📰', 'Marine News': '⚓' }
 const TAB_ALL = ''
 const JOURNAL_TABS = [TAB_ALL, ...CATEGORIES]
-
-interface SceneSection { scene: string; items: Journal[] }
-function buildSceneSections(items: Journal[], sortMode: SortMode): SceneSection[] {
-  const map = new Map<string, Journal[]>()
-  items.forEach(j => {
-    const key = j.scene || ''
-    if (!map.has(key)) map.set(key, [])
-    map.get(key)!.push(j)
-  })
-  const keys = Array.from(map.keys()).sort((a, b) => {
-    if (a === '' || b === '') return a === '' ? 1 : -1
-    return a.localeCompare(b, undefined, { numeric: true })
-  })
-  return keys.map(k => ({ scene: k, items: sortJournaux(map.get(k) || [], sortMode) }))
-}
 
 const S = {
   page: { minHeight:'100vh', background:'#050d1a', color:'#e8eef5', fontFamily:"'Crimson Pro',Georgia,serif", paddingTop:60 } as React.CSSProperties,
@@ -81,7 +65,7 @@ export default function JournauxPage() {
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
   const [pdfFiles, setPdfFiles] = useState<File[]>([])
-  const [form, setForm] = useState<Partial<Journal>>({ num:1, titre:'', date:'', lieu:'', resume:'', photos:[], pdfs:[], personnages:[], gdoc:'', miro:'', categorie:'Le Hérault', scene:'' })
+  const [form, setForm] = useState<Partial<Journal>>({ num:1, titre:'', date:'', lieu:'', resume:'', photos:[], pdfs:[], personnages:[], gdoc:'', miro:'', categorie:'Le Hérault' })
   const [consult, setConsult] = useState<Journal | null>(null)
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
 
@@ -89,7 +73,7 @@ export default function JournauxPage() {
   if (pageTab !== TAB_ALL) filtered = filtered.filter(j => j.categorie === pageTab)
   if (search) filtered = filtered.filter(j => j.titre.toLowerCase().includes(search.toLowerCase()) || (j.resume||'').toLowerCase().includes(search.toLowerCase()))
   if (personnageFilter) filtered = filtered.filter(j => j.personnages?.includes(personnageFilter))
-  const scenes = buildSceneSections(filtered, sortMode)
+  const sorted = sortJournaux(filtered, sortMode)
   const tabColor = pageTab ? (CATEGORY_COLORS[pageTab] || '#f0c040') : '#f0c040'
 
   useEffect(() => {
@@ -112,7 +96,7 @@ export default function JournauxPage() {
 
   function openForm(j?: Journal) {
     if (j) { setForm({ ...j, photos: j.photos || [], pdfs: j.pdfs || [], personnages: j.personnages || [] }); setEditId(j.id) }
-    else { setForm({ num:(journaux.length+1), titre:'', date:'', lieu:'', resume:'', photos:[], pdfs:[], personnages:[], gdoc:'', miro:'', categorie: pageTab || 'Le Hérault', scene:'' }); setEditId(null) }
+    else { setForm({ num:(journaux.length+1), titre:'', date:'', lieu:'', resume:'', photos:[], pdfs:[], personnages:[], gdoc:'', miro:'', categorie: pageTab || 'Le Hérault' }); setEditId(null) }
     setPhotoFiles([]); setPhotoPreviews([]); setPdfFiles([])
     setShowForm(true)
   }
@@ -285,7 +269,6 @@ export default function JournauxPage() {
             </select>
           </div>
         )}
-        <div style={{fontSize:'.72rem',color:'#4a6880',fontStyle:'italic'}}>Regroupés par scène.</div>
       </div>
 
       <div style={S.grid}>
@@ -296,16 +279,7 @@ export default function JournauxPage() {
             {journaux.length === 0 && <button style={S.btnGold} onClick={() => openForm()}>＋ Créer le premier journal</button>}
           </div>
         )}
-        {scenes.flatMap((section, si) => {
-          const nodes: React.ReactNode[] = [
-            <div key={`div-${section.scene || 'none'}`} style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:'.75rem',margin: si===0 ? '0 0 .2rem' : '1.4rem 0 .2rem'}}>
-              <span style={{fontFamily:"'Cinzel',serif",fontSize:'.68rem',letterSpacing:'.12em',textTransform:'uppercase',color:'#f0c040'}}>🎬 {section.scene || 'Sans scène'}</span>
-              <div style={{flex:1,height:1,background:'rgba(212,160,23,.25)'}} />
-            </div>
-          ]
-          section.items.forEach(j => nodes.push(renderCard(j)))
-          return nodes
-        })}
+        {sorted.map(j => renderCard(j))}
       </div>
 
       {/* ===== FORM MODAL ===== */}
@@ -317,13 +291,10 @@ export default function JournauxPage() {
               <button onClick={()=>setShowForm(false)} style={{background:'rgba(5,13,26,.75)',border:'1px solid rgba(30,120,200,.2)',color:'#7a9ab8',borderRadius:'50%',width:34,height:34,cursor:'pointer',fontSize:'.9rem'}}>✕</button>
             </div>
             <div style={{padding:'1.75rem',display:'flex',flexDirection:'column',gap:'1.1rem'}}>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'.85rem'}}>
-                <div><label style={S.label}>Journal</label>
-                  <select style={S.input} value={form.categorie || 'Le Hérault'} onChange={e=>setForm(f=>({...f,categorie:e.target.value}))}>
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div><label style={S.label}>Scène</label><input style={S.input} value={form.scene||''} onChange={e=>setForm(f=>({...f,scene:e.target.value}))} placeholder="Scène 1" /></div>
+              <div><label style={S.label}>Journal</label>
+                <select style={S.input} value={form.categorie || 'Le Hérault'} onChange={e=>setForm(f=>({...f,categorie:e.target.value}))}>
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
               <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:'.85rem'}}>
                 <div><label style={S.label}>N° Session</label><input style={{...S.input,width:80}} type="number" min="1" value={form.num||1} onChange={e=>setForm(f=>({...f,num:parseInt(e.target.value)}))} /></div>
@@ -425,7 +396,6 @@ export default function JournauxPage() {
               <div style={{position:'relative',zIndex:2}}>
                 <div style={{fontFamily:"'Cinzel',serif",fontSize:'.6rem',letterSpacing:'.11em',textTransform:'uppercase',color:'#00c8ff',marginBottom:'.35rem'}}>
                   {consult.categorie && `${CATEGORY_EMOJI[consult.categorie]||'📰'} ${consult.categorie} · `}
-                  {consult.scene && `🎬 ${consult.scene} · `}
                   Session {consult.num}{consult.date && ` · 📅 ${formatDate(consult.date)}`}{consult.lieu?` · ${consult.lieu}`:''}
                 </div>
                 <div style={{fontFamily:"'Cinzel Decorative',serif",fontSize:'1.5rem',fontWeight:700,color:'#fff'}}>{consult.titre}</div>
