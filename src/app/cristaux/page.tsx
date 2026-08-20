@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
+import { fetchCategoryValues } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageLightbox from '@/components/ImageLightbox'
 import MoneyInput from '@/components/MoneyInput'
@@ -61,11 +62,15 @@ export default function CristauxPage() {
     nom: '', categorie: '', puissance: 5, emoji: '💎', description: '', proprietaire: '', instabilite: '', color: '#e03030', photos: [], prix: ''
   })
 
-  const categories = Array.from(new Set(list.map(c => c.categorie).filter(Boolean))).sort()
+  const [catSuggestions, setCatSuggestions] = useState<string[]>([])
+  // Union des catégories déjà utilisées sur des fiches et de celles ajoutées via
+  // Dashboard → Personnalisation (qui peuvent ne porter encore aucune fiche).
+  const categories = Array.from(new Set([...list.map(c => c.categorie).filter(Boolean), ...catSuggestions])).sort()
   const personnageMap = new Map(personnages.map(p => [p.nom, p.id]))
 
   useEffect(() => {
     fetchList(); fetchPersonnages()
+    fetchCategoryValues('cristaux', 'categorie', []).then(setCatSuggestions)
     const q = new URLSearchParams(window.location.search).get('q')
     if (q) setSearch(q)
   }, [])
