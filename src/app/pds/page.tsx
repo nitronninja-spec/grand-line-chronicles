@@ -26,6 +26,7 @@ interface Pds {
   sujet_photos?: string[]
   sujet_biographie?: string
   sujet_notes?: string
+  ordre_manuel?: number | null
 }
 
 const THEME = '#40d060'
@@ -35,6 +36,13 @@ const FALLBACK_STATUTS = ['Actif', 'Perdu', 'En Stase', 'En fuite', 'Neutralisé
 // Du plus faible au plus fort — sert à trier par niveau, SS (le plus fort) en tête.
 function classeRank(c: string | undefined, classes: string[]) { const i = classes.indexOf(c || ''); return i === -1 ? -1 : i }
 const EXPLAINER = "Un PDS est un être vivant — humain, animal ou créature — porteur d'une anomalie naturelle, génétique ou énergétique. On ne le fabrique pas, on l'observe et on l'étudie, parfois pour en tirer un Despa. Remplis cette fiche pour documenter le sujet : son pouvoir, ses limites, et son histoire."
+
+interface ClasseSection { classe: string; items: Pds[] }
+// Regroupe par palier, SS en tête — même patron que buildGroupSections (personnages/page.tsx).
+function buildClasseSections(items: Pds[], classes: string[]): ClasseSection[] {
+  const order = classes.slice().reverse()
+  return order.map(c => ({ classe: c, items: items.filter(p => (p.classe || '') === c) })).filter(s => s.items.length > 0)
+}
 
 const S = {
   page: { minHeight: '100vh', background: '#050d1a', color: '#e8eef5', fontFamily: "'Crimson Pro', Georgia, serif", paddingTop: 60 } as React.CSSProperties,
@@ -124,6 +132,8 @@ export default function PdsPage() {
   const [types, setTypes] = useState(FALLBACK_TYPES)
   const [classes, setClasses] = useState(FALLBACK_CLASSES)
   const [statuts, setStatuts] = useState(FALLBACK_STATUTS)
+  const [sortMode, setSortMode] = useState<'defaut' | 'manuel'>('defaut')
+  const [draggingId, setDraggingId] = useState<string | null>(null)
 
   const despasMap = new Map(despasList.map(d => [d.nom, d.id]))
 
@@ -136,9 +146,30 @@ export default function PdsPage() {
     let l = list
     if (search) l = l.filter(p => p.nom.toLowerCase().includes(search.toLowerCase()))
     if (statutFilter) l = l.filter(p => p.statut === statutFilter)
-    l = l.slice().sort((a, b) => classeRank(b.classe, classes) - classeRank(a.classe, classes))
+    l = l.slice().sort((a, b) => sortMode === 'manuel'
+      ? (a.ordre_manuel ?? Infinity) - (b.ordre_manuel ?? Infinity)
+      : classeRank(b.classe, classes) - classeRank(a.classe, classes))
     setFiltered(l)
-  }, [list, search, statutFilter, classes])
+  }, [list, search, statutFilter, classes, sortMode])
+
+  // Réordonne par glisser-déposer — même patron que reorderFactions (factions/page.tsx).
+  async function reorderItems(currentOrder: Pds[], fromId: string, toId: string) {
+    const fromIdx = currentOrder.findIndex(x => x.id === fromId)
+    const toIdx = currentOrder.findIndex(x => x.id === toId)
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+    const reordered = currentOrder.slice()
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    let failures = 0
+    for (let i = 0; i < reordered.length; i++) {
+      if (reordered[i].ordre_manuel !== i) {
+        const { error } = await supabase.from('pds').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        if (error) failures++
+      }
+    }
+    if (failures > 0) alert(`Le nouvel ordre n'a pas pu être enregistré entièrement.`)
+    fetchList()
+  }
 
   async function fetchTaxonomies() {
     const [t, c, s] = await Promise.all([
@@ -262,7 +293,15 @@ export default function PdsPage() {
             <button key={s} onClick={() => setStatutFilter(s)} style={{ background: statutFilter === s ? `${THEME}30` : '#0a1829', border: `1px solid ${statutFilter === s ? THEME : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: statutFilter === s ? THEME : '#7a9ab8', cursor: 'pointer' }}>{s}</button>
           ))}
         </div>
-        <div style={{ fontSize: '.72rem', color: '#4a6880', fontStyle: 'italic' }}>Classés par niveau décroissant (SS → C).</div>
+        <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '.5rem' }}>
+          <span style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.08em', textTransform: 'uppercase', color: '#4a6880', marginRight: '.2rem' }}>Tri :</span>
+          {(['defaut', 'manuel'] as const).map(m => (
+            <button key={m} onClick={() => setSortMode(m)} style={{ background: sortMode === m ? `${THEME}30` : '#0a1829', border: `1px solid ${sortMode === m ? THEME : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: sortMode === m ? THEME : '#7a9ab8', cursor: 'pointer' }}>
+              {m === 'defaut' ? 'Par palier' : 'Manuel (glisser-déposer)'}
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: '.72rem', color: '#4a6880', fontStyle: 'italic' }}>{sortMode === 'manuel' ? 'Glisse une carte pour la réordonner.' : 'Regroupés par palier (SS → C).'}</div>
       </div>
 
       <div style={S.grid}>
@@ -273,72 +312,17 @@ export default function PdsPage() {
             <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter le premier</button>
           </div>
         )}
-        {filtered.map(p => {
-          const tc = p.color || THEME
-          return (
-            <div key={p.id} style={{ background: '#0d2040', border: `1px solid rgba(30,120,200,.2)`, borderRadius: 14, overflow: 'hidden', transition: 'all .3s', position: 'relative' }}
-              onMouseEnter={e => { const el = e.currentTarget; el.style.transform = 'translateY(-6px)'; el.style.borderColor = tc; el.style.boxShadow = `0 18px 36px rgba(0,0,0,.4)` }}
-              onMouseLeave={e => { const el = e.currentTarget; el.style.transform = 'none'; el.style.borderColor = 'rgba(30,120,200,.2)'; el.style.boxShadow = 'none' }}>
-              <div style={{ height: 3, background: tc }} />
-              <div style={{ width: '100%', height: 160, background: 'linear-gradient(135deg,#0a1829,#050d1a)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem', overflow: 'hidden', cursor: (p.photos && p.photos[0]) ? 'zoom-in' : 'default' }}
-                onClick={() => { if (p.photos && p.photos.length > 0) setLightbox({ images: p.photos, index: 0 }) }}>
-                {p.photos && p.photos[0] && <img loading="lazy" src={p.photos[0]} alt={p.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
-                {p.emoji && <span style={{ position: 'relative', zIndex: 1, opacity: p.photos && p.photos[0] ? 0.3 : 1 }}>{p.emoji}</span>}
-                {p.photos && p.photos.length > 1 && <span style={{ position: 'absolute', bottom: 8, right: 8, background: 'rgba(5,13,26,.75)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 100, padding: '.15rem .5rem', fontSize: '.62rem', fontFamily: "'Cinzel',serif", color: '#e8eef5' }}>📷 {p.photos.length}</span>}
-              </div>
-              <div style={{ padding: '1.1rem' }}>
-                <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '.65rem' }}>
-                  {p.type && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: `${tc}22`, color: tc, border: `1px solid ${tc}44` }}>{p.type}</div>}
-                  {p.classe && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: 'rgba(240,192,64,.15)', color: '#f0c040', border: '1px solid rgba(240,192,64,.35)' }}>Classe {p.classe}</div>}
-                  {p.statut && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: 'rgba(122,154,184,.15)', color: '#7a9ab8', border: '1px solid rgba(122,154,184,.35)' }}>{p.statut}</div>}
-                  {p.hereditaire && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: 'rgba(160,96,255,.15)', color: '#a060ff', border: '1px solid rgba(160,96,255,.35)' }}>🧬 Héréditaire</div>}
-                </div>
-                <div style={{ fontFamily: "'Cinzel',serif", fontSize: '1.05rem', fontWeight: 700, color: '#e8eef5', marginBottom: '.12rem' }}>{p.nom}</div>
-                {p.code && <div style={{ fontSize: '.78rem', color: '#4a6880', marginBottom: '.65rem', fontFamily: 'monospace' }}>{p.code}</div>}
-                {p.pouvoir && (
-                  <div style={{ marginBottom: '.85rem' }}>
-                    <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.25rem' }}>⚡ Pouvoir</div>
-                    <div style={{ fontSize: '.85rem', color: '#c8d8e8', lineHeight: 1.6 }}>{p.pouvoir}</div>
-                  </div>
-                )}
-                {p.faiblesse && <div style={{ fontSize: '.8rem', color: '#ff6060', marginBottom: '.65rem' }}>⚠️ {p.faiblesse}</div>}
-                {p.objectif_etude && <div style={{ fontSize: '.78rem', color: '#7a9ab8', marginBottom: '.65rem', fontStyle: 'italic' }}>🔬 {p.objectif_etude}</div>}
-                {(p.despas_derives || []).length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.3rem', marginBottom: '.65rem' }}>
-                    {(p.despas_derives || []).map(dn => (
-                      despasMap.has(dn)
-                        ? <a key={dn} href={`/despa?q=${encodeURIComponent(dn)}`} style={{ fontSize: '.72rem', color: THEME, textDecoration: 'none' }}>🦾 {dn}</a>
-                        : <span key={dn} style={{ fontSize: '.72rem', color: '#7a9ab8' }}>🦾 {dn}</span>
-                    ))}
-                  </div>
-                )}
-                {p.sujet_nom && (
-                  <div style={{ background: '#0a1829', border: '1px solid rgba(30,120,200,.2)', borderRadius: 10, padding: '.75rem .9rem', marginBottom: '.65rem', display: 'flex', gap: '.75rem', alignItems: 'center' }}>
-                    {p.sujet_photos && p.sujet_photos[0] ? (
-                      <div style={{ width: 52, height: 52, borderRadius: 8, overflow: 'hidden', flexShrink: 0, border: `2px solid ${tc}`, cursor: 'zoom-in', position: 'relative' }}
-                        onClick={e => { e.stopPropagation(); setLightbox({ images: p.sujet_photos!, index: 0 }) }}>
-                        <img loading="lazy" src={p.sujet_photos[0]} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                        {p.sujet_photos.length > 1 && <span style={{ position: 'absolute', bottom: 0, right: 0, background: 'rgba(5,13,26,.85)', color: '#e8eef5', fontSize: '.42rem', fontFamily: "'Cinzel',serif", padding: '0 3px' }}>+{p.sujet_photos.length - 1}</span>}
-                      </div>
-                    ) : (
-                      <div style={{ width: 52, height: 52, borderRadius: 8, flexShrink: 0, background: '#0d2040', border: '1px solid rgba(30,120,200,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>👤</div>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.2rem' }}>👤 Sujet</div>
-                      <div style={{ fontSize: '.88rem', color: '#e8eef5', fontWeight: 700, marginBottom: p.sujet_statut ? '.15rem' : 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.sujet_nom}</div>
-                      {p.sujet_statut && <div style={{ fontSize: '.78rem', color: '#7a9ab8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.sujet_statut}</div>}
-                    </div>
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: '.4rem', justifyContent: 'flex-end' }}>
-                  <button onClick={() => duplicatePds(p)} title="Dupliquer" style={{ background: 'rgba(160,96,255,.1)', border: '1px solid rgba(160,96,255,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#a060ff', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>⧉</button>
-                  <button onClick={() => openForm(p)} style={{ background: 'rgba(0,200,255,.1)', border: '1px solid rgba(0,200,255,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#00c8ff', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>✏️</button>
-                  <button onClick={() => deletePds(p.id)} style={{ background: 'rgba(224,48,48,.1)', border: '1px solid rgba(224,48,48,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#ff6060', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>🗑</button>
-                </div>
-              </div>
-            </div>
-          )
-        })}
+        {sortMode === 'manuel'
+          ? filtered.map(p => renderCard(p))
+          : buildClasseSections(filtered, classes).flatMap((section, si) => [
+              <div key={`div-${section.classe}`} style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', gap: '.75rem', margin: si === 0 ? '0 0 .2rem' : '1.4rem 0 .2rem' }}>
+                <span style={{ fontFamily: "'Cinzel',serif", fontSize: '.68rem', letterSpacing: '.12em', textTransform: 'uppercase', color: THEME }}>
+                  🧬 Classe {section.classe} <span style={{ opacity: .7 }}>({section.items.length})</span>
+                </span>
+                <div style={{ flex: 1, height: 1, background: `${THEME}40` }} />
+              </div>,
+              ...section.items.map(p => renderCard(p)),
+            ])}
       </div>
 
       {showForm && (
@@ -465,4 +449,77 @@ export default function PdsPage() {
       {lightbox && <ImageLightbox images={lightbox.images} index={lightbox.index} onClose={() => setLightbox(null)} onIndexChange={i => setLightbox(lb => lb ? { ...lb, index: i } : lb)} />}
     </div>
   )
+
+  function renderCard(p: Pds) {
+    const tc = p.color || THEME
+    const manual = sortMode === 'manuel'
+    return (
+      <div key={p.id} style={{ background: '#0d2040', border: `1px solid ${manual && draggingId === p.id ? THEME : 'rgba(30,120,200,.2)'}`, borderRadius: 14, overflow: 'hidden', transition: 'all .3s', position: 'relative', opacity: manual && draggingId === p.id ? .4 : 1, cursor: manual ? 'grab' : undefined }}
+        draggable={manual}
+        onDragStart={manual ? e => { setDraggingId(p.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', p.id) } : undefined}
+        onDragEnd={() => setDraggingId(null)}
+        onDragOver={manual ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+        onDrop={manual ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderItems(filtered, fromId, p.id) } : undefined}
+        onMouseEnter={e => { const el = e.currentTarget; el.style.transform = 'translateY(-6px)'; el.style.borderColor = tc; el.style.boxShadow = `0 18px 36px rgba(0,0,0,.4)` }}
+        onMouseLeave={e => { const el = e.currentTarget; el.style.transform = 'none'; el.style.borderColor = 'rgba(30,120,200,.2)'; el.style.boxShadow = 'none' }}>
+        <div style={{ height: 3, background: tc }} />
+        <div style={{ width: '100%', height: 160, background: 'linear-gradient(135deg,#0a1829,#050d1a)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem', overflow: 'hidden', cursor: (p.photos && p.photos[0]) ? 'zoom-in' : 'default' }}
+          onClick={() => { if (p.photos && p.photos.length > 0) setLightbox({ images: p.photos, index: 0 }) }}>
+          {p.photos && p.photos[0] && <img loading="lazy" src={p.photos[0]} alt={p.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
+          {p.emoji && <span style={{ position: 'relative', zIndex: 1, opacity: p.photos && p.photos[0] ? 0.3 : 1 }}>{p.emoji}</span>}
+          {p.photos && p.photos.length > 1 && <span style={{ position: 'absolute', bottom: 8, right: 8, background: 'rgba(5,13,26,.75)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 100, padding: '.15rem .5rem', fontSize: '.62rem', fontFamily: "'Cinzel',serif", color: '#e8eef5' }}>📷 {p.photos.length}</span>}
+        </div>
+        <div style={{ padding: '1.1rem' }}>
+          <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '.65rem' }}>
+            {p.type && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: `${tc}22`, color: tc, border: `1px solid ${tc}44` }}>{p.type}</div>}
+            {p.classe && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: 'rgba(240,192,64,.15)', color: '#f0c040', border: '1px solid rgba(240,192,64,.35)' }}>Classe {p.classe}</div>}
+            {p.statut && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: 'rgba(122,154,184,.15)', color: '#7a9ab8', border: '1px solid rgba(122,154,184,.35)' }}>{p.statut}</div>}
+            {p.hereditaire && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: 'rgba(160,96,255,.15)', color: '#a060ff', border: '1px solid rgba(160,96,255,.35)' }}>🧬 Héréditaire</div>}
+          </div>
+          <div style={{ fontFamily: "'Cinzel',serif", fontSize: '1.05rem', fontWeight: 700, color: '#e8eef5', marginBottom: '.12rem' }}>{p.nom}</div>
+          {p.code && <div style={{ fontSize: '.78rem', color: '#4a6880', marginBottom: '.65rem', fontFamily: 'monospace' }}>{p.code}</div>}
+          {p.pouvoir && (
+            <div style={{ marginBottom: '.85rem' }}>
+              <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.25rem' }}>⚡ Pouvoir</div>
+              <div style={{ fontSize: '.85rem', color: '#c8d8e8', lineHeight: 1.6 }}>{p.pouvoir}</div>
+            </div>
+          )}
+          {p.faiblesse && <div style={{ fontSize: '.8rem', color: '#ff6060', marginBottom: '.65rem' }}>⚠️ {p.faiblesse}</div>}
+          {p.objectif_etude && <div style={{ fontSize: '.78rem', color: '#7a9ab8', marginBottom: '.65rem', fontStyle: 'italic' }}>🔬 {p.objectif_etude}</div>}
+          {(p.despas_derives || []).length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.3rem', marginBottom: '.65rem' }}>
+              {(p.despas_derives || []).map(dn => (
+                despasMap.has(dn)
+                  ? <a key={dn} href={`/despa?q=${encodeURIComponent(dn)}`} style={{ fontSize: '.72rem', color: THEME, textDecoration: 'none' }}>🦾 {dn}</a>
+                  : <span key={dn} style={{ fontSize: '.72rem', color: '#7a9ab8' }}>🦾 {dn}</span>
+              ))}
+            </div>
+          )}
+          {p.sujet_nom && (
+            <div style={{ background: '#0a1829', border: '1px solid rgba(30,120,200,.2)', borderRadius: 10, padding: '.75rem .9rem', marginBottom: '.65rem', display: 'flex', gap: '.75rem', alignItems: 'center' }}>
+              {p.sujet_photos && p.sujet_photos[0] ? (
+                <div style={{ width: 52, height: 52, borderRadius: 8, overflow: 'hidden', flexShrink: 0, border: `2px solid ${tc}`, cursor: 'zoom-in', position: 'relative' }}
+                  onClick={e => { e.stopPropagation(); setLightbox({ images: p.sujet_photos!, index: 0 }) }}>
+                  <img loading="lazy" src={p.sujet_photos[0]} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  {p.sujet_photos.length > 1 && <span style={{ position: 'absolute', bottom: 0, right: 0, background: 'rgba(5,13,26,.85)', color: '#e8eef5', fontSize: '.42rem', fontFamily: "'Cinzel',serif", padding: '0 3px' }}>+{p.sujet_photos.length - 1}</span>}
+                </div>
+              ) : (
+                <div style={{ width: 52, height: 52, borderRadius: 8, flexShrink: 0, background: '#0d2040', border: '1px solid rgba(30,120,200,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>👤</div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.2rem' }}>👤 Sujet</div>
+                <div style={{ fontSize: '.88rem', color: '#e8eef5', fontWeight: 700, marginBottom: p.sujet_statut ? '.15rem' : 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.sujet_nom}</div>
+                {p.sujet_statut && <div style={{ fontSize: '.78rem', color: '#7a9ab8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.sujet_statut}</div>}
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '.4rem', justifyContent: 'flex-end' }}>
+            <button onClick={() => duplicatePds(p)} title="Dupliquer" style={{ background: 'rgba(160,96,255,.1)', border: '1px solid rgba(160,96,255,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#a060ff', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>⧉</button>
+            <button onClick={() => openForm(p)} style={{ background: 'rgba(0,200,255,.1)', border: '1px solid rgba(0,200,255,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#00c8ff', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>✏️</button>
+            <button onClick={() => deletePds(p.id)} style={{ background: 'rgba(224,48,48,.1)', border: '1px solid rgba(224,48,48,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#ff6060', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>🗑</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 }

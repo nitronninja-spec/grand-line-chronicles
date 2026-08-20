@@ -22,6 +22,7 @@ interface Despa {
   ancien_detenteur?: string
   color?: string
   photo?: string
+  ordre_manuel?: number | null
 }
 
 const THEME = '#7c5cff'
@@ -32,6 +33,13 @@ const FALLBACK_MODIFICATEURS = ['Aucun', 'Consommable', 'Limité']
 // Du plus faible au plus fort — sert à trier par niveau, SS (le plus fort) en tête.
 function classeRank(c: string | undefined, classes: string[]) { const i = classes.indexOf(c || ''); return i === -1 ? -1 : i }
 const EXPLAINER = "Un Despa est un objet — une prothèse artificielle qui donne un pouvoir à celui qui le porte. Il n'est jamais gratuit : chaque Despa impose un coût (douleur, instabilité, dépendance...). Remplis cette fiche pour documenter un Despa existant dans l'univers : son origine, ses capacités, et qui le porte actuellement."
+
+interface ClasseSection { classe: string; items: Despa[] }
+// Regroupe par palier, SS en tête — même patron que buildGroupSections (personnages/page.tsx).
+function buildClasseSections(items: Despa[], classes: string[]): ClasseSection[] {
+  const order = classes.slice().reverse()
+  return order.map(c => ({ classe: c, items: items.filter(d => (d.classe || '') === c) })).filter(s => s.items.length > 0)
+}
 
 const S = {
   page: { minHeight: '100vh', background: '#050d1a', color: '#e8eef5', fontFamily: "'Crimson Pro', Georgia, serif", paddingTop: 60 } as React.CSSProperties,
@@ -64,6 +72,8 @@ export default function DespaPage() {
   const [classes, setClasses] = useState(FALLBACK_CLASSES)
   const [statuts, setStatuts] = useState(FALLBACK_STATUTS)
   const [modificateurs, setModificateurs] = useState(FALLBACK_MODIFICATEURS)
+  const [sortMode, setSortMode] = useState<'defaut' | 'manuel'>('defaut')
+  const [draggingId, setDraggingId] = useState<string | null>(null)
   const [form, setForm] = useState<Partial<Despa>>({
     nom: '', code: '', type: 'Cristallin', classe: 'C', statut: 'Actif', modificateur: 'Aucun', emoji: '', description: '', capacites: '', cout: '', proprietaire: '', ancien_detenteur: '', color: THEME
   })
@@ -79,9 +89,30 @@ export default function DespaPage() {
     let l = list
     if (search) l = l.filter(d => d.nom.toLowerCase().includes(search.toLowerCase()))
     if (statutFilter) l = l.filter(d => d.statut === statutFilter)
-    l = l.slice().sort((a, b) => classeRank(b.classe, classes) - classeRank(a.classe, classes))
+    l = l.slice().sort((a, b) => sortMode === 'manuel'
+      ? (a.ordre_manuel ?? Infinity) - (b.ordre_manuel ?? Infinity)
+      : classeRank(b.classe, classes) - classeRank(a.classe, classes))
     setFiltered(l)
-  }, [list, search, statutFilter, classes])
+  }, [list, search, statutFilter, classes, sortMode])
+
+  // Réordonne par glisser-déposer — même patron que reorderFactions (factions/page.tsx).
+  async function reorderItems(currentOrder: Despa[], fromId: string, toId: string) {
+    const fromIdx = currentOrder.findIndex(x => x.id === fromId)
+    const toIdx = currentOrder.findIndex(x => x.id === toId)
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return
+    const reordered = currentOrder.slice()
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    let failures = 0
+    for (let i = 0; i < reordered.length; i++) {
+      if (reordered[i].ordre_manuel !== i) {
+        const { error } = await supabase.from('despas').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        if (error) failures++
+      }
+    }
+    if (failures > 0) alert(`Le nouvel ordre n'a pas pu être enregistré entièrement.`)
+    fetchList()
+  }
 
   async function fetchTaxonomies() {
     const [t, c, s, m] = await Promise.all([
@@ -193,7 +224,15 @@ export default function DespaPage() {
             <button key={s} onClick={() => setStatutFilter(s)} style={{ background: statutFilter === s ? `${THEME}30` : '#0a1829', border: `1px solid ${statutFilter === s ? THEME : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: statutFilter === s ? THEME : '#7a9ab8', cursor: 'pointer' }}>{s}</button>
           ))}
         </div>
-        <div style={{ fontSize: '.72rem', color: '#4a6880', fontStyle: 'italic' }}>Classés par niveau décroissant (SS → C).</div>
+        <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '.5rem' }}>
+          <span style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.08em', textTransform: 'uppercase', color: '#4a6880', marginRight: '.2rem' }}>Tri :</span>
+          {(['defaut', 'manuel'] as const).map(m => (
+            <button key={m} onClick={() => setSortMode(m)} style={{ background: sortMode === m ? `${THEME}30` : '#0a1829', border: `1px solid ${sortMode === m ? THEME : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: sortMode === m ? THEME : '#7a9ab8', cursor: 'pointer' }}>
+              {m === 'defaut' ? 'Par palier' : 'Manuel (glisser-déposer)'}
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: '.72rem', color: '#4a6880', fontStyle: 'italic' }}>{sortMode === 'manuel' ? 'Glisse une carte pour la réordonner.' : 'Regroupés par palier (SS → C).'}</div>
       </div>
 
       <div style={S.grid}>
@@ -204,57 +243,17 @@ export default function DespaPage() {
             <button style={S.btnGold} onClick={() => openForm()}>＋ Ajouter le premier</button>
           </div>
         )}
-        {filtered.map(d => {
-          const tc = d.color || THEME
-          return (
-            <div key={d.id} style={{ background: '#0d2040', border: `1px solid rgba(30,120,200,.2)`, borderRadius: 14, overflow: 'hidden', transition: 'all .3s', position: 'relative' }}
-              onMouseEnter={e => { const el = e.currentTarget; el.style.transform = 'translateY(-6px)'; el.style.borderColor = tc; el.style.boxShadow = `0 18px 36px rgba(0,0,0,.4)` }}
-              onMouseLeave={e => { const el = e.currentTarget; el.style.transform = 'none'; el.style.borderColor = 'rgba(30,120,200,.2)'; el.style.boxShadow = 'none' }}>
-              <div style={{ height: 3, background: tc }} />
-              <div style={{ width: '100%', height: 160, background: 'linear-gradient(135deg,#0a1829,#050d1a)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem', overflow: 'hidden' }}>
-                {d.photo && <img loading="lazy" src={d.photo} alt={d.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
-                {d.emoji && <span style={{ position: 'relative', zIndex: 1, opacity: d.photo ? 0.3 : 1 }}>{d.emoji}</span>}
-              </div>
-              <div style={{ padding: '1.1rem' }}>
-                <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '.65rem' }}>
-                  {d.type && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: `${tc}22`, color: tc, border: `1px solid ${tc}44` }}>{d.type}</div>}
-                  {d.classe && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: 'rgba(240,192,64,.15)', color: '#f0c040', border: '1px solid rgba(240,192,64,.35)' }}>Classe {d.classe}</div>}
-                  {d.statut && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: 'rgba(122,154,184,.15)', color: '#7a9ab8', border: '1px solid rgba(122,154,184,.35)' }}>{d.statut}</div>}
-                </div>
-                <div style={{ fontFamily: "'Cinzel',serif", fontSize: '1.05rem', fontWeight: 700, color: '#e8eef5', marginBottom: '.12rem' }}>{d.nom}</div>
-                {d.code && <div style={{ fontSize: '.78rem', color: '#4a6880', marginBottom: '.65rem', fontFamily: 'monospace' }}>{d.code}</div>}
-                {d.description && <div style={{ fontSize: '.88rem', color: '#7a9ab8', lineHeight: 1.6, fontStyle: 'italic', marginBottom: '.85rem' }}>{d.description}</div>}
-                {d.capacites && (
-                  <div style={{ marginBottom: '.85rem' }}>
-                    <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.25rem' }}>⚡ Capacités</div>
-                    <div style={{ fontSize: '.85rem', color: '#c8d8e8', lineHeight: 1.6 }}>{d.capacites}</div>
-                  </div>
-                )}
-                {d.cout && <div style={{ fontSize: '.8rem', color: '#ff6060', marginBottom: '.65rem' }}>⚠️ {d.cout}</div>}
-                {d.modificateur && d.modificateur !== 'Aucun' && <div style={{ fontSize: '.78rem', color: '#a060ff', marginBottom: '.65rem' }}>🔧 {d.modificateur}</div>}
-                {d.proprietaire && (
-                  <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>
-                    Porteur : {personnageMap.has(d.proprietaire)
-                      ? <a href={`/personnages?open=${personnageMap.get(d.proprietaire)}`} style={{ color: '#00c8ff', textDecoration: 'none' }}>{d.proprietaire}</a>
-                      : <span style={{ color: '#7a9ab8' }}>{d.proprietaire}</span>}
-                  </div>
-                )}
-                {d.ancien_detenteur && (
-                  <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>
-                    Ancien porteur : {personnageMap.has(d.ancien_detenteur)
-                      ? <a href={`/personnages?open=${personnageMap.get(d.ancien_detenteur)}`} style={{ color: '#00c8ff', textDecoration: 'none' }}>{d.ancien_detenteur}</a>
-                      : <span style={{ color: '#7a9ab8' }}>{d.ancien_detenteur}</span>}
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: '.4rem', justifyContent: 'flex-end' }}>
-                  <button onClick={() => duplicateDespa(d)} title="Dupliquer" style={{ background: 'rgba(160,96,255,.1)', border: '1px solid rgba(160,96,255,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#a060ff', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>⧉</button>
-                  <button onClick={() => openForm(d)} style={{ background: 'rgba(0,200,255,.1)', border: '1px solid rgba(0,200,255,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#00c8ff', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>✏️</button>
-                  <button onClick={() => deleteDespa(d.id)} style={{ background: 'rgba(224,48,48,.1)', border: '1px solid rgba(224,48,48,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#ff6060', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>🗑</button>
-                </div>
-              </div>
-            </div>
-          )
-        })}
+        {sortMode === 'manuel'
+          ? filtered.map(d => renderCard(d))
+          : buildClasseSections(filtered, classes).flatMap((section, si) => [
+              <div key={`div-${section.classe}`} style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', gap: '.75rem', margin: si === 0 ? '0 0 .2rem' : '1.4rem 0 .2rem' }}>
+                <span style={{ fontFamily: "'Cinzel',serif", fontSize: '.68rem', letterSpacing: '.12em', textTransform: 'uppercase', color: THEME }}>
+                  🦾 Classe {section.classe} <span style={{ opacity: .7 }}>({section.items.length})</span>
+                </span>
+                <div style={{ flex: 1, height: 1, background: `${THEME}40` }} />
+              </div>,
+              ...section.items.map(d => renderCard(d)),
+            ])}
       </div>
 
       {showForm && (
@@ -336,4 +335,62 @@ export default function DespaPage() {
       )}
     </div>
   )
+
+  function renderCard(d: Despa) {
+    const tc = d.color || THEME
+    const manual = sortMode === 'manuel'
+    return (
+      <div key={d.id} style={{ background: '#0d2040', border: `1px solid ${manual && draggingId === d.id ? THEME : 'rgba(30,120,200,.2)'}`, borderRadius: 14, overflow: 'hidden', transition: 'all .3s', position: 'relative', opacity: manual && draggingId === d.id ? .4 : 1, cursor: manual ? 'grab' : undefined }}
+        draggable={manual}
+        onDragStart={manual ? e => { setDraggingId(d.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', d.id) } : undefined}
+        onDragEnd={() => setDraggingId(null)}
+        onDragOver={manual ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+        onDrop={manual ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderItems(filtered, fromId, d.id) } : undefined}
+        onMouseEnter={e => { const el = e.currentTarget; el.style.transform = 'translateY(-6px)'; el.style.borderColor = tc; el.style.boxShadow = `0 18px 36px rgba(0,0,0,.4)` }}
+        onMouseLeave={e => { const el = e.currentTarget; el.style.transform = 'none'; el.style.borderColor = 'rgba(30,120,200,.2)'; el.style.boxShadow = 'none' }}>
+        <div style={{ height: 3, background: tc }} />
+        <div style={{ width: '100%', height: 160, background: 'linear-gradient(135deg,#0a1829,#050d1a)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem', overflow: 'hidden' }}>
+          {d.photo && <img loading="lazy" src={d.photo} alt={d.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
+          {d.emoji && <span style={{ position: 'relative', zIndex: 1, opacity: d.photo ? 0.3 : 1 }}>{d.emoji}</span>}
+        </div>
+        <div style={{ padding: '1.1rem' }}>
+          <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginBottom: '.65rem' }}>
+            {d.type && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: `${tc}22`, color: tc, border: `1px solid ${tc}44` }}>{d.type}</div>}
+            {d.classe && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: 'rgba(240,192,64,.15)', color: '#f0c040', border: '1px solid rgba(240,192,64,.35)' }}>Classe {d.classe}</div>}
+            {d.statut && <div style={{ display: 'inline-block', borderRadius: 100, padding: '.18rem .65rem', fontFamily: "'Cinzel',serif", fontSize: '.52rem', letterSpacing: '.09em', textTransform: 'uppercase', background: 'rgba(122,154,184,.15)', color: '#7a9ab8', border: '1px solid rgba(122,154,184,.35)' }}>{d.statut}</div>}
+          </div>
+          <div style={{ fontFamily: "'Cinzel',serif", fontSize: '1.05rem', fontWeight: 700, color: '#e8eef5', marginBottom: '.12rem' }}>{d.nom}</div>
+          {d.code && <div style={{ fontSize: '.78rem', color: '#4a6880', marginBottom: '.65rem', fontFamily: 'monospace' }}>{d.code}</div>}
+          {d.description && <div style={{ fontSize: '.88rem', color: '#7a9ab8', lineHeight: 1.6, fontStyle: 'italic', marginBottom: '.85rem' }}>{d.description}</div>}
+          {d.capacites && (
+            <div style={{ marginBottom: '.85rem' }}>
+              <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.25rem' }}>⚡ Capacités</div>
+              <div style={{ fontSize: '.85rem', color: '#c8d8e8', lineHeight: 1.6 }}>{d.capacites}</div>
+            </div>
+          )}
+          {d.cout && <div style={{ fontSize: '.8rem', color: '#ff6060', marginBottom: '.65rem' }}>⚠️ {d.cout}</div>}
+          {d.modificateur && d.modificateur !== 'Aucun' && <div style={{ fontSize: '.78rem', color: '#a060ff', marginBottom: '.65rem' }}>🔧 {d.modificateur}</div>}
+          {d.proprietaire && (
+            <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>
+              Porteur : {personnageMap.has(d.proprietaire)
+                ? <a href={`/personnages?open=${personnageMap.get(d.proprietaire)}`} style={{ color: '#00c8ff', textDecoration: 'none' }}>{d.proprietaire}</a>
+                : <span style={{ color: '#7a9ab8' }}>{d.proprietaire}</span>}
+            </div>
+          )}
+          {d.ancien_detenteur && (
+            <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>
+              Ancien porteur : {personnageMap.has(d.ancien_detenteur)
+                ? <a href={`/personnages?open=${personnageMap.get(d.ancien_detenteur)}`} style={{ color: '#00c8ff', textDecoration: 'none' }}>{d.ancien_detenteur}</a>
+                : <span style={{ color: '#7a9ab8' }}>{d.ancien_detenteur}</span>}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '.4rem', justifyContent: 'flex-end' }}>
+            <button onClick={() => duplicateDespa(d)} title="Dupliquer" style={{ background: 'rgba(160,96,255,.1)', border: '1px solid rgba(160,96,255,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#a060ff', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>⧉</button>
+            <button onClick={() => openForm(d)} style={{ background: 'rgba(0,200,255,.1)', border: '1px solid rgba(0,200,255,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#00c8ff', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>✏️</button>
+            <button onClick={() => deleteDespa(d.id)} style={{ background: 'rgba(224,48,48,.1)', border: '1px solid rgba(224,48,48,.25)', borderRadius: 8, padding: '.2rem .5rem', color: '#ff6060', cursor: 'pointer', fontSize: '.7rem', fontFamily: "'Cinzel',serif" }}>🗑</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 }
