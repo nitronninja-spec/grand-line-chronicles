@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
+import { fetchCategoryValues } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageLightbox from '@/components/ImageLightbox'
 
@@ -28,11 +29,11 @@ interface Pds {
 }
 
 const THEME = '#40d060'
-const TYPES = ['Résonance', 'Mutationnel', 'Bestial', 'Héritage']
-const CLASSES = ['C', 'B', 'A', 'S', 'SS']
-const STATUTS = ['Actif', 'Perdu', 'En Stase', 'En fuite', 'Neutralisé', 'Inconnu']
+const FALLBACK_TYPES = ['Résonance', 'Mutationnel', 'Bestial', 'Héritage']
+const FALLBACK_CLASSES = ['C', 'B', 'A', 'S', 'SS']
+const FALLBACK_STATUTS = ['Actif', 'Perdu', 'En Stase', 'En fuite', 'Neutralisé', 'Inconnu']
 // Du plus faible au plus fort — sert à trier par niveau, SS (le plus fort) en tête.
-function classeRank(c?: string) { const i = CLASSES.indexOf(c || ''); return i === -1 ? -1 : i }
+function classeRank(c: string | undefined, classes: string[]) { const i = classes.indexOf(c || ''); return i === -1 ? -1 : i }
 const EXPLAINER = "Un PDS est un être vivant — humain, animal ou créature — porteur d'une anomalie naturelle, génétique ou énergétique. On ne le fabrique pas, on l'observe et on l'étudie, parfois pour en tirer un Despa. Remplis cette fiche pour documenter le sujet : son pouvoir, ses limites, et son histoire."
 
 const S = {
@@ -120,11 +121,14 @@ export default function PdsPage() {
   const [sujetPhotoFiles, setSujetPhotoFiles] = useState<File[]>([])
   const [sujetPhotoPreviews, setSujetPhotoPreviews] = useState<string[]>([])
   const [dragOverSujet, setDragOverSujet] = useState(false)
+  const [types, setTypes] = useState(FALLBACK_TYPES)
+  const [classes, setClasses] = useState(FALLBACK_CLASSES)
+  const [statuts, setStatuts] = useState(FALLBACK_STATUTS)
 
   const despasMap = new Map(despasList.map(d => [d.nom, d.id]))
 
   useEffect(() => {
-    fetchList(); fetchDespas()
+    fetchList(); fetchDespas(); fetchTaxonomies()
     const q = new URLSearchParams(window.location.search).get('q')
     if (q) setSearch(q)
   }, [])
@@ -132,9 +136,18 @@ export default function PdsPage() {
     let l = list
     if (search) l = l.filter(p => p.nom.toLowerCase().includes(search.toLowerCase()))
     if (statutFilter) l = l.filter(p => p.statut === statutFilter)
-    l = l.slice().sort((a, b) => classeRank(b.classe) - classeRank(a.classe))
+    l = l.slice().sort((a, b) => classeRank(b.classe, classes) - classeRank(a.classe, classes))
     setFiltered(l)
-  }, [list, search, statutFilter])
+  }, [list, search, statutFilter, classes])
+
+  async function fetchTaxonomies() {
+    const [t, c, s] = await Promise.all([
+      fetchCategoryValues('pds', 'type', FALLBACK_TYPES),
+      fetchCategoryValues('pds', 'classe', FALLBACK_CLASSES),
+      fetchCategoryValues('pds', 'statut', FALLBACK_STATUTS),
+    ])
+    setTypes(t); setClasses(c); setStatuts(s)
+  }
 
   async function fetchList() {
     const { data } = await supabase.from('pds').select('*').order('created_at', { ascending: false })
@@ -245,7 +258,7 @@ export default function PdsPage() {
         <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '.5rem' }}>
           <span style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.08em', textTransform: 'uppercase', color: '#4a6880', marginRight: '.2rem' }}>Statut :</span>
           <button onClick={() => setStatutFilter('')} style={{ background: statutFilter === '' ? `${THEME}30` : '#0a1829', border: `1px solid ${statutFilter === '' ? THEME : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: statutFilter === '' ? THEME : '#7a9ab8', cursor: 'pointer' }}>Tous</button>
-          {STATUTS.map(s => (
+          {statuts.map(s => (
             <button key={s} onClick={() => setStatutFilter(s)} style={{ background: statutFilter === s ? `${THEME}30` : '#0a1829', border: `1px solid ${statutFilter === s ? THEME : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: statutFilter === s ? THEME : '#7a9ab8', cursor: 'pointer' }}>{s}</button>
           ))}
         </div>
@@ -368,19 +381,19 @@ export default function PdsPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.85rem' }}>
                 <div><label style={S.label}>Type</label>
                   <select style={{ ...S.input }} value={form.type || 'Résonance'} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-                    {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    {types.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div><label style={S.label}>Classe</label>
                   <select style={{ ...S.input }} value={form.classe || 'C'} onChange={e => setForm(f => ({ ...f, classe: e.target.value }))}>
-                    {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {classes.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.85rem' }}>
                 <div><label style={S.label}>Statut actuel</label>
                   <select style={{ ...S.input }} value={form.statut || 'Actif'} onChange={e => setForm(f => ({ ...f, statut: e.target.value }))}>
-                    {STATUTS.map(s => <option key={s} value={s}>{s}</option>)}
+                    {statuts.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
