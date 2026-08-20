@@ -28,6 +28,8 @@ const TYPES = ['Cristallin', 'Biologique', 'Hybride', 'Technologique']
 const CLASSES = ['C', 'B', 'A', 'S', 'SS']
 const STATUTS = ['Actif', 'Perdu', 'Inachevé', 'En Stase', 'Contrôlé']
 const MODIFICATEURS = ['Aucun', 'Consommable', 'Limité']
+// Du plus faible au plus fort — sert à trier par niveau, SS (le plus fort) en tête.
+function classeRank(c?: string) { const i = CLASSES.indexOf(c || ''); return i === -1 ? -1 : i }
 const EXPLAINER = "Un Despa est un objet — une prothèse artificielle qui donne un pouvoir à celui qui le porte. Il n'est jamais gratuit : chaque Despa impose un coût (douleur, instabilité, dépendance...). Remplis cette fiche pour documenter un Despa existant dans l'univers : son origine, ses capacités, et qui le porte actuellement."
 
 const S = {
@@ -50,6 +52,7 @@ export default function DespaPage() {
   const [list, setList] = useState<Despa[]>([])
   const [filtered, setFiltered] = useState<Despa[]>([])
   const [search, setSearch] = useState('')
+  const [statutFilter, setStatutFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -70,8 +73,10 @@ export default function DespaPage() {
   useEffect(() => {
     let l = list
     if (search) l = l.filter(d => d.nom.toLowerCase().includes(search.toLowerCase()))
+    if (statutFilter) l = l.filter(d => d.statut === statutFilter)
+    l = l.slice().sort((a, b) => classeRank(b.classe) - classeRank(a.classe))
     setFiltered(l)
-  }, [list, search])
+  }, [list, search, statutFilter])
 
   async function fetchList() {
     const { data } = await supabase.from('despas').select('*').order('created_at', { ascending: false })
@@ -166,6 +171,14 @@ export default function DespaPage() {
             <input style={{ ...S.input, paddingLeft: '2.5rem' }} placeholder="Rechercher un DS..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
         </div>
+        <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '.5rem' }}>
+          <span style={{ fontFamily: "'Cinzel',serif", fontSize: '.56rem', letterSpacing: '.08em', textTransform: 'uppercase', color: '#4a6880', marginRight: '.2rem' }}>Statut :</span>
+          <button onClick={() => setStatutFilter('')} style={{ background: statutFilter === '' ? `${THEME}30` : '#0a1829', border: `1px solid ${statutFilter === '' ? THEME : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: statutFilter === '' ? THEME : '#7a9ab8', cursor: 'pointer' }}>Tous</button>
+          {STATUTS.map(s => (
+            <button key={s} onClick={() => setStatutFilter(s)} style={{ background: statutFilter === s ? `${THEME}30` : '#0a1829', border: `1px solid ${statutFilter === s ? THEME : 'rgba(30,120,200,.2)'}`, borderRadius: 100, padding: '.3rem .8rem', fontFamily: "'Cinzel',serif", fontSize: '.58rem', letterSpacing: '.07em', textTransform: 'uppercase', color: statutFilter === s ? THEME : '#7a9ab8', cursor: 'pointer' }}>{s}</button>
+          ))}
+        </div>
+        <div style={{ fontSize: '.72rem', color: '#4a6880', fontStyle: 'italic' }}>Classés par niveau décroissant (SS → C).</div>
       </div>
 
       <div style={S.grid}>

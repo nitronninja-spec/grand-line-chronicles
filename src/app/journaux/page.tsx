@@ -201,25 +201,25 @@ export default function JournauxPage() {
         )}
         {filtered.map(j => (
           <div key={j.id} style={{display:'flex',gap:'1.25rem',marginBottom:'1.75rem',position:'relative'}}>
-            <div style={{width:42,height:42,borderRadius:'50%',background:'#0d2040',border:'2px solid #d4a017',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Cinzel Decorative',serif",fontSize:'.85rem',fontWeight:700,color:'#f0c040',flexShrink:0,boxShadow:'0 0 14px rgba(212,160,23,.2)',zIndex:1}}>{j.num||'?'}</div>
-            <div style={{flex:1,background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:12,padding:'1.1rem',transition:'all .2s',cursor:'pointer'}}
+            <div style={{width:44,height:44,borderRadius:'50%',background:'linear-gradient(135deg,#d4a017,#8a5a1c)',border:'2px solid #f0c040',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Cinzel Decorative',serif",fontSize:'.9rem',fontWeight:900,color:'#050d1a',flexShrink:0,boxShadow:'0 0 18px rgba(212,160,23,.35)',zIndex:1}}>{j.num||'?'}</div>
+            <div style={{flex:1,background:'#0d2040',border:'1px solid rgba(30,120,200,.2)',borderRadius:14,overflow:'hidden',transition:'all .3s',cursor:'pointer'}}
               onClick={() => setConsult(j)}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor='#d4a017';e.currentTarget.style.boxShadow='0 6px 20px rgba(0,0,0,.3)'}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(30,120,200,.2)';e.currentTarget.style.boxShadow='none'}}>
-              {(j.date || j.lieu) && <div style={{fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.11em',textTransform:'uppercase',color:'#00c8ff',marginBottom:'.35rem'}}>{j.date && `📅 ${formatDate(j.date)}`} {j.date && j.lieu ? '· ' : ''}{j.lieu}</div>}
-              <div style={{fontFamily:"'Cinzel',serif",fontSize:'.95rem',fontWeight:700,color:'#e8eef5',marginBottom:'.45rem'}}>{j.titre}</div>
-              {j.resume && <div style={{fontSize:'.88rem',color:'#7a9ab8',fontStyle:'italic',lineHeight:1.6,marginBottom:'.65rem',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical' as const,overflow:'hidden'}}>{j.resume}</div>}
+              onMouseEnter={e=>{const el=e.currentTarget;el.style.transform='translateY(-4px)';el.style.borderColor='#d4a017';el.style.boxShadow='0 14px 32px rgba(0,0,0,.4)'}}
+              onMouseLeave={e=>{const el=e.currentTarget;el.style.transform='none';el.style.borderColor='rgba(30,120,200,.2)';el.style.boxShadow='none'}}>
 
               {j.photos && j.photos.length > 0 && (
-                <div style={{display:'flex',gap:'.4rem',marginBottom:'.65rem'}}>
-                  {j.photos.slice(0,4).map((ph,i) => (
-                    <div key={i} onClick={e => { e.stopPropagation(); setLightbox({ images: j.photos!, index: i }) }} style={{width:52,height:52,borderRadius:6,overflow:'hidden',border:'1px solid rgba(30,120,200,.2)',flexShrink:0,cursor:'zoom-in'}}>
-                      <img src={ph} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
-                    </div>
-                  ))}
-                  {j.photos.length > 4 && <div style={{width:52,height:52,borderRadius:6,background:'#071828',display:'flex',alignItems:'center',justifyContent:'center',color:'#7a9ab8',fontSize:'.75rem',fontFamily:"'Cinzel',serif"}}>+{j.photos.length-4}</div>}
+                <div style={{width:'100%',height:150,position:'relative',overflow:'hidden',cursor:'zoom-in'}}
+                  onClick={e => { e.stopPropagation(); setLightbox({ images: j.photos!, index: 0 }) }}>
+                  <img src={j.photos[0]} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                  <div style={{position:'absolute',inset:0,background:'linear-gradient(to top,#0d2040,transparent 55%)'}} />
+                  {j.photos.length > 1 && <span style={{position:'absolute',bottom:8,right:10,background:'rgba(5,13,26,.75)',border:'1px solid rgba(255,255,255,.2)',borderRadius:100,padding:'.15rem .55rem',fontSize:'.62rem',fontFamily:"'Cinzel',serif",color:'#e8eef5'}}>📷 {j.photos.length}</span>}
                 </div>
               )}
+
+              <div style={{padding:'1.1rem'}}>
+              {(j.date || j.lieu) && <div style={{fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.11em',textTransform:'uppercase',color:'#00c8ff',marginBottom:'.35rem'}}>{j.date && `📅 ${formatDate(j.date)}`} {j.date && j.lieu ? '· ' : ''}{j.lieu}</div>}
+              <div style={{fontFamily:"'Cinzel',serif",fontSize:'1rem',fontWeight:700,color:'#e8eef5',marginBottom:'.45rem'}}>{j.titre}</div>
+              {j.resume && <div style={{fontSize:'.88rem',color:'#7a9ab8',fontStyle:'italic',lineHeight:1.6,marginBottom:'.65rem',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical' as const,overflow:'hidden'}}>{j.resume}</div>}
 
               {(j.personnages && j.personnages.length > 0) && (
                 <div style={{display:'flex',gap:'.3rem',flexWrap:'wrap',marginBottom:'.65rem'}}>
@@ -239,6 +239,7 @@ export default function JournauxPage() {
                   <button onClick={e => { e.stopPropagation(); openForm(j) }} style={{background:'rgba(0,200,255,.1)',border:'1px solid rgba(0,200,255,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#00c8ff',cursor:'pointer',fontSize:'.7rem'}}>✏️</button>
                   <button onClick={e => { e.stopPropagation(); deleteJournal(j.id) }} style={{background:'rgba(224,48,48,.1)',border:'1px solid rgba(224,48,48,.25)',borderRadius:8,padding:'.2rem .5rem',color:'#ff6060',cursor:'pointer',fontSize:'.7rem'}}>🗑</button>
                 </div>
+              </div>
               </div>
             </div>
           </div>
