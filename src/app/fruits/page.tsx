@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
+import { fetchCategoryDetails, CategoryDetail } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import PersonnageSearchSelect from '@/components/PersonnageSearchSelect'
 import ImageLightbox from '@/components/ImageLightbox'
@@ -27,25 +28,24 @@ interface Fruit {
   faiblesses?: string
 }
 
-const FRUIT_TYPES = ['Paramecia', 'Logia', 'Zoan', 'Mythical', 'Inconnu']
 const TAB_ALL = ''
-const FRUIT_TABS = [TAB_ALL, ...FRUIT_TYPES]
-const TYPE_COLORS: Record<string, string> = {
-  Paramecia: '#40d060', Logia: '#ff8c40', Zoan: '#a060ff', Mythical: '#d4a017', Inconnu: '#7a9ab8'
-}
-const TYPE_EMOJI: Record<string, string> = {
-  Paramecia: '🔮', Logia: '🌪️', Zoan: '🐾', Mythical: '✨', Inconnu: '❓'
-}
+const FALLBACK_TYPE_DETAILS: CategoryDetail[] = [
+  { value: 'Paramecia', label: 'Paramecia', emoji: '🔮', color: '#40d060' },
+  { value: 'Logia', label: 'Logia', emoji: '🌪️', color: '#ff8c40' },
+  { value: 'Zoan', label: 'Zoan', emoji: '🐾', color: '#a060ff' },
+  { value: 'Mythical', label: 'Mythical Zoan', emoji: '✨', color: '#d4a017' },
+  { value: 'Inconnu', label: 'Inconnu', emoji: '❓', color: '#7a9ab8' },
+]
 // Mangé/Perdu/Stocké sont des états mutuellement exclusifs et volontairement très visibles
 // (ruban plein sur la photo) — l'absence de statut affiche "Disponible" pour que l'information
-// soit toujours explicite plutôt que silencieuse.
-const STATUT_FRUIT: Record<string, { label: string; icon: string; color: string }> = {
-  mange: { label: 'Mangé', icon: '🍽️', color: '#e03030' },
-  perdu: { label: 'Perdu', icon: '❓', color: '#a0a0c0' },
-  stocke: { label: 'Stocké', icon: '📦', color: '#00c8ff' },
-}
+// soit toujours explicite plutôt que silencieuse. "Disponible" n'est jamais une valeur stockée,
+// donc jamais dans categories — c'est un repli local à part.
+const FALLBACK_STATUT_DETAILS: CategoryDetail[] = [
+  { value: 'mange', label: 'Mangé', emoji: '🍽️', color: '#e03030' },
+  { value: 'perdu', label: 'Perdu', emoji: '❓', color: '#a0a0c0' },
+  { value: 'stocke', label: 'Stocké', emoji: '📦', color: '#00c8ff' },
+]
 const STATUT_DISPONIBLE = { label: 'Disponible', icon: '🌱', color: '#40d060' }
-function fruitStatut(f: Fruit) { return f.statut && STATUT_FRUIT[f.statut] ? STATUT_FRUIT[f.statut] : STATUT_DISPONIBLE }
 function parsePrix(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
 
 const S = {
@@ -255,15 +255,28 @@ export default function FruitsPage() {
   const [dragOver, setDragOver] = useState(false)
   const [personnages, setPersonnages] = useState<{ id: string; nom: string }[]>([])
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
+  const [typeDetails, setTypeDetails] = useState<CategoryDetail[]>(FALLBACK_TYPE_DETAILS)
+  const [statutDetails, setStatutDetails] = useState<CategoryDetail[]>(FALLBACK_STATUT_DETAILS)
   const [form, setForm] = useState<Partial<Fruit>>({
     nom: '', jp: '', type: 'Paramecia', puissance: 5,
     emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', color: '#40d060', faiblesses: '', photos: [], statut: '', prix: ''
   })
 
+  const FRUIT_TYPES = typeDetails.map(t => t.value)
+  const FRUIT_TABS = [TAB_ALL, ...FRUIT_TYPES]
+  const TYPE_COLORS: Record<string, string> = Object.fromEntries(typeDetails.map(t => [t.value, t.color]))
+  const TYPE_EMOJI: Record<string, string> = Object.fromEntries(typeDetails.map(t => [t.value, t.emoji]))
+  const STATUT_FRUIT: Record<string, { label: string; icon: string; color: string }> = Object.fromEntries(
+    statutDetails.map(s => [s.value, { label: s.label, icon: s.emoji, color: s.color }])
+  )
+  function fruitStatut(f: Fruit) { return f.statut && STATUT_FRUIT[f.statut] ? STATUT_FRUIT[f.statut] : STATUT_DISPONIBLE }
+
   const personnageMap = new Map(personnages.map(p => [p.nom, p.id]))
 
   useEffect(() => {
     fetchList(); fetchPersonnages()
+    fetchCategoryDetails('fruits', 'type', FALLBACK_TYPE_DETAILS).then(setTypeDetails)
+    fetchCategoryDetails('fruits', 'statut', FALLBACK_STATUT_DETAILS).then(setStatutDetails)
     const q = new URLSearchParams(window.location.search).get('q')
     if (q) setSearch(q)
   }, [])
@@ -544,11 +557,7 @@ export default function FruitsPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.85rem' }}>
                 <div><label style={S.label}>Type</label>
                   <select style={{ ...S.input }} value={form.type || 'Paramecia'} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-                    <option value="Paramecia">Paramecia</option>
-                    <option value="Logia">Logia</option>
-                    <option value="Zoan">Zoan</option>
-                    <option value="Mythical">Mythical Zoan</option>
-                    <option value="Inconnu">Inconnu</option>
+                    {typeDetails.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>
                 <div><label style={S.label}>Puissance (1-10)</label><input style={S.input} type="number" min="1" max="10" value={form.puissance || 5} onChange={e => setForm(f => ({ ...f, puissance: parseInt(e.target.value) }))} /></div>
@@ -560,10 +569,8 @@ export default function FruitsPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.85rem' }}>
                 <div><label style={S.label}>Statut</label>
                   <select style={{ ...S.input }} value={form.statut || ''} onChange={e => setForm(f => ({ ...f, statut: e.target.value }))}>
-                    <option value="">🌱 Disponible</option>
-                    <option value="mange">🍽️ Mangé</option>
-                    <option value="perdu">❓ Perdu</option>
-                    <option value="stocke">📦 Stocké</option>
+                    <option value="">{STATUT_DISPONIBLE.icon} {STATUT_DISPONIBLE.label}</option>
+                    {statutDetails.map(s => <option key={s.value} value={s.value}>{s.emoji} {s.label}</option>)}
                   </select>
                 </div>
                 <div><label style={S.label}>Prix (berries)</label>

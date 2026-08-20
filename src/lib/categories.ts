@@ -25,6 +25,19 @@ export async function fetchCategoryFull(contentType: string, dimension: string, 
   return data.map(d => ({ value: d.value as string, emoji: (d.emoji as string) || '', color: (d.color as string) || '#7a9ab8', cap: (d.cap as number) ?? null }))
 }
 
+export interface CategoryDetail { value: string; label: string; emoji: string; color: string }
+
+// Variante la plus granulaire : valeur, libellé, emoji et couleur tous séparés — pour les
+// dictionnaires où le libellé affiché diffère de la valeur stockée (ex: fruits.statut vaut
+// "mange" mais affiche "Mangé") et où l'icône est rendue indépendamment du libellé.
+export async function fetchCategoryDetails(contentType: string, dimension: string, fallback: CategoryDetail[]): Promise<CategoryDetail[]> {
+  const { data, error } = await supabase.from('categories').select('value,label,emoji,color')
+    .eq('content_type', contentType).eq('dimension', dimension).eq('actif', true)
+    .order('ordre', { ascending: true })
+  if (error || !data || data.length === 0) return fallback
+  return data.map(d => ({ value: d.value as string, label: (d.label as string) || (d.value as string), emoji: (d.emoji as string) || '', color: (d.color as string) || '#7a9ab8' }))
+}
+
 export interface CategoryRow { id: string; label: string; color: string }
 
 // Variante pour les pages qui affichent aussi la couleur par catégorie (ex: Lore) — même

@@ -34,7 +34,7 @@ insert into categories (content_type, dimension, value, label, emoji, color, ord
   ('fruits', 'type', 'Paramecia', 'Paramecia', '🔮', '#40d060', 0),
   ('fruits', 'type', 'Logia', 'Logia', '🌪️', '#ff8c40', 1),
   ('fruits', 'type', 'Zoan', 'Zoan', '🐾', '#a060ff', 2),
-  ('fruits', 'type', 'Mythical', 'Mythical', '✨', '#d4a017', 3),
+  ('fruits', 'type', 'Mythical', 'Mythical Zoan', '✨', '#d4a017', 3),
   ('fruits', 'type', 'Inconnu', 'Inconnu', '❓', '#7a9ab8', 4)
 on conflict do nothing;
 
