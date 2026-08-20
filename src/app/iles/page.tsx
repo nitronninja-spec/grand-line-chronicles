@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
+import { fetchCategoryFull, CategoryFull } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageLightbox from '@/components/ImageLightbox'
 
@@ -23,22 +24,27 @@ interface Ile {
   miro?: string
 }
 
-const SEA_ORDER = ['East Blue', 'West Blue', 'North Blue', 'South Blue', 'Grand Line', 'Red Line', 'New World']
-const REGIONS = [...SEA_ORDER, 'Région inconnue']
-const REGION_COLORS: Record<string, string> = {
-  'East Blue': '#00c8ff', 'West Blue': '#4488ff', 'North Blue': '#a060ff',
-  'South Blue': '#40d060', 'Grand Line': '#d4a017', 'Red Line': '#ff8c40', 'New World': '#e03030',
-  'Région inconnue': '#7a9ab8'
-}
+const FALLBACK_REGION_FULL: CategoryFull[] = [
+  { value: 'East Blue', emoji: '', color: '#00c8ff', cap: null },
+  { value: 'West Blue', emoji: '', color: '#4488ff', cap: null },
+  { value: 'North Blue', emoji: '', color: '#a060ff', cap: null },
+  { value: 'South Blue', emoji: '', color: '#40d060', cap: null },
+  { value: 'Grand Line', emoji: '', color: '#d4a017', cap: null },
+  { value: 'Red Line', emoji: '', color: '#ff8c40', cap: null },
+  { value: 'New World', emoji: '', color: '#e03030', cap: null },
+  { value: 'Région inconnue', emoji: '', color: '#7a9ab8', cap: null },
+]
 const PEUPLE = 'Peuple'
 type SortMode = 'mer' | 'mer-rev' | 'az' | 'za'
 
-function sortIles(items: Ile[], mode: SortMode) {
+// "regions" inclut "Région inconnue" en dernière position — comme son index y est toujours
+// le plus grand, elle finit toujours en fin de liste, exactement comme le repli -1→999 d'avant.
+function sortIles(items: Ile[], mode: SortMode, regions: string[]) {
   return items.slice().sort((a, b) => {
     if (mode === 'az') return a.nom.localeCompare(b.nom)
     if (mode === 'za') return b.nom.localeCompare(a.nom)
-    const ai = SEA_ORDER.indexOf(a.region || '')
-    const bi = SEA_ORDER.indexOf(b.region || '')
+    const ai = regions.indexOf(a.region || '')
+    const bi = regions.indexOf(b.region || '')
     const oa = ai === -1 ? 999 : ai
     const ob = bi === -1 ? 999 : bi
     return (mode === 'mer-rev' ? ob - oa : oa - ob) || a.nom.localeCompare(b.nom)
@@ -81,9 +87,14 @@ export default function IlesPage() {
   const [form, setForm] = useState<Partial<Ile>>({
     nom: '', emoji: '🏝️', region: 'Grand Line', climat: '', factions: [], chef: '', iles_parentes: [], est_archipel: false, est_detruite: false, description: '', gdoc: '', miro: '', photos: []
   })
+  const [regionFull, setRegionFull] = useState<CategoryFull[]>(FALLBACK_REGION_FULL)
+
+  const REGIONS = regionFull.map(r => r.value)
+  const REGION_COLORS: Record<string, string> = Object.fromEntries(regionFull.map(r => [r.value, r.color]))
 
   useEffect(() => {
     fetchList(); fetchFactions(); fetchPersonnages()
+    fetchCategoryFull('iles', 'region', FALLBACK_REGION_FULL).then(setRegionFull)
     const q = new URLSearchParams(window.location.search).get('q')
     if (q) setSearch(q)
   }, [])
@@ -93,8 +104,8 @@ export default function IlesPage() {
     if (search) l = l.filter(i => i.nom.toLowerCase().includes(search.toLowerCase()))
     if (regionFilter) l = l.filter(i => i.region === regionFilter)
     if (factionFilter) l = l.filter(i => i.factions?.includes(factionFilter))
-    setFiltered(sortIles(l, sortMode))
-  }, [list, search, regionFilter, factionFilter, sortMode])
+    setFiltered(sortIles(l, sortMode, REGIONS))
+  }, [list, search, regionFilter, factionFilter, sortMode, regionFull])
 
   async function fetchList() {
     const { data } = await supabase.from('iles').select('*').order('created_at', { ascending: false })
