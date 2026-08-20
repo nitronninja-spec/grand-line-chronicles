@@ -93,17 +93,19 @@ type FactionSortMode = 'categorie' | 'az' | 'prime' | 'manuel'
 // Les factions sont réparties en 4 pages, chacune avec sa couleur dominante. Une faction
 // individuelle (surtout côté Pirates/Peuple, où il y a beaucoup d'équipages distincts) peut
 // remplacer cette couleur par la sienne via le champ "couleur".
-type PageTab = 'pirates' | 'marine' | 'peuple' | 'sans_groupe'
-const PAGE_ORDER: PageTab[] = ['pirates', 'marine', 'peuple', 'sans_groupe']
+type PageTab = 'pirates' | 'marine' | 'revolutionnaire' | 'peuple' | 'sans_groupe'
+const PAGE_ORDER: PageTab[] = ['pirates', 'marine', 'revolutionnaire', 'peuple', 'sans_groupe']
 const PAGE_THEMES: Record<PageTab, { label: string; emoji: string; color: string }> = {
   pirates: { label: 'Pirates', emoji: '🏴‍☠️', color: '#e03030' },
   marine: { label: 'Marine · CP · Shichibukai · GM', emoji: '⚓', color: '#3f7fe0' },
+  revolutionnaire: { label: 'Révolutionnaire', emoji: '✊', color: '#ff8c40' },
   peuple: { label: 'Peuple', emoji: '👥', color: '#40d060' },
   sans_groupe: { label: 'Sans groupe', emoji: '✨', color: '#f0c040' },
 }
 function factionPage(f: Faction): PageTab {
   if (f.type === 'Pirates') return 'pirates'
   if (f.type === 'Marine' || f.type === 'Gouvernement') return 'marine'
+  if (f.type === 'Révolutionnaire') return 'revolutionnaire'
   if (f.type === 'Peuple') return 'peuple'
   return 'sans_groupe'
 }
