@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase, uploadImage } from '@/lib/supabase'
+import { fetchCategoryRows, CategoryRow } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 
 interface LoreArticle {
@@ -14,7 +15,9 @@ interface LoreArticle {
   modifie?: string
 }
 
-const CATS = [
+// "Magie" reste dans le repli pour les fiches déjà existantes en base (aucune actuellement),
+// mais est volontairement absente du seed de categories — l'univers repose sur le Haki.
+const FALLBACK_CATS: CategoryRow[] = [
   { id:'histoire', label:'📜 Histoire', color:'#d4a017' },
   { id:'geographie', label:'🌍 Géographie', color:'#00c8ff' },
   { id:'magie', label:'✨ Magie', color:'#a060ff' },
@@ -85,9 +88,11 @@ export default function LorePage() {
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
   const [lightbox, setLightbox] = useState<string|null>(null)
+  const [cats, setCats] = useState<CategoryRow[]>(FALLBACK_CATS)
 
   useEffect(() => {
     fetchArticles()
+    fetchCategoryRows('lore', 'categorie', FALLBACK_CATS).then(setCats)
     const q = new URLSearchParams(window.location.search).get('q')
     if (q) setSearch(q)
   }, [])
@@ -194,7 +199,7 @@ export default function LorePage() {
         </div>
         <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',marginBottom:allTags.length>0?'.65rem':'1.25rem'}}>
           <button onClick={()=>setCatFilter('')} style={{background:catFilter===''?'rgba(212,160,23,.15)':'#0a1829',border:`1px solid ${catFilter===''?'#d4a017':'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:catFilter===''?'#f0c040':'#7a9ab8',cursor:'pointer'}}>Tous</button>
-          {CATS.map(c => <button key={c.id} onClick={()=>setCatFilter(c.id)} style={{background:catFilter===c.id?`${c.color}22`:'#0a1829',border:`1px solid ${catFilter===c.id?c.color:'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:catFilter===c.id?c.color:'#7a9ab8',cursor:'pointer'}}>{c.label}</button>)}
+          {cats.map(c => <button key={c.id} onClick={()=>setCatFilter(c.id)} style={{background:catFilter===c.id?`${c.color}22`:'#0a1829',border:`1px solid ${catFilter===c.id?c.color:'rgba(30,120,200,.2)'}`,borderRadius:100,padding:'.3rem .8rem',fontFamily:"'Cinzel',serif",fontSize:'.58rem',letterSpacing:'.07em',textTransform:'uppercase',color:catFilter===c.id?c.color:'#7a9ab8',cursor:'pointer'}}>{c.label}</button>)}
         </div>
         {allTags.length > 0 && (
           <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',alignItems:'center',marginBottom:'1.25rem'}}>
@@ -209,7 +214,7 @@ export default function LorePage() {
         {/* Sidebar groupée par catégorie */}
         <div style={{display:'flex',flexDirection:'column',gap:'.2rem'}}>
           <div style={{fontFamily:"'Cinzel',serif",fontSize:'.65rem',letterSpacing:'.15em',textTransform:'uppercase',color:'#4a6880',padding:'.5rem .75rem',borderBottom:'1px solid rgba(30,120,200,.2)',marginBottom:'.25rem'}}>📚 Articles ({filtered.length})</div>
-          {CATS.map(cat => {
+          {cats.map(cat => {
             const inCat = filtered.filter(a => a.categorie === cat.id)
             if (inCat.length === 0) return null
             return (
@@ -255,7 +260,7 @@ export default function LorePage() {
                 <input style={{...S.input,width:52,fontSize:'1.4rem',textAlign:'center',padding:'.3rem',borderRadius:8,flexShrink:0}} value={form.emoji||'📄'} onChange={e=>setForm(f=>({...f,emoji:e.target.value}))} title="Emoji" />
                 <input style={{...S.input,flex:1,minWidth:150,fontFamily:"'Cinzel',serif",fontSize:'1.1rem',fontWeight:700,color:'#f0c040',background:'none',border:'none',padding:'.3rem'}} value={form.titre||''} onChange={e=>setForm(f=>({...f,titre:e.target.value}))} placeholder="Titre de l'article..." />
                 <select style={{...S.input,width:'auto',fontSize:'.72rem'}} value={form.categorie||'divers'} onChange={e=>setForm(f=>({...f,categorie:e.target.value}))}>
-                  {CATS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  {cats.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </select>
                 <button style={{...S.btnGold,padding:'.4rem .9rem',fontSize:'.62rem'}} onClick={saveArticle} disabled={saving}>{saving?'⏳':'💾'} Sauvegarder</button>
                 {selected && <button title="Dupliquer" style={{background:'rgba(160,96,255,.1)',border:'1px solid rgba(160,96,255,.25)',borderRadius:8,padding:'.4rem .75rem',color:'#a060ff',fontFamily:"'Cinzel',serif",fontSize:'.62rem',cursor:'pointer'}} onClick={()=>duplicateArticle(selected)}>⧉</button>}
