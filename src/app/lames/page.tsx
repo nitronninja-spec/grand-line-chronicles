@@ -66,6 +66,7 @@ export default function LamesPage() {
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [personnages, setPersonnages] = useState<{ id: string; nom: string }[]>([])
+  const [fruitsMangeurs, setFruitsMangeurs] = useState<{ id: string; nom: string; lame_id: string }[]>([])
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [rangFull, setRangFull] = useState<CategoryFull[]>(FALLBACK_RANG_FULL)
   const [sortMode, setSortMode] = useState<'defaut' | 'manuel'>('defaut')
@@ -82,9 +83,12 @@ export default function LamesPage() {
   function rangLabel(r: string) { return RANG_MAX[r] ? `[${RANG_MAX[r]}] ${r}` : r }
 
   const personnageMap = new Map(personnages.map(p => [p.nom, p.id]))
+  // Réciproque de fruits.lame_id — interrogée plutôt que dupliquée sur la lame, pour éviter
+  // tout risque de désynchronisation entre les deux tables (cf. renommage de factions).
+  const fruitByLameId = new Map(fruitsMangeurs.map(f => [f.lame_id, f]))
 
   useEffect(() => {
-    fetchList(); fetchPersonnages()
+    fetchList(); fetchPersonnages(); fetchFruitsMangeurs()
     fetchCategoryFull('lames', 'rang', FALLBACK_RANG_FULL).then(setRangFull)
     const q = new URLSearchParams(window.location.search).get('q')
     if (q) setSearch(q)
@@ -125,6 +129,11 @@ export default function LamesPage() {
   async function fetchPersonnages() {
     const { data } = await supabase.from('personnages').select('id, nom').order('nom', { ascending: true })
     setPersonnages(data || [])
+  }
+
+  async function fetchFruitsMangeurs() {
+    const { data } = await supabase.from('fruits').select('id, nom, lame_id').not('lame_id', 'is', null)
+    setFruitsMangeurs((data || []) as { id: string; nom: string; lame_id: string }[])
   }
 
   function openForm(l?: Lame) {
@@ -289,6 +298,11 @@ export default function LamesPage() {
                   </div>
                 )}
                 {l.particularites && <div style={{ fontSize: '.8rem', color: '#4a6880', marginBottom: '.65rem' }}>✨ {l.particularites}</div>}
+                {fruitByLameId.has(l.id) && (
+                  <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>
+                    Fruit ingéré : <a href={`/fruits?q=${encodeURIComponent(fruitByLameId.get(l.id)!.nom)}`} style={{ color: '#40d060', textDecoration: 'none' }}>🍎 {fruitByLameId.get(l.id)!.nom}</a>
+                  </div>
+                )}
                 {l.proprietaire && (
                   <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>
                     Propriétaire : {personnageMap.has(l.proprietaire)

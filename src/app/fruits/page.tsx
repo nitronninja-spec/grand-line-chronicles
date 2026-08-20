@@ -5,6 +5,7 @@ import { supabase, uploadImage } from '@/lib/supabase'
 import { fetchCategoryDetails, CategoryDetail } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import PersonnageSearchSelect from '@/components/PersonnageSearchSelect'
+import LameSearchSelect from '@/components/LameSearchSelect'
 import ImageLightbox from '@/components/ImageLightbox'
 import MoneyInput from '@/components/MoneyInput'
 
@@ -27,6 +28,7 @@ interface Fruit {
   prix?: string
   faiblesses?: string
   ordre_manuel?: number | null
+  lame_id?: string | null
 }
 
 const TAB_ALL = ''
@@ -255,6 +257,7 @@ export default function FruitsPage() {
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [personnages, setPersonnages] = useState<{ id: string; nom: string }[]>([])
+  const [lames, setLames] = useState<{ id: string; nom: string; rang?: string }[]>([])
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [typeDetails, setTypeDetails] = useState<CategoryDetail[]>(FALLBACK_TYPE_DETAILS)
   const [statutDetails, setStatutDetails] = useState<CategoryDetail[]>(FALLBACK_STATUT_DETAILS)
@@ -275,9 +278,10 @@ export default function FruitsPage() {
   function fruitStatut(f: Fruit) { return f.statut && STATUT_FRUIT[f.statut] ? STATUT_FRUIT[f.statut] : STATUT_DISPONIBLE }
 
   const personnageMap = new Map(personnages.map(p => [p.nom, p.id]))
+  const lameMap = new Map(lames.map(l => [l.id, l.nom]))
 
   useEffect(() => {
-    fetchList(); fetchPersonnages()
+    fetchList(); fetchPersonnages(); fetchLames()
     fetchCategoryDetails('fruits', 'type', FALLBACK_TYPE_DETAILS).then(setTypeDetails)
     fetchCategoryDetails('fruits', 'statut', FALLBACK_STATUT_DETAILS).then(setStatutDetails)
     const q = new URLSearchParams(window.location.search).get('q')
@@ -321,6 +325,11 @@ export default function FruitsPage() {
     setPersonnages(data || [])
   }
 
+  async function fetchLames() {
+    const { data } = await supabase.from('lames').select('id, nom, rang').order('nom', { ascending: true })
+    setLames(data || [])
+  }
+
   function openForm(f?: Fruit) {
     if (f) { setForm({ ...f, photos: f.photos && f.photos.length > 0 ? f.photos : (f.photo ? [f.photo] : []) }); setEditId(f.id) }
     else { setForm({ nom: '', jp: '', type: pageTab || 'Paramecia', puissance: 5, emoji: '', description: '', capacites: '', lore: '', proprietaire: '', ancien_detenteur: '', color: '#40d060', faiblesses: '', photos: [], statut: '', prix: '' }); setEditId(null) }
@@ -359,7 +368,7 @@ export default function FruitsPage() {
       const url = await uploadImage(file, 'fruits')
       if (url) photos = [...photos, url]
     }
-    const data = { ...form, photos, photo: photos[0] || null }
+    const data = { ...form, photos, photo: photos[0] || null, lame_id: form.lame_id || null }
     const { error } = editId
       ? await supabase.from('fruits').update(data).eq('id', editId)
       : await supabase.from('fruits').insert([data])
@@ -498,6 +507,11 @@ export default function FruitsPage() {
                     <div style={{ fontSize: '.85rem', color: '#c8d8e8', lineHeight: 1.6, fontStyle: 'italic' }}>{f.lore}</div>
                   </div>
                 )}
+                {f.lame_id && lameMap.has(f.lame_id) && (
+                  <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>
+                    Mangé par : <a href={`/lames?q=${encodeURIComponent(lameMap.get(f.lame_id)!)}`} style={{ color: '#a060ff', textDecoration: 'none' }}>🗡️ {lameMap.get(f.lame_id)}</a>
+                  </div>
+                )}
                 {f.proprietaire && (
                   <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.6rem', letterSpacing: '.09em', textTransform: 'uppercase', color: '#4a6880', marginBottom: '.65rem' }}>
                     Propriétaire : {personnageMap.has(f.proprietaire)
@@ -613,6 +627,12 @@ export default function FruitsPage() {
                 <div><label style={S.label}>Prix (berries)</label>
                   <MoneyInput value={form.prix || ''} onChange={v => setForm(f => ({ ...f, prix: v }))} placeholder="1,000,000,000" inputStyle={S.input} />
                 </div>
+              </div>
+              <div><label style={S.label}>🗡️ Mangé par (lame)</label>
+                <LameSearchSelect lames={lames} value={form.lame_id || ''} onChange={id => setForm(f => id
+                  ? { ...f, lame_id: id, statut: 'mange', proprietaire: '' }
+                  : { ...f, lame_id: '' })} placeholder="Rechercher une lame ou Aucune" inputStyle={S.input} />
+                {form.lame_id && <div style={{ fontSize: '.72rem', color: '#7a9ab8', marginTop: '.35rem', fontStyle: 'italic' }}>Lier une lame passe automatiquement le statut à &quot;Mangé&quot; et vide le propriétaire.</div>}
               </div>
               <div><label style={S.label}>Propriétaire</label>
                 <PersonnageSearchSelect personnages={personnages} value={form.proprietaire || ''} onChange={nom => setForm(f => ({ ...f, proprietaire: nom }))} placeholder="Rechercher un personnage ou Non attribué" inputStyle={S.input} unknownOption={{ label: '❓ Propriétaire inconnu', value: 'Propriétaire inconnu' }} />
