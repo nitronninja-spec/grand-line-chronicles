@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import GlobalSearch from '@/components/GlobalSearch'
+import CategoryManager from '@/components/CategoryManager'
 
 interface Stats {
   personnages: number
@@ -44,6 +45,7 @@ export default function DashboardPage() {
   const [recents, setRecents] = useState<{ section: string; items: RecentItem[] }[]>([])
   const [loading, setLoading] = useState(true)
   const [time, setTime] = useState(new Date())
+  const [showPersonnalisation, setShowPersonnalisation] = useState(false)
 
   useEffect(() => {
     fetchAll()
@@ -191,6 +193,27 @@ export default function DashboardPage() {
               </div>
             </a>
           ))}
+        </div>
+
+        {/* Personnalisation */}
+        <div style={{ marginBottom: '2.5rem', animation: 'fadeUp .5s .15s ease both' }}>
+          <button onClick={() => setShowPersonnalisation(v => !v)} style={{
+            display: 'flex', alignItems: 'center', gap: '.6rem', width: '100%', textAlign: 'left',
+            background: 'linear-gradient(135deg, rgba(212,160,23,.1), rgba(212,160,23,.03))',
+            border: '1px solid rgba(212,160,23,.25)', borderRadius: 14, padding: '1rem 1.4rem', cursor: 'pointer',
+          }}>
+            <span style={{ fontSize: '1.3rem' }}>⚙️</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: "'Cinzel',serif", fontSize: '.72rem', fontWeight: 700, letterSpacing: '.06em', color: '#f0c040' }}>Personnalisation</div>
+              <div style={{ fontSize: '.78rem', color: '#4a6880', fontStyle: 'italic' }}>Créer, renommer, réordonner ou désactiver les catégories et statuts de chaque section</div>
+            </div>
+            <span style={{ color: '#d4a017', fontSize: '.9rem', transform: showPersonnalisation ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>▾</span>
+          </button>
+          {showPersonnalisation && (
+            <div style={{ marginTop: '1rem' }}>
+              <CategoryManager />
+            </div>
+          )}
         </div>
 
         {/* Ajouts récents */}
