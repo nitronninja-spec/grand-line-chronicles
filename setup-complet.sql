@@ -259,6 +259,11 @@ alter table personnages add column if not exists rang text;
 -- (tableau de texte), pour permettre l'appartenance à plusieurs factions.
 alter table personnages add column if not exists factions text[] default '{}'::text[];
 
+-- Garde défensive : garantit que "faction" existe avant d'être lue ci-dessous, quel que
+-- soit l'état exact dans lequel ce script a été exécuté (ajoutée pour setup-complet.sql,
+-- absente du fichier de migration original qui supposait un historique déjà en place).
+alter table personnages add column if not exists faction text;
+
 -- Reprend les valeurs existantes de "faction" dans le nouveau tableau.
 update personnages
   set factions = array[faction]
@@ -286,6 +291,8 @@ alter table iles add column if not exists est_archipel boolean default false;
 
 -- 2) Plusieurs factions par île (remplace la colonne "faction" texte unique).
 alter table iles add column if not exists factions text[] default '{}'::text[];
+-- Garde défensive (ajoutée pour setup-complet.sql) : garantit "faction" avant lecture.
+alter table iles add column if not exists faction text;
 update iles
   set factions = array[faction]
   where faction is not null and trim(faction) <> '' and (factions is null or factions = '{}');
@@ -294,6 +301,8 @@ alter table iles drop column if exists faction;
 -- 3) Plusieurs îles parentes (remplace la colonne "ile_parente" texte unique).
 -- Permet à une île d'être rangée dans plusieurs archipels/dossiers à la fois.
 alter table iles add column if not exists iles_parentes text[] default '{}'::text[];
+-- Garde défensive (ajoutée pour setup-complet.sql) : garantit "ile_parente" avant lecture.
+alter table iles add column if not exists ile_parente text;
 update iles
   set iles_parentes = array[ile_parente]
   where ile_parente is not null and trim(ile_parente) <> '' and (iles_parentes is null or iles_parentes = '{}');
@@ -342,6 +351,11 @@ alter table personnages add column if not exists titre_mondial text default '';
 -- À exécuter dans Supabase (SQL Editor).
 
 alter table personnages add column if not exists rangs jsonb default '[]'::jsonb;
+-- Garde défensive (ajoutée pour setup-complet.sql) : garantit "equipage" et "rang" avant
+-- lecture ci-dessous — "equipage" est censée venir de la table de base (section 1),
+-- "rang" de supabase-migration-3.sql, mais on ne prend aucun risque ici.
+alter table personnages add column if not exists equipage text;
+alter table personnages add column if not exists rang text;
 
 -- Reprend l'ancien rang unique (associé à l'équipage) dans le nouveau format tableau,
 -- uniquement pour les personnages qui n'ont pas encore de rangs migrés.
@@ -422,6 +436,8 @@ alter table fruits add column if not exists capacites text;
 alter table fruits add column if not exists lore text;
 alter table fruits add column if not exists statut text;
 alter table fruits add column if not exists ancien_detenteur text;
+-- Garde défensive (ajoutée pour setup-complet.sql) : garantit "photo" avant lecture.
+alter table fruits add column if not exists photo text;
 
 -- Reprend l'ancienne photo unique dans le nouveau tableau photos[], pour ne rien perdre.
 update fruits set photos = array[photo] where photo is not null and photo <> '' and (photos is null or array_length(photos, 1) is null);
@@ -450,6 +466,13 @@ alter table despas add column if not exists photos text[];
 alter table iles add column if not exists photos text[];
 
 alter table factions add column if not exists photos text[];
+
+-- Gardes défensives (ajoutées pour setup-complet.sql) : garantissent "photo" sur chaque
+-- table avant lecture ci-dessous.
+alter table lames add column if not exists photo text;
+alter table cristaux_primordiaux add column if not exists photo text;
+alter table despas add column if not exists photo text;
+alter table iles add column if not exists photo text;
 
 -- Reprend chaque ancienne photo unique dans le nouveau tableau photos[], pour ne rien perdre.
 update lames set photos = array[photo] where photo is not null and photo <> '' and (photos is null or array_length(photos, 1) is null);
