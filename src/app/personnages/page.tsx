@@ -48,7 +48,7 @@ const HAKI_TYPES: { value: string; emoji: string; color: string }[] = [
   { value: 'Armement', emoji: '👊', color: '#7a9ab8' },
   { value: 'Conquérant', emoji: '👑', color: '#c026d3' },
 ]
-const HAKI_ROI_COLOR = '#c026d3'
+const HAKI_ROI_COLOR = '#ff1744'
 
 const FALLBACK_TYPE_FULL: CategoryFull[] = [
   { value: 'pj', emoji: '', color: '#00c8ff', cap: null },
@@ -472,18 +472,19 @@ export default function PersonnagesPage() {
     const tm = p.titre_mondial ? TITRE_MONDIAL[p.titre_mondial] : null
     // Un titre mondial (plus rare, plus significatif) prime sur le simple Haki du Roi pour
     // l'accent visuel de la carte — les deux ne se cumulent jamais pour rester lisible.
-    const accent = tm ? tm.color : (p.haki?.includes('Conquérant') ? HAKI_ROI_COLOR : null)
+    const hakiRoi = !tm && !!p.haki?.includes('Conquérant')
+    const accent = tm ? tm.color : (hakiRoi ? HAKI_ROI_COLOR : null)
     const linkedDespa = despas.find(d => d.proprietaire === p.nom)
     const manual = sortMode === 'manuel'
     return (
-      <div key={key} style={{ ...S.card, ...(accent ? { border:`2px solid ${accent}`, boxShadow:`0 0 22px ${accent}33` } : {}), ...(manual && draggingId===p.id ? { opacity:.4, borderColor:'#00c8ff' } : {}), cursor: manual ? 'grab' : undefined }}
+      <div key={key} className={hakiRoi ? 'haki-roi-card' : undefined} style={{ ...S.card, ...(accent ? { border:`2px solid ${accent}`, ...(tm ? { boxShadow:`0 0 22px ${accent}33` } : {}) } : {}), ...(manual && draggingId===p.id ? { opacity:.4, borderColor:'#00c8ff' } : {}), cursor: manual ? 'grab' : undefined }}
         draggable={manual}
         onDragStart={manual ? e => { setDraggingId(p.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', p.id) } : undefined}
         onDragEnd={() => setDraggingId(null)}
         onDragOver={manual ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
         onDrop={manual ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderItems(sortPersonnages(filtered, sortMode), fromId, p.id) } : undefined}
-        onMouseEnter={e => { const el = e.currentTarget; el.style.transform='translateY(-7px)'; if(!accent) el.style.borderColor='#d4a017'; el.style.boxShadow= accent ? `0 0 30px ${accent}55` : '0 20px 40px rgba(0,0,0,.5)' }}
-        onMouseLeave={e => { const el = e.currentTarget; el.style.transform='none'; if(!accent) el.style.borderColor='rgba(30,120,200,.2)'; el.style.boxShadow= accent ? `0 0 22px ${accent}33` : 'none' }}
+        onMouseEnter={e => { const el = e.currentTarget; el.style.transform='translateY(-7px)'; if(!accent) el.style.borderColor='#d4a017'; if(!hakiRoi) el.style.boxShadow= accent ? `0 0 30px ${accent}55` : '0 20px 40px rgba(0,0,0,.5)' }}
+        onMouseLeave={e => { const el = e.currentTarget; el.style.transform='none'; if(!accent) el.style.borderColor='rgba(30,120,200,.2)'; if(!hakiRoi) el.style.boxShadow= accent ? `0 0 22px ${accent}33` : 'none' }}
       >
         {/* Image */}
         <div style={{ width:'100%', height:195, overflow:'hidden', background:'linear-gradient(135deg,#0a1829,#050d1a)', position:'relative', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'5rem', cursor:'pointer' }}
@@ -498,10 +499,15 @@ export default function PersonnagesPage() {
               {tm.icon} {tm.label}
             </div>
           )}
-          {!tm && p.haki?.includes('Conquérant') && (
-            <div style={{ position:'absolute', top:8, left:8, zIndex:3, background:`${HAKI_ROI_COLOR}dd`, color:'#fff', borderRadius:100, padding:'.2rem .6rem', fontFamily:"'Cinzel',serif", fontSize:'.55rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', display:'flex', alignItems:'center', gap:'.3rem' }}>
-              👑 Haki du Roi
-            </div>
+          {hakiRoi && (
+            <>
+              <div style={{ position:'absolute', top:8, left:8, zIndex:3, background:`${HAKI_ROI_COLOR}dd`, color:'#fff', borderRadius:100, padding:'.2rem .6rem', fontFamily:"'Cinzel',serif", fontSize:'.55rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', display:'flex', alignItems:'center', gap:'.3rem' }}>
+                👑 Haki du Roi
+              </div>
+              <span className="haki-bolt" style={{ top:'12%', right:'10%', animationDelay:'0s', ['--r' as string]:'12deg' }}>⚡</span>
+              <span className="haki-bolt" style={{ bottom:'22%', left:'8%', animationDelay:'.9s', ['--r' as string]:'-18deg' }}>⚡</span>
+              <span className="haki-bolt" style={{ top:'45%', right:'18%', animationDelay:'1.7s', ['--r' as string]:'6deg' }}>⚡</span>
+            </>
           )}
           <div style={{ position:'absolute', bottom:0, left:0, right:0, height:55, background:'linear-gradient(to top,#0d2040,transparent)', pointerEvents:'none' }} />
         </div>
@@ -562,6 +568,19 @@ export default function PersonnagesPage() {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         input:focus, textarea:focus, select:focus { border-color: #d4a017 !important; box-shadow: 0 0 0 3px rgba(212,160,23,.15); }
         ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-thumb { background: #d4a017; border-radius: 3px; }
+        @keyframes hakiPulse {
+          0%, 100% { box-shadow: 0 0 20px rgba(255,23,68,.45), inset 0 0 14px rgba(255,23,68,.12); }
+          50% { box-shadow: 0 0 38px rgba(255,23,68,.9), inset 0 0 20px rgba(255,23,68,.28); }
+        }
+        .haki-roi-card { animation: hakiPulse 1.6s ease-in-out infinite; }
+        @keyframes hakiBoltFlicker {
+          0%, 100% { opacity: 0; transform: scale(.7) rotate(var(--r, 0deg)); }
+          4%, 7% { opacity: 1; transform: scale(1.15) rotate(var(--r, 0deg)); }
+          10% { opacity: 0; transform: scale(.7) rotate(var(--r, 0deg)); }
+          13%, 15% { opacity: .9; transform: scale(1) rotate(var(--r, 0deg)); }
+          18% { opacity: 0; transform: scale(.7) rotate(var(--r, 0deg)); }
+        }
+        .haki-bolt { position: absolute; font-size: 1.5rem; color: #ff1744; filter: drop-shadow(0 0 5px #ff1744) drop-shadow(0 0 12px #ff1744); pointer-events: none; z-index: 4; animation: hakiBoltFlicker 3s infinite; }
       `}</style>
 
       {/* NAV */}
@@ -1005,7 +1024,7 @@ export default function PersonnagesPage() {
         <div style={S.overlay} onClick={e => { if(e.target===e.currentTarget)setShowView(false) }}>
           <div style={{ ...S.modal, maxWidth:900 }}>
             {/* Header avec photo */}
-            <div style={{ position:'relative', height:280, background:'linear-gradient(135deg,#071828,#0d2440)', borderRadius:'18px 18px 0 0', overflow:'hidden', display:'flex', alignItems:'flex-end', padding:'1.75rem' }}>
+            <div className={!selected.titre_mondial && selected.haki?.includes('Conquérant') ? 'haki-roi-card' : undefined} style={{ position:'relative', height:280, background:'linear-gradient(135deg,#071828,#0d2440)', borderRadius:'18px 18px 0 0', overflow:'hidden', display:'flex', alignItems:'flex-end', padding:'1.75rem' }}>
               {selected.photos && selected.photos[0] && (
                 <img loading="lazy" src={selected.photos[0]} style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', objectPosition:'top center', opacity:.42, display:'block', filter: selected.statut==='mort' ? 'grayscale(1)' : 'none' }} />
               )}
@@ -1019,9 +1038,14 @@ export default function PersonnagesPage() {
                 </div>
               )}
               {!selected.titre_mondial && selected.haki?.includes('Conquérant') && (
-                <div style={{ position:'absolute', top:'.9rem', left:'.9rem', zIndex:5, background:`${HAKI_ROI_COLOR}dd`, color:'#fff', borderRadius:100, padding:'.3rem .75rem', fontFamily:"'Cinzel',serif", fontSize:'.62rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase' }}>
-                  👑 Haki du Roi
-                </div>
+                <>
+                  <div style={{ position:'absolute', top:'.9rem', left:'.9rem', zIndex:5, background:`${HAKI_ROI_COLOR}dd`, color:'#fff', borderRadius:100, padding:'.3rem .75rem', fontFamily:"'Cinzel',serif", fontSize:'.62rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase' }}>
+                    👑 Haki du Roi
+                  </div>
+                  <span className="haki-bolt" style={{ top:'18%', right:'14%', animationDelay:'0s', ['--r' as string]:'10deg' }}>⚡</span>
+                  <span className="haki-bolt" style={{ top:'50%', right:'28%', animationDelay:'.9s', ['--r' as string]:'-14deg' }}>⚡</span>
+                  <span className="haki-bolt" style={{ bottom:'12%', right:'8%', animationDelay:'1.7s', ['--r' as string]:'4deg' }}>⚡</span>
+                </>
               )}
               <button onClick={() => setShowView(false)} style={{ position:'absolute', top:'.9rem', right:'.9rem', background:'rgba(5,13,26,.75)', border:'1px solid rgba(30,120,200,.2)', color:'#7a9ab8', borderRadius:'50%', width:34, height:34, cursor:'pointer', fontSize:'.9rem', zIndex:5 }}>✕</button>
               <div style={{ position:'relative', zIndex:2, display:'flex', gap:'1.25rem', alignItems:'flex-end' }}>
