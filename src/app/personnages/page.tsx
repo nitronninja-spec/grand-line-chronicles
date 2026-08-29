@@ -9,6 +9,7 @@ import ImageLightbox from '@/components/ImageLightbox'
 import MoneyInput from '@/components/MoneyInput'
 
 interface PersonnageRang { faction: string; rang: string }
+interface PersonnageIle { ile: string; notes: string }
 interface Personnage {
   id: string
   nom: string
@@ -22,11 +23,13 @@ interface Personnage {
   titre_mondial?: string
   origine?: string
   ile?: string
+  iles_liees?: PersonnageIle[]
   factions?: string[]
   rang?: string
   rangs?: PersonnageRang[]
   statut?: string
   fruit?: string
+  haki?: string[]
   tags?: string
   description?: string
   historique?: string
@@ -40,6 +43,12 @@ interface Personnage {
 interface LinkedItem { id: string; nom: string; proprietaire?: string; type?: string }
 const FRUIT_TYPE_ORDER = ['Paramecia', 'Logia', 'Zoan', 'Mythical']
 interface FactionRef { id: string; nom: string; type?: string; rangs?: { nom: string; ordre: number }[] }
+const HAKI_TYPES: { value: string; emoji: string; color: string }[] = [
+  { value: 'Observation', emoji: '👁️', color: '#00c8ff' },
+  { value: 'Armement', emoji: '👊', color: '#7a9ab8' },
+  { value: 'Conquérant', emoji: '👑', color: '#c026d3' },
+]
+const HAKI_ROI_COLOR = '#c026d3'
 
 const FALLBACK_TYPE_FULL: CategoryFull[] = [
   { value: 'pj', emoji: '', color: '#00c8ff', cap: null },
@@ -73,7 +82,7 @@ const FALLBACK_TITRE_MONDIAL: CategoryDetail[] = [
   { value: 'Shichibukai Déchu', label: 'Shichibukai Déchu', emoji: '🗡️', color: '#6a4a7a' },
   { value: 'Dragon Céleste', label: 'Dragon Céleste', emoji: '🫧', color: '#f0c040' },
 ]
-type SortMode = 'defaut' | 'prime' | 'groupe' | 'manuel'
+type SortMode = 'defaut' | 'prime' | 'groupe' | 'manuel' | 'haki'
 function parsePrime(p?: string) { return parseInt((p || '0').replace(/[^\d]/g, ''), 10) || 0 }
 
 // Même répartition en 4 pages à couleur dominante que sur la page Factions — mais avec un
@@ -143,6 +152,11 @@ function personnageRangs(p: Personnage): PersonnageRang[] {
 function sortPersonnages(items: Personnage[], mode: SortMode) {
   if (mode === 'prime') return items.slice().sort((a, b) => parsePrime(b.prime) - parsePrime(a.prime))
   if (mode === 'manuel') return items.slice().sort((a, b) => (a.ordre_manuel ?? Infinity) - (b.ordre_manuel ?? Infinity))
+  if (mode === 'haki') return items.slice().sort((a, b) => {
+    const ha = a.haki?.includes('Conquérant') ? 0 : 1
+    const hb = b.haki?.includes('Conquérant') ? 0 : 1
+    return ha - hb || a.nom.localeCompare(b.nom)
+  })
   return items
 }
 function getRangOrdreForFaction(p: Personnage, factionNom: string, factions: FactionRef[]): number {
@@ -242,7 +256,7 @@ export default function PersonnagesPage() {
   const [pageTab, setPageTab] = useState<PageTab>('pirates')
   const [form, setForm] = useState<Partial<Personnage>>({
     nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant',
-    prime: '0', condition_prime: 'non_recherche', titre_mondial: '', origine: '', ile: '', factions: [], rangs: [], equipage: '', fruit: 'Aucun',
+    prime: '0', condition_prime: 'non_recherche', titre_mondial: '', origine: '', ile: '', iles_liees: [], factions: [], rangs: [], equipage: '', fruit: 'Aucun', haki: [],
     tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: ''
   })
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
@@ -348,10 +362,10 @@ export default function PersonnagesPage() {
 
   function openForm(p?: Personnage) {
     if (p) {
-      setForm({ ...p, rangs: personnageRangs(p) })
+      setForm({ ...p, rangs: personnageRangs(p), iles_liees: p.iles_liees || [], haki: p.haki || [] })
       setEditId(p.id)
     } else {
-      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', condition_prime: 'non_recherche', titre_mondial: '', origine: '', ile: '', factions: [], rangs: [], equipage: '', fruit: 'Aucun', tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
+      setForm({ nom: '', surnom: '', emoji: '👤', type: 'pnj', statut: 'vivant', prime: '0', condition_prime: 'non_recherche', titre_mondial: '', origine: '', ile: '', iles_liees: [], factions: [], rangs: [], equipage: '', fruit: 'Aucun', haki: [], tags: '', description: '', historique: '', techniques: '', gdoc: '', miro: '' })
       setEditId(null)
     }
     setPhotoFiles([])
@@ -456,17 +470,20 @@ export default function PersonnagesPage() {
   function renderCard(p: Personnage, key: string) {
     const isMort = p.statut === 'mort'
     const tm = p.titre_mondial ? TITRE_MONDIAL[p.titre_mondial] : null
+    // Un titre mondial (plus rare, plus significatif) prime sur le simple Haki du Roi pour
+    // l'accent visuel de la carte — les deux ne se cumulent jamais pour rester lisible.
+    const accent = tm ? tm.color : (p.haki?.includes('Conquérant') ? HAKI_ROI_COLOR : null)
     const linkedDespa = despas.find(d => d.proprietaire === p.nom)
     const manual = sortMode === 'manuel'
     return (
-      <div key={key} style={{ ...S.card, ...(tm ? { border:`2px solid ${tm.color}`, boxShadow:`0 0 22px ${tm.color}33` } : {}), ...(manual && draggingId===p.id ? { opacity:.4, borderColor:'#00c8ff' } : {}), cursor: manual ? 'grab' : undefined }}
+      <div key={key} style={{ ...S.card, ...(accent ? { border:`2px solid ${accent}`, boxShadow:`0 0 22px ${accent}33` } : {}), ...(manual && draggingId===p.id ? { opacity:.4, borderColor:'#00c8ff' } : {}), cursor: manual ? 'grab' : undefined }}
         draggable={manual}
         onDragStart={manual ? e => { setDraggingId(p.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', p.id) } : undefined}
         onDragEnd={() => setDraggingId(null)}
         onDragOver={manual ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
         onDrop={manual ? e => { e.preventDefault(); const fromId = e.dataTransfer.getData('text/plain'); reorderItems(sortPersonnages(filtered, sortMode), fromId, p.id) } : undefined}
-        onMouseEnter={e => { const el = e.currentTarget; el.style.transform='translateY(-7px)'; if(!tm) el.style.borderColor='#d4a017'; el.style.boxShadow= tm ? `0 0 30px ${tm.color}55` : '0 20px 40px rgba(0,0,0,.5)' }}
-        onMouseLeave={e => { const el = e.currentTarget; el.style.transform='none'; if(!tm) el.style.borderColor='rgba(30,120,200,.2)'; el.style.boxShadow= tm ? `0 0 22px ${tm.color}33` : 'none' }}
+        onMouseEnter={e => { const el = e.currentTarget; el.style.transform='translateY(-7px)'; if(!accent) el.style.borderColor='#d4a017'; el.style.boxShadow= accent ? `0 0 30px ${accent}55` : '0 20px 40px rgba(0,0,0,.5)' }}
+        onMouseLeave={e => { const el = e.currentTarget; el.style.transform='none'; if(!accent) el.style.borderColor='rgba(30,120,200,.2)'; el.style.boxShadow= accent ? `0 0 22px ${accent}33` : 'none' }}
       >
         {/* Image */}
         <div style={{ width:'100%', height:195, overflow:'hidden', background:'linear-gradient(135deg,#0a1829,#050d1a)', position:'relative', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'5rem', cursor:'pointer' }}
@@ -479,6 +496,11 @@ export default function PersonnagesPage() {
           {tm && (
             <div style={{ position:'absolute', top:8, left:8, zIndex:3, background:`${tm.color}dd`, color:'#050d1a', borderRadius:100, padding:'.2rem .6rem', fontFamily:"'Cinzel',serif", fontSize:'.55rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', display:'flex', alignItems:'center', gap:'.3rem' }}>
               {tm.icon} {tm.label}
+            </div>
+          )}
+          {!tm && p.haki?.includes('Conquérant') && (
+            <div style={{ position:'absolute', top:8, left:8, zIndex:3, background:`${HAKI_ROI_COLOR}dd`, color:'#fff', borderRadius:100, padding:'.2rem .6rem', fontFamily:"'Cinzel',serif", fontSize:'.55rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', display:'flex', alignItems:'center', gap:'.3rem' }}>
+              👑 Haki du Roi
             </div>
           )}
           <div style={{ position:'absolute', bottom:0, left:0, right:0, height:55, background:'linear-gradient(to top,#0d2040,transparent)', pointerEvents:'none' }} />
@@ -594,7 +616,7 @@ export default function PersonnagesPage() {
         {/* Tri */}
         <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap', alignItems:'center', marginBottom:'.75rem' }}>
           <span style={{ fontFamily:"'Cinzel',serif", fontSize:'.56rem', letterSpacing:'.1em', textTransform:'uppercase', color:'#4a6880', marginRight:'.2rem' }}>Trier :</span>
-          {([['defaut','Par défaut'],['prime','Par prime'],['groupe','Par groupe'],['manuel','Manuel (glisser-déposer)']] as [SortMode,string][]).map(([m,l]) => (
+          {([['defaut','Par défaut'],['prime','Par prime'],['groupe','Par groupe'],['haki','Par Haki'],['manuel','Manuel (glisser-déposer)']] as [SortMode,string][]).map(([m,l]) => (
             <button key={m} onClick={() => setSortMode(m)} style={{ background: sortMode===m ? 'rgba(0,200,255,.15)' : '#0a1829', border: `1px solid ${sortMode===m ? '#00c8ff' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.3rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.07em', textTransform:'uppercase', color: sortMode===m ? '#00c8ff' : '#7a9ab8', cursor:'pointer' }}>{l}</button>
           ))}
         </div>
@@ -774,6 +796,60 @@ export default function PersonnagesPage() {
                 </select>
               </div>
 
+              {/* Îles liées (multi, en plus de l'île natale) */}
+              <div>
+                <label style={S.label}>🌊 Îles liées</label>
+                {iles.length === 0 && <div style={{ fontSize:'.8rem', color:'#4a6880', fontStyle:'italic' }}>Aucune île créée pour l&apos;instant.</div>}
+                <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap' }}>
+                  {iles.map(ileOpt => {
+                    const active = (form.iles_liees || []).some(l => l.ile === ileOpt.nom)
+                    return (
+                      <button key={ileOpt.id} type="button" onClick={() => setForm(f => {
+                        const current = f.iles_liees || []
+                        const next = active ? current.filter(l => l.ile !== ileOpt.nom) : [...current, { ile: ileOpt.nom, notes: '' }]
+                        return { ...f, iles_liees: next }
+                      })} style={{ background: active ? 'rgba(64,208,96,.15)' : '#0a1829', border: `1px solid ${active ? '#40d060' : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.35rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.62rem', color: active ? '#40d060' : '#7a9ab8', cursor:'pointer' }}>
+                        {active ? '✓ ' : ''}{ileOpt.nom}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Notes par île liée */}
+              {(form.iles_liees || []).length > 0 && (
+                <div>
+                  <label style={S.label}>📝 Notes par île liée</label>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'.5rem' }}>
+                    {(form.iles_liees || []).map(link => (
+                      <div key={link.ile} style={{ display:'grid', gridTemplateColumns:'150px 1fr', gap:'.6rem', alignItems:'start' }}>
+                        <span style={{ fontSize:'.78rem', color:'#7a9ab8', paddingTop:'.5rem' }}>{link.ile}</span>
+                        <textarea style={{ ...S.input, minHeight:60, resize:'vertical', lineHeight:1.6 }} value={link.notes} placeholder="Notes libres sur ce lien..."
+                          onChange={e => setForm(f => ({ ...f, iles_liees: (f.iles_liees || []).map(l => l.ile === link.ile ? { ...l, notes: e.target.value } : l) }))} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Haki */}
+              <div>
+                <label style={S.label}>✊ Haki</label>
+                <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap' }}>
+                  {HAKI_TYPES.map(h => {
+                    const active = (form.haki || []).includes(h.value)
+                    return (
+                      <button key={h.value} type="button" onClick={() => setForm(f => {
+                        const current = f.haki || []
+                        return { ...f, haki: active ? current.filter(v => v !== h.value) : [...current, h.value] }
+                      })} style={{ background: active ? `${h.color}22` : '#0a1829', border: `1px solid ${active ? h.color : 'rgba(30,120,200,.2)'}`, borderRadius:100, padding:'.35rem .8rem', fontFamily:"'Cinzel',serif", fontSize:'.62rem', color: active ? h.color : '#7a9ab8', cursor:'pointer' }}>
+                        {active ? '✓ ' : ''}{h.emoji} {h.value}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
               {/* Factions liées (multi) */}
               <div>
                 <label style={S.label}>🏴‍☠️ Factions liées</label>
@@ -942,6 +1018,11 @@ export default function PersonnagesPage() {
                   {TITRE_MONDIAL[selected.titre_mondial].icon} {TITRE_MONDIAL[selected.titre_mondial].label}
                 </div>
               )}
+              {!selected.titre_mondial && selected.haki?.includes('Conquérant') && (
+                <div style={{ position:'absolute', top:'.9rem', left:'.9rem', zIndex:5, background:`${HAKI_ROI_COLOR}dd`, color:'#fff', borderRadius:100, padding:'.3rem .75rem', fontFamily:"'Cinzel',serif", fontSize:'.62rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase' }}>
+                  👑 Haki du Roi
+                </div>
+              )}
               <button onClick={() => setShowView(false)} style={{ position:'absolute', top:'.9rem', right:'.9rem', background:'rgba(5,13,26,.75)', border:'1px solid rgba(30,120,200,.2)', color:'#7a9ab8', borderRadius:'50%', width:34, height:34, cursor:'pointer', fontSize:'.9rem', zIndex:5 }}>✕</button>
               <div style={{ position:'relative', zIndex:2, display:'flex', gap:'1.25rem', alignItems:'flex-end' }}>
                 <div style={{ width:86, height:86, borderRadius:14, background:'#0d2040', border:'2px solid #d4a017', overflow:'hidden', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'2.8rem', cursor: selected.photos && selected.photos[0] ? 'zoom-in' : 'default' }}
@@ -973,6 +1054,7 @@ export default function PersonnagesPage() {
                   { l:'⚓ Équipage', v:selected.equipage||'—', c:'#00c8ff', href:null },
                   { l:'📍 Origine', v:selected.origine||'—', c:'#7a9ab8', href:null },
                   { l:'🏝️ Île', v:selected.ile||'—', c:'#40d060', href: selected.ile ? `/iles?q=${encodeURIComponent(selected.ile)}` : null },
+                  { l:'✊ Haki', v:(selected.haki && selected.haki.length > 0) ? selected.haki.join(', ') : '—', c: selected.haki?.includes('Conquérant') ? HAKI_ROI_COLOR : '#7a9ab8', href: null },
                   { l:'🏴‍☠️ Factions', v:(selected.factions && selected.factions.length > 0) ? selected.factions.join(', ') : '—', c:'#ff8c40', href: null },
                   { l:'🍎 Fruit du Démon', v: fruits.find(fr => fr.proprietaire === selected.nom)?.nom || '—', c:'#f0c040', href: fruits.find(fr => fr.proprietaire === selected.nom) ? `/fruits?q=${encodeURIComponent(fruits.find(fr => fr.proprietaire === selected.nom)!.nom)}` : null },
                   { l:'🦾 Despa', v: despas.find(d => d.proprietaire === selected.nom)?.nom || '—', c:'#4488ff', href: despas.find(d => d.proprietaire === selected.nom) ? `/despa?q=${encodeURIComponent(despas.find(d => d.proprietaire === selected.nom)!.nom)}` : null },
@@ -1014,6 +1096,23 @@ export default function PersonnagesPage() {
                 {selected.gdoc ? <a href={selected.gdoc} target="_blank" rel="noopener" style={{ display:'inline-flex', alignItems:'center', gap:'.45rem', borderRadius:9, padding:'.55rem .95rem', fontFamily:"'Cinzel',serif", fontSize:'.62rem', fontWeight:700, letterSpacing:'.07em', textTransform:'uppercase', textDecoration:'none', background:'rgba(66,133,244,.15)', color:'#6aabff', border:'1px solid rgba(66,133,244,.3)' }}>📄 Ouvrir le Google Doc</a> : <span style={{ color:'#4a6880', fontStyle:'italic', fontSize:'.88rem' }}>Pas de Google Doc</span>}
                 {selected.miro && <a href={selected.miro} target="_blank" rel="noopener" style={{ display:'inline-flex', alignItems:'center', gap:'.45rem', borderRadius:9, padding:'.55rem .95rem', fontFamily:"'Cinzel',serif", fontSize:'.62rem', fontWeight:700, letterSpacing:'.07em', textTransform:'uppercase', textDecoration:'none', background:'rgba(255,196,0,.12)', color:'#ffc400', border:'1px solid rgba(255,196,0,.3)' }}>🗒 Ouvrir le Miro Board</a>}
               </div>
+
+              {/* Îles liées */}
+              {selected.iles_liees && selected.iles_liees.length > 0 && (
+                <>
+                  <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.7rem', letterSpacing:'.14em', textTransform:'uppercase', color:'#00c8ff', marginBottom:'.65rem', display:'flex', alignItems:'center', gap:'.5rem' }}>
+                    🌊 Îles liées <div style={{ flex:1, height:1, background:'rgba(30,120,200,.2)' }} />
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'.6rem', marginBottom:'1.25rem' }}>
+                    {selected.iles_liees.map(link => (
+                      <div key={link.ile} style={{ background:'#0d2040', border:'1px solid rgba(30,120,200,.2)', borderRadius:10, padding:'.75rem .9rem' }}>
+                        <a href={`/iles?q=${encodeURIComponent(link.ile)}`} style={{ color:'#40d060', textDecoration:'none', fontFamily:"'Cinzel',serif", fontSize:'.85rem', fontWeight:700 }}>🏝️ {link.ile}</a>
+                        {link.notes && <p style={{ fontSize:'.85rem', color:'#7a9ab8', lineHeight:1.6, fontStyle:'italic', marginTop:'.4rem' }}>{link.notes}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
 
               {/* Description */}
               {selected.description && <>

@@ -81,7 +81,9 @@ export default function IlesPage() {
   const [dragOverUpload, setDragOverUpload] = useState(false)
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [factions, setFactions] = useState<{ id: string; nom: string; emoji?: string }[]>([])
-  const [personnages, setPersonnages] = useState<{ id: string; nom: string }[]>([])
+  const [personnages, setPersonnages] = useState<{ id: string; nom: string; emoji?: string; ile?: string; iles_liees?: { ile: string; notes: string }[] }[]>([])
+  const [selected, setSelected] = useState<Ile | null>(null)
+  const [showView, setShowView] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('mer')
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -140,7 +142,7 @@ export default function IlesPage() {
   }
 
   async function fetchPersonnages() {
-    const { data } = await supabase.from('personnages').select('id, nom').order('nom', { ascending: true })
+    const { data } = await supabase.from('personnages').select('id, nom, emoji, ile, iles_liees').order('nom', { ascending: true })
     setPersonnages(data || [])
   }
 
@@ -232,6 +234,13 @@ export default function IlesPage() {
 
   const navLinks = [['Accueil','/'],['Personnages','/personnages'],['Fruits','/fruits'],['DS','/despa'],['PDS','/pds'],['Lames','/lames'],['Cristaux','/cristaux'],['Îles','/iles'],['Factions','/factions'],['Journaux','/journaux'],['Lore','/lore'],['Dashboard','/dashboard']]
   const personnageMap = new Map(personnages.map(p => [p.nom, p.id]))
+  // Réciproque de personnages.ile (île natale) et personnages.iles_liees (liens multiples,
+  // avec notes) — interrogée plutôt que dupliquée sur l'île, même principe que Lames/Fruits.
+  function personnagesLiesA(ileNom: string) {
+    return personnages
+      .map(p => ({ p, link: (p.iles_liees || []).find(l => l.ile === ileNom), native: p.ile === ileNom }))
+      .filter(x => x.link || x.native)
+  }
   const byName = new Map(filtered.map(i => [i.nom, i]))
   function hasPresentArchipelParent(ile: Ile) {
     return (ile.iles_parentes || []).some(pname => { const p = byName.get(pname); return p && p.est_archipel })
@@ -283,7 +292,7 @@ export default function IlesPage() {
         </div>
         <div style={{padding:opts.nested?'.85rem':'1.1rem'}}>
           <div style={{display:'flex',alignItems:'center',gap:'.5rem',marginBottom:'.2rem'}}>
-            <div style={{fontFamily:"'Cinzel',serif",fontSize:opts.nested?'.92rem':'1.08rem',fontWeight:700,color:isDestroyed?'#a06060':'#e8eef5',flex:1,textDecoration:isDestroyed?'line-through':'none'}}>{ile.nom}</div>
+            <div style={{fontFamily:"'Cinzel',serif",fontSize:opts.nested?'.92rem':'1.08rem',fontWeight:700,color:isDestroyed?'#a06060':'#e8eef5',flex:1,textDecoration:isDestroyed?'line-through':'none',cursor:'pointer'}} onClick={() => { setSelected(ile); setShowView(true) }}>{ile.nom}</div>
             {isFolder && (
               <button onClick={() => toggleFolder(ile.id)} style={{background:'rgba(212,160,23,.1)',border:'1px solid rgba(212,160,23,.25)',borderRadius:8,padding:'.2rem .55rem',color:'#d4a017',cursor:'pointer',fontSize:'.68rem',fontFamily:"'Cinzel',serif",whiteSpace:'nowrap'}}>{expanded?'▾':'▸'} {children.length}</button>
             )}
@@ -569,6 +578,100 @@ export default function IlesPage() {
           </div>
         </div>
       )}
+
+      {showView && selected && (() => {
+        const rc = REGION_COLORS[selected.region || ''] || '#00c8ff'
+        const lies = personnagesLiesA(selected.nom)
+        return (
+          <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) setShowView(false) }}>
+            <div style={{ ...S.modal, maxWidth: 900 }}>
+              <div style={{ position:'relative', height:220, background:'linear-gradient(135deg,#071828,#0d2440)', borderRadius:'18px 18px 0 0', overflow:'hidden', display:'flex', alignItems:'flex-end', padding:'1.75rem' }}>
+                {selected.photos && selected.photos[0] && (
+                  <img loading="lazy" src={selected.photos[0]} style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', opacity:.42, display:'block' }} />
+                )}
+                {(!selected.photos || !selected.photos[0]) && (
+                  <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11rem', opacity:.07 }}>{selected.emoji || '🏝️'}</div>
+                )}
+                <div style={{ position:'absolute', bottom:0, left:0, right:0, height:120, background:'linear-gradient(to top,#0a1829,transparent)' }} />
+                <button onClick={() => setShowView(false)} style={{ position:'absolute', top:'.9rem', right:'.9rem', background:'rgba(5,13,26,.75)', border:'1px solid rgba(30,120,200,.2)', color:'#7a9ab8', borderRadius:'50%', width:34, height:34, cursor:'pointer', fontSize:'.9rem', zIndex:5 }}>✕</button>
+                <div style={{ position:'relative', zIndex:2 }}>
+                  <div style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:'1.85rem', fontWeight:700, color:'#fff', marginBottom:'.35rem' }}>{selected.emoji} {selected.nom}</div>
+                  <span style={{ background:`${rc}22`, color:rc, border:`1px solid ${rc}44`, borderRadius:100, padding:'.15rem .65rem', fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.1em', textTransform:'uppercase' }}>{selected.region}</span>
+                </div>
+              </div>
+
+              <div style={{ padding:'1.75rem' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.1rem', marginBottom:'1.25rem' }}>
+                  {[
+                    { l:'🌤 Climat', v: selected.climat || '—', c:'#7a9ab8' },
+                    { l:'👑 Chef', v: selected.chef || '—', c:'#a060ff' },
+                    { l:'⚔️ Factions', v: (selected.factions && selected.factions.length > 0) ? selected.factions.join(', ') : '—', c:'#f0c040' },
+                    { l:'🏝️ Îles parentes', v: (selected.iles_parentes && selected.iles_parentes.length > 0) ? selected.iles_parentes.join(', ') : '—', c:'#40d060' },
+                  ].map(({l,v,c}) => (
+                    <div key={l} style={{ background:'#0d2040', border:'1px solid rgba(30,120,200,.2)', borderRadius:10, padding:'1rem' }}>
+                      <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.58rem', letterSpacing:'.14em', textTransform:'uppercase', color:'#4a6880', marginBottom:'.35rem' }}>{l}</div>
+                      <div style={{ fontFamily:"'Cinzel',serif", fontSize:'1.05rem', fontWeight:700, color:c }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {selected.photos && selected.photos.length > 1 && (
+                  <>
+                    <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.7rem', letterSpacing:'.14em', textTransform:'uppercase', color:'#00c8ff', marginBottom:'.65rem', display:'flex', alignItems:'center', gap:'.5rem' }}>
+                      📸 Galerie ({selected.photos.length} photos) <div style={{ flex:1, height:1, background:'rgba(30,120,200,.2)' }} />
+                    </div>
+                    <div style={{ display:'flex', gap:'.5rem', flexWrap:'wrap', marginBottom:'1.25rem' }}>
+                      {selected.photos.map((ph,i) => (
+                        <div key={i} style={{ width:70, height:70, borderRadius:8, overflow:'hidden', border:`2px solid ${i===0?'#d4a017':'rgba(30,120,200,.2)'}`, cursor:'zoom-in' }}
+                          onClick={() => setLightbox({ images: selected.photos!, index: i })}>
+                          <img loading="lazy" src={ph} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {selected.description && (
+                  <>
+                    <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.7rem', letterSpacing:'.14em', textTransform:'uppercase', color:'#00c8ff', marginBottom:'.65rem', display:'flex', alignItems:'center', gap:'.5rem' }}>📖 Description <div style={{ flex:1, height:1, background:'rgba(30,120,200,.2)' }} /></div>
+                    <p style={{ fontSize:'1rem', color:'#7a9ab8', lineHeight:1.8, marginBottom:'1.25rem', fontStyle:'italic' }}>{selected.description}</p>
+                  </>
+                )}
+
+                {/* Personnages liés (île natale + îles liées) */}
+                <div style={{ fontFamily:"'Cinzel',serif", fontSize:'.7rem', letterSpacing:'.14em', textTransform:'uppercase', color:'#00c8ff', marginBottom:'.65rem', display:'flex', alignItems:'center', gap:'.5rem' }}>
+                  👤 Personnages liés ({lies.length}) <div style={{ flex:1, height:1, background:'rgba(30,120,200,.2)' }} />
+                </div>
+                {lies.length === 0 ? (
+                  <div style={{ fontSize:'.85rem', color:'#4a6880', fontStyle:'italic', marginBottom:'1.25rem' }}>Aucun personnage lié à cette île pour l&apos;instant.</div>
+                ) : (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'.6rem', marginBottom:'1.25rem' }}>
+                    {lies.map(({ p, link, native }) => (
+                      <div key={p.id} style={{ background:'#0d2040', border:'1px solid rgba(30,120,200,.2)', borderRadius:10, padding:'.75rem .9rem', display:'flex', gap:'.65rem', alignItems:'flex-start' }}>
+                        <span style={{ fontSize:'1.3rem', flexShrink:0 }}>{p.emoji || '👤'}</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:'flex', gap:'.4rem', alignItems:'center', flexWrap:'wrap' }}>
+                            <a href={`/personnages?open=${p.id}`} style={{ color:'#e8eef5', textDecoration:'none', fontFamily:"'Cinzel',serif", fontSize:'.85rem', fontWeight:700 }}>{p.nom}</a>
+                            {native && <span style={{ background:'rgba(64,208,96,.15)', color:'#40d060', border:'1px solid rgba(64,208,96,.3)', borderRadius:100, padding:'.1rem .5rem', fontFamily:"'Cinzel',serif", fontSize:'.5rem', letterSpacing:'.08em', textTransform:'uppercase' }}>Île natale</span>}
+                          </div>
+                          {link?.notes && <p style={{ fontSize:'.82rem', color:'#7a9ab8', lineHeight:1.6, fontStyle:'italic', marginTop:'.3rem' }}>{link.notes}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ display:'flex', gap:'.5rem', flexWrap:'wrap' }}>
+                  {selected.gdoc && <a href={selected.gdoc} target="_blank" rel="noopener" style={{ display:'inline-flex', alignItems:'center', gap:'.45rem', borderRadius:9, padding:'.55rem .95rem', fontFamily:"'Cinzel',serif", fontSize:'.62rem', fontWeight:700, letterSpacing:'.07em', textTransform:'uppercase', textDecoration:'none', background:'rgba(66,133,244,.15)', color:'#6aabff', border:'1px solid rgba(66,133,244,.3)' }}>📄 Google Doc</a>}
+                  {selected.miro && <a href={selected.miro} target="_blank" rel="noopener" style={{ display:'inline-flex', alignItems:'center', gap:'.45rem', borderRadius:9, padding:'.55rem .95rem', fontFamily:"'Cinzel',serif", fontSize:'.62rem', fontWeight:700, letterSpacing:'.07em', textTransform:'uppercase', textDecoration:'none', background:'rgba(255,196,0,.12)', color:'#ffc400', border:'1px solid rgba(255,196,0,.3)' }}>🗒 Miro Board</a>}
+                  <button onClick={() => { setShowView(false); openForm(selected) }} style={{ ...S.btnCyan, marginLeft:'auto' }}>✏️ Modifier</button>
+                  <button onClick={() => { setShowView(false); deleteIle(selected.id) }} style={{ background:'rgba(224,48,48,.12)', color:'#ff6060', border:'1px solid rgba(224,48,48,.3)', borderRadius:10, padding:'.7rem 1.4rem', fontFamily:"'Cinzel',serif", fontSize:'.72rem', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase' as const, cursor:'pointer' }}>🗑 Supprimer</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {lightbox && <ImageLightbox images={lightbox.images} index={lightbox.index} onClose={() => setLightbox(null)} onIndexChange={i => setLightbox(lb => lb ? { ...lb, index: i } : lb)} />}
     </div>
