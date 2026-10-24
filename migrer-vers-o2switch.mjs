@@ -146,9 +146,11 @@ for (const chemin of chemins) {
 }
 await writeFile(path.join(SORTIE, 'resume.json'), JSON.stringify(resume, null, 2))
 
-// Archive zip (le gestionnaire de fichiers cPanel sait l'extraire) — tar.exe est fourni avec Windows 10+.
+// Archive zip (le gestionnaire de fichiers cPanel sait l'extraire) — le tar.exe de Windows 10+ sait
+// écrire du zip ; on l'appelle par son chemin, car le tar de Git Bash écrirait un .tar nommé .zip.
 await rm(path.join(SORTIE, 'media.zip'), { force: true })
-const zip = spawnSync('tar', ['-a', '-cf', '../media.zip', '.'], { cwd: path.join(SORTIE, 'media'), stdio: 'inherit' })
+const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'bsdtar'
+const zip = spawnSync(tar, ['-a', '-cf', '../media.zip', '.'], { cwd: path.join(SORTIE, 'media'), stdio: 'inherit' })
 
 console.log(`\nTerminé : ${resume.images} fichier(s), ${(resume.octets / 1048576).toFixed(1)} Mo.`)
 if (resume.introuvables.length) console.log(`${resume.introuvables.length} fichier(s) référencé(s) mais introuvable(s) sur Supabase (liste dans resume.json).`)
