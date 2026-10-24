@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, uploadImage } from '@/lib/supabase'
+import { db, uploadImage } from '@/lib/db'
 import { fetchCategoryValues } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageLightbox from '@/components/ImageLightbox'
@@ -163,7 +163,7 @@ export default function PdsPage() {
     let failures = 0
     for (let i = 0; i < reordered.length; i++) {
       if (reordered[i].ordre_manuel !== i) {
-        const { error } = await supabase.from('pds').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        const { error } = await db.from('pds').update({ ordre_manuel: i }).eq('id', reordered[i].id)
         if (error) failures++
       }
     }
@@ -181,12 +181,12 @@ export default function PdsPage() {
   }
 
   async function fetchList() {
-    const { data } = await supabase.from('pds').select('*').order('created_at', { ascending: false })
+    const { data } = await db.from('pds').select('*').order('created_at', { ascending: false })
     setList(data || [])
   }
 
   async function fetchDespas() {
-    const { data } = await supabase.from('despas').select('id, nom').order('nom', { ascending: true })
+    const { data } = await db.from('despas').select('id, nom').order('nom', { ascending: true })
     setDespasList(data || [])
   }
 
@@ -224,8 +224,8 @@ export default function PdsPage() {
     }
     const data = { ...form, photos, sujet_photos: sujetPhotos }
     const { error } = editId
-      ? await supabase.from('pds').update(data).eq('id', editId)
-      : await supabase.from('pds').insert([data])
+      ? await db.from('pds').update(data).eq('id', editId)
+      : await db.from('pds').insert([data])
     setUploading(false)
     if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
     setShowForm(false)
@@ -234,14 +234,14 @@ export default function PdsPage() {
 
   async function deletePds(id: string) {
     if (!confirm('Supprimer ce PDS ?')) return
-    await supabase.from('pds').delete().eq('id', id)
+    await db.from('pds').delete().eq('id', id)
     fetchList()
   }
 
   async function duplicatePds(p: Pds) {
     const { id, ...rest } = p
     void id
-    await supabase.from('pds').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
+    await db.from('pds').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
     fetchList()
   }
 

@@ -44,3 +44,7 @@ next-env.d.ts
 /backup/
 /.next-export/
 /out/
+
+# O2switch : mot de passe MySQL et dossier de transfert (données + images)
+serveur/api/config.php
+o2switch-transfert/

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, uploadImage } from '@/lib/supabase'
+import { db, uploadImage } from '@/lib/db'
 import { fetchCategoryFull, CategoryFull } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageLightbox from '@/components/ImageLightbox'
@@ -112,7 +112,7 @@ export default function IlesPage() {
   }, [list, search, regionFilter, factionFilter, sortMode, regionFull])
 
   async function fetchList() {
-    const { data } = await supabase.from('iles').select('*').order('created_at', { ascending: false })
+    const { data } = await db.from('iles').select('*').order('created_at', { ascending: false })
     setList(data || [])
   }
 
@@ -128,7 +128,7 @@ export default function IlesPage() {
     let failures = 0
     for (let i = 0; i < reordered.length; i++) {
       if (reordered[i].ordre_manuel !== i) {
-        const { error } = await supabase.from('iles').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        const { error } = await db.from('iles').update({ ordre_manuel: i }).eq('id', reordered[i].id)
         if (error) failures++
       }
     }
@@ -137,12 +137,12 @@ export default function IlesPage() {
   }
 
   async function fetchFactions() {
-    const { data } = await supabase.from('factions').select('id, nom, emoji').order('nom', { ascending: true })
+    const { data } = await db.from('factions').select('id, nom, emoji').order('nom', { ascending: true })
     setFactions(data || [])
   }
 
   async function fetchPersonnages() {
-    const { data } = await supabase.from('personnages').select('id, nom, emoji, ile, iles_liees').order('nom', { ascending: true })
+    const { data } = await db.from('personnages').select('id, nom, emoji, ile, iles_liees').order('nom', { ascending: true })
     setPersonnages(data || [])
   }
 
@@ -168,19 +168,19 @@ export default function IlesPage() {
     if (!dragged) return
     const current = dragged.iles_parentes || []
     if (current.includes(folder.nom)) return
-    await supabase.from('iles').update({ iles_parentes: [...current, folder.nom] }).eq('id', dragged.id)
+    await db.from('iles').update({ iles_parentes: [...current, folder.nom] }).eq('id', dragged.id)
     setExpandedFolders(prev => new Set(prev).add(folder.id))
     fetchList()
   }
 
   async function removeFromFolder(ile: Ile, folderNom: string) {
     const next = (ile.iles_parentes || []).filter(n => n !== folderNom)
-    await supabase.from('iles').update({ iles_parentes: next }).eq('id', ile.id)
+    await db.from('iles').update({ iles_parentes: next }).eq('id', ile.id)
     fetchList()
   }
 
   async function removeFromAllFolders(ileId: string) {
-    await supabase.from('iles').update({ iles_parentes: [] }).eq('id', ileId)
+    await db.from('iles').update({ iles_parentes: [] }).eq('id', ileId)
     fetchList()
   }
 
@@ -211,8 +211,8 @@ export default function IlesPage() {
     }
     const data = { ...form, photos, photo: photos[0] || null }
     const { error } = editId
-      ? await supabase.from('iles').update(data).eq('id', editId)
-      : await supabase.from('iles').insert([data])
+      ? await db.from('iles').update(data).eq('id', editId)
+      : await db.from('iles').insert([data])
     setUploading(false)
     if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
     setShowForm(false)
@@ -221,14 +221,14 @@ export default function IlesPage() {
 
   async function deleteIle(id: string) {
     if (!confirm('Supprimer cette île ?')) return
-    await supabase.from('iles').delete().eq('id', id)
+    await db.from('iles').delete().eq('id', id)
     fetchList()
   }
 
   async function duplicateIle(ile: Ile) {
     const { id, ...rest } = ile
     void id
-    await supabase.from('iles').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
+    await db.from('iles').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
     fetchList()
   }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { supabase, uploadImage } from '@/lib/supabase'
+import { db, uploadImage } from '@/lib/db'
 import { fetchCategoryFull, fetchCategoryDetails, CategoryFull, CategoryDetail } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageCropper from '@/components/ImageCropper'
@@ -304,21 +304,21 @@ export default function PersonnagesPage() {
   }, [list])
 
   async function fetchIles() {
-    const { data } = await supabase.from('iles').select('id, nom, region').order('nom', { ascending: true })
+    const { data } = await db.from('iles').select('id, nom, region').order('nom', { ascending: true })
     setIles(data || [])
   }
 
   async function fetchFactions() {
-    const { data } = await supabase.from('factions').select('id, nom, type, rangs').order('nom', { ascending: true })
+    const { data } = await db.from('factions').select('id, nom, type, rangs').order('nom', { ascending: true })
     setFactions(data || [])
   }
 
   async function fetchLinkedCatalogs() {
     const [fr, d, l, c] = await Promise.all([
-      supabase.from('fruits').select('id, nom, proprietaire, type'),
-      supabase.from('despas').select('id, nom, proprietaire'),
-      supabase.from('lames').select('id, nom, proprietaire'),
-      supabase.from('cristaux_primordiaux').select('id, nom, proprietaire'),
+      db.from('fruits').select('id, nom, proprietaire, type'),
+      db.from('despas').select('id, nom, proprietaire'),
+      db.from('lames').select('id, nom, proprietaire'),
+      db.from('cristaux_primordiaux').select('id, nom, proprietaire'),
     ])
     setFruits(fr.data || [])
     setDespas(d.data || [])
@@ -335,7 +335,7 @@ export default function PersonnagesPage() {
   }, [list, search, typeFilter, factionFilter, pageTab, factions])
 
   async function fetchList() {
-    const { data } = await supabase.from('personnages').select('*').order('created_at', { ascending: false })
+    const { data } = await db.from('personnages').select('*').order('created_at', { ascending: false })
     setList(data || [])
   }
 
@@ -352,7 +352,7 @@ export default function PersonnagesPage() {
     let failures = 0
     for (let i = 0; i < reordered.length; i++) {
       if (reordered[i].ordre_manuel !== i) {
-        const { error } = await supabase.from('personnages').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        const { error } = await db.from('personnages').update({ ordre_manuel: i }).eq('id', reordered[i].id)
         if (error) failures++
       }
     }
@@ -432,8 +432,8 @@ export default function PersonnagesPage() {
     }
     const data = { ...form, photos }
     const { error } = editId
-      ? await supabase.from('personnages').update(data).eq('id', editId)
-      : await supabase.from('personnages').insert([data])
+      ? await db.from('personnages').update(data).eq('id', editId)
+      : await db.from('personnages').insert([data])
     setUploading(false)
     if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
     setShowForm(false)
@@ -442,7 +442,7 @@ export default function PersonnagesPage() {
 
   async function deletePerso(id: string) {
     if (!confirm('Supprimer ce personnage ?')) return
-    await supabase.from('personnages').delete().eq('id', id)
+    await db.from('personnages').delete().eq('id', id)
     setShowView(false)
     fetchList()
   }
@@ -450,12 +450,12 @@ export default function PersonnagesPage() {
   async function duplicatePerso(p: Personnage) {
     const { id, ...rest } = p
     void id
-    await supabase.from('personnages').insert([{ ...rest, nom: rest.nom + ' (copie)', fav: false }])
+    await db.from('personnages').insert([{ ...rest, nom: rest.nom + ' (copie)', fav: false }])
     fetchList()
   }
 
   async function toggleFav(p: Personnage) {
-    await supabase.from('personnages').update({ fav: !p.fav }).eq('id', p.id)
+    await db.from('personnages').update({ fav: !p.fav }).eq('id', p.id)
     fetchList()
   }
 

@@ -29,6 +29,11 @@ Détails techniques et conventions : voir `PASSATION.md`. Aucun secret dans ce f
 6. **Sauvegarde locale** — `backup.mjs` (tables JSON + 711 images, ~1,5 Go dont ~1,47 Go non référencées).
 7. **Changement d'hébergeur envisagé (O2switch)** — `npm run export` produit un site statique testé en
    local (`.next-export/`) ; données et images restent sur Supabase.
+8. **Migration complète vers O2switch** (24/10/2026, branche `o2switch`) — Matéis a choisi de tout quitter
+   (Supabase + Vercel) : base MySQL (`serveur/schema.sql`), API PHP (`serveur/api/`) qui imite supabase-js
+   (`src/lib/db.ts`, pages quasi inchangées), images dans `public_html/media/`. Transfert : `npm run migrer`
+   (204 personnages… + 392 images utilisées, 100 Mo ; orphelines laissées). Testé en local avec PHP 8.3 +
+   MariaDB 11.4 : résultats identiques à Supabase, lecture/écriture/upload OK. Guide : `MISE-EN-LIGNE-O2SWITCH.md`.
 
 ## Décisions et idées écartées
 - Notes privées par compte utilisateur : écarté, un simple champ « notes » suffit.
@@ -36,6 +41,6 @@ Détails techniques et conventions : voir `PASSATION.md`. Aucun secret dans ce f
 - Pas de suppression des ~320 images orphelines du bucket sans validation explicite.
 
 ## Reste à faire / pistes
-- Script de restauration (`restore.mjs`) pour réinjecter une sauvegarde dans un autre Supabase.
-- Nettoyage éventuel des images orphelines (liste à montrer avant toute suppression).
-- Mise en ligne sur O2switch (envoyer le contenu de `.next-export/` dans `public_html`).
+- Mise en ligne sur O2switch par Matéis (suivre `MISE-EN-LIGNE-O2SWITCH.md`), puis fusion de la branche
+  `o2switch` dans `main`, arrêt de Vercel, Supabase repassé en gratuit puis supprimé.
+- Corriger le doublon d'article Lore (sauvegarde auto).

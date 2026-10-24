@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { supabase, uploadImage } from '@/lib/supabase'
+import { db, uploadImage } from '@/lib/db'
 import { fetchCategoryFull, CategoryFull } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageLightbox from '@/components/ImageLightbox'
@@ -94,7 +94,7 @@ export default function JournauxPage() {
   }, [])
 
   async function fetchJournaux() {
-    const { data } = await supabase.from('sessions').select('*').order('num', { ascending: true })
+    const { data } = await db.from('sessions').select('*').order('num', { ascending: true })
     setJournaux(data || [])
   }
 
@@ -109,7 +109,7 @@ export default function JournauxPage() {
     let failures = 0
     for (let i = 0; i < reordered.length; i++) {
       if (reordered[i].ordre_manuel !== i) {
-        const { error } = await supabase.from('sessions').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        const { error } = await db.from('sessions').update({ ordre_manuel: i }).eq('id', reordered[i].id)
         if (error) failures++
       }
     }
@@ -118,7 +118,7 @@ export default function JournauxPage() {
   }
 
   async function fetchPersonnages() {
-    const { data } = await supabase.from('personnages').select('id, nom').order('nom', { ascending: true })
+    const { data } = await db.from('personnages').select('id, nom').order('nom', { ascending: true })
     setPersonnages(data || [])
   }
 
@@ -159,8 +159,8 @@ export default function JournauxPage() {
     // valeur valide (contrairement à un champ texte), il faut explicitement envoyer null.
     const data = { ...form, photos, pdfs, date: form.date || null }
     const { error } = editId
-      ? await supabase.from('sessions').update(data).eq('id', editId)
-      : await supabase.from('sessions').insert([data])
+      ? await db.from('sessions').update(data).eq('id', editId)
+      : await db.from('sessions').insert([data])
     setUploading(false)
     if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
     setShowForm(false); fetchJournaux()
@@ -168,7 +168,7 @@ export default function JournauxPage() {
 
   async function deleteJournal(id: string) {
     if (!confirm('Supprimer ce journal ?')) return
-    await supabase.from('sessions').delete().eq('id', id)
+    await db.from('sessions').delete().eq('id', id)
     setConsult(null)
     fetchJournaux()
   }
@@ -176,7 +176,7 @@ export default function JournauxPage() {
   async function duplicateJournal(j: Journal) {
     const { id, ...rest } = j
     void id
-    await supabase.from('sessions').insert([{ ...rest, titre: rest.titre + ' (copie)', num: journaux.length + 1 }])
+    await db.from('sessions').insert([{ ...rest, titre: rest.titre + ' (copie)', num: journaux.length + 1 }])
     fetchJournaux()
   }
 

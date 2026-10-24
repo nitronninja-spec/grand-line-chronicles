@@ -1,11 +1,11 @@
-import { supabase } from './supabase'
+import { db } from './db'
 
 // Récupère la liste ordonnée des valeurs actives d'une dimension (ex: content_type='despa',
 // dimension='classe') depuis la table "categories" configurable via Dashboard → Personnalisation.
 // Repli sur le tableau fourni si la table est vide, en erreur, ou pas encore migrée —
 // aucune page ne doit jamais se retrouver sans options par manque de données.
 export async function fetchCategoryValues(contentType: string, dimension: string, fallback: string[]): Promise<string[]> {
-  const { data, error } = await supabase.from('categories').select('value')
+  const { data, error } = await db.from('categories').select('value')
     .eq('content_type', contentType).eq('dimension', dimension).eq('actif', true)
     .order('ordre', { ascending: true })
   if (error || !data || data.length === 0) return fallback
@@ -18,7 +18,7 @@ export interface CategoryFull { value: string; emoji: string; color: string; cap
 // pages qui construisent leurs propres dictionnaires Record<valeur, couleur|emoji|plafond>
 // (ex: Journaux, Lames).
 export async function fetchCategoryFull(contentType: string, dimension: string, fallback: CategoryFull[]): Promise<CategoryFull[]> {
-  const { data, error } = await supabase.from('categories').select('value,emoji,color,cap')
+  const { data, error } = await db.from('categories').select('value,emoji,color,cap')
     .eq('content_type', contentType).eq('dimension', dimension).eq('actif', true)
     .order('ordre', { ascending: true })
   if (error || !data || data.length === 0) return fallback
@@ -31,7 +31,7 @@ export interface CategoryDetail { value: string; label: string; emoji: string; c
 // dictionnaires où le libellé affiché diffère de la valeur stockée (ex: fruits.statut vaut
 // "mange" mais affiche "Mangé") et où l'icône est rendue indépendamment du libellé.
 export async function fetchCategoryDetails(contentType: string, dimension: string, fallback: CategoryDetail[]): Promise<CategoryDetail[]> {
-  const { data, error } = await supabase.from('categories').select('value,label,emoji,color')
+  const { data, error } = await db.from('categories').select('value,label,emoji,color')
     .eq('content_type', contentType).eq('dimension', dimension).eq('actif', true)
     .order('ordre', { ascending: true })
   if (error || !data || data.length === 0) return fallback
@@ -44,7 +44,7 @@ export interface CategoryRow { id: string; label: string; color: string }
 // contrat de repli que fetchCategoryValues. Le libellé inclut l'emoji en préfixe (ex: "📜
 // Histoire") pour reproduire à l'identique l'ancien format codé en dur.
 export async function fetchCategoryRows(contentType: string, dimension: string, fallback: CategoryRow[]): Promise<CategoryRow[]> {
-  const { data, error } = await supabase.from('categories').select('value,label,emoji,color')
+  const { data, error } = await db.from('categories').select('value,label,emoji,color')
     .eq('content_type', contentType).eq('dimension', dimension).eq('actif', true)
     .order('ordre', { ascending: true })
   if (error || !data || data.length === 0) return fallback

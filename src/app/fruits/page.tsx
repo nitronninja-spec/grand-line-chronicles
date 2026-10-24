@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, uploadImage } from '@/lib/supabase'
+import { db, uploadImage } from '@/lib/db'
 import { fetchCategoryDetails, CategoryDetail } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import PersonnageSearchSelect from '@/components/PersonnageSearchSelect'
@@ -297,7 +297,7 @@ export default function FruitsPage() {
   }, [list, pageTab, search, sortMode])
 
   async function fetchList() {
-    const { data } = await supabase.from('fruits').select('*').order('created_at', { ascending: false })
+    const { data } = await db.from('fruits').select('*').order('created_at', { ascending: false })
     setList(data || [])
   }
 
@@ -312,7 +312,7 @@ export default function FruitsPage() {
     let failures = 0
     for (let i = 0; i < reordered.length; i++) {
       if (reordered[i].ordre_manuel !== i) {
-        const { error } = await supabase.from('fruits').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        const { error } = await db.from('fruits').update({ ordre_manuel: i }).eq('id', reordered[i].id)
         if (error) failures++
       }
     }
@@ -321,12 +321,12 @@ export default function FruitsPage() {
   }
 
   async function fetchPersonnages() {
-    const { data } = await supabase.from('personnages').select('id, nom').order('nom', { ascending: true })
+    const { data } = await db.from('personnages').select('id, nom').order('nom', { ascending: true })
     setPersonnages(data || [])
   }
 
   async function fetchLames() {
-    const { data } = await supabase.from('lames').select('id, nom, rang').order('nom', { ascending: true })
+    const { data } = await db.from('lames').select('id, nom, rang').order('nom', { ascending: true })
     setLames(data || [])
   }
 
@@ -370,8 +370,8 @@ export default function FruitsPage() {
     }
     const data = { ...form, photos, photo: photos[0] || null, lame_id: form.lame_id || null }
     const { error } = editId
-      ? await supabase.from('fruits').update(data).eq('id', editId)
-      : await supabase.from('fruits').insert([data])
+      ? await db.from('fruits').update(data).eq('id', editId)
+      : await db.from('fruits').insert([data])
     setUploading(false)
     if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
     setShowForm(false)
@@ -380,14 +380,14 @@ export default function FruitsPage() {
 
   async function deleteFruit(id: string) {
     if (!confirm('Supprimer ce fruit ?')) return
-    await supabase.from('fruits').delete().eq('id', id)
+    await db.from('fruits').delete().eq('id', id)
     fetchList()
   }
 
   async function duplicateFruit(f: Fruit) {
     const { id, ...rest } = f
     void id
-    await supabase.from('fruits').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
+    await db.from('fruits').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
     fetchList()
   }
 

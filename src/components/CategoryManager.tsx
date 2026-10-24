@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 interface Category {
   id: string
@@ -86,7 +86,7 @@ export default function CategoryManager() {
 
   async function fetchItems() {
     setLoading(true)
-    const { data } = await supabase.from('categories').select('*')
+    const { data } = await db.from('categories').select('*')
       .eq('content_type', group.contentType).eq('dimension', group.dimension)
       .order('ordre', { ascending: true })
     setItems(data || [])
@@ -98,7 +98,7 @@ export default function CategoryManager() {
     if (!value) return
     if (items.some(i => i.value === value)) { alert('Cette valeur existe déjà dans cette catégorie.'); return }
     const ordre = items.length ? Math.max(...items.map(i => i.ordre)) + 1 : 0
-    const { error } = await supabase.from('categories').insert([{
+    const { error } = await db.from('categories').insert([{
       content_type: group.contentType, dimension: group.dimension, value, label: value, ordre, actif: true,
     }])
     if (error) { alert('Erreur lors de la création : ' + error.message); return }
@@ -108,7 +108,7 @@ export default function CategoryManager() {
 
   async function patchItem(id: string, patch: Partial<Category>) {
     setItems(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
-    const { error } = await supabase.from('categories').update(patch).eq('id', id)
+    const { error } = await db.from('categories').update(patch).eq('id', id)
     if (error) alert('Erreur lors de la sauvegarde : ' + error.message)
   }
 
@@ -119,9 +119,9 @@ export default function CategoryManager() {
     const value = newVal.trim()
     if (!value || value === item.value) return
     if (items.some(i => i.id !== item.id && i.value === value)) { alert('Cette valeur existe déjà.'); return }
-    const { error: catErr } = await supabase.from('categories').update({ value, label: value }).eq('id', item.id)
+    const { error: catErr } = await db.from('categories').update({ value, label: value }).eq('id', item.id)
     if (catErr) { alert('Erreur lors du renommage : ' + catErr.message); return }
-    const { error: cascErr } = await supabase.from(group.table).update({ [group.field]: value }).eq(group.field, item.value)
+    const { error: cascErr } = await db.from(group.table).update({ [group.field]: value }).eq(group.field, item.value)
     if (cascErr) alert(`Le libellé a été renommé, mais la mise à jour des fiches existantes a échoué : ${cascErr.message}`)
     fetchItems()
   }
@@ -138,10 +138,10 @@ export default function CategoryManager() {
 
   async function confirmDelete(item: Category, fallback: string) {
     if (fallback) {
-      const { error } = await supabase.from(group.table).update({ [group.field]: fallback }).eq(group.field, item.value)
+      const { error } = await db.from(group.table).update({ [group.field]: fallback }).eq(group.field, item.value)
       if (error) { alert('Erreur lors de la réaffectation des fiches : ' + error.message); return }
     }
-    const { error: delErr } = await supabase.from('categories').delete().eq('id', item.id)
+    const { error: delErr } = await db.from('categories').delete().eq('id', item.id)
     if (delErr) { alert('Erreur lors de la suppression : ' + delErr.message); return }
     setPendingDelete(null)
     fetchItems()
@@ -160,7 +160,7 @@ export default function CategoryManager() {
     let failures = 0
     for (let i = 0; i < reordered.length; i++) {
       if (reordered[i].ordre !== i) {
-        const { error } = await supabase.from('categories').update({ ordre: i }).eq('id', reordered[i].id)
+        const { error } = await db.from('categories').update({ ordre: i }).eq('id', reordered[i].id)
         if (error) failures++
       }
     }

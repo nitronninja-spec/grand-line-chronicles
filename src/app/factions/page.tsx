@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { supabase, uploadImage } from '@/lib/supabase'
+import { db, uploadImage } from '@/lib/db'
 import { fetchCategoryFull, fetchCategoryDetails, CategoryFull, CategoryDetail } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageLightbox from '@/components/ImageLightbox'
@@ -178,12 +178,12 @@ export default function FactionsPage() {
   }, [])
 
   async function fetchList() {
-    const { data } = await supabase.from('factions').select('*').order('created_at', { ascending: false })
+    const { data } = await db.from('factions').select('*').order('created_at', { ascending: false })
     setList(data || [])
   }
 
   async function fetchMembers() {
-    const { data } = await supabase.from('personnages').select('id, nom, emoji, type, photos, factions, equipage, rang, rangs, prime, condition_prime')
+    const { data } = await db.from('personnages').select('id, nom, emoji, type, photos, factions, equipage, rang, rangs, prime, condition_prime')
     setMembers(data || [])
   }
 
@@ -199,9 +199,9 @@ export default function FactionsPage() {
   // avait été créé. On vérifie maintenant chaque erreur et on prévient si besoin.
   async function cascadeFactionRename(oldNom: string, newNom: string): Promise<number> {
     const [psAll, ilesFac, childFac] = await Promise.all([
-      supabase.from('personnages').select('id, factions, equipage, rangs'),
-      supabase.from('iles').select('id, factions').contains('factions', [oldNom]),
-      supabase.from('factions').select('id, factions_parentes').contains('factions_parentes', [oldNom]),
+      db.from('personnages').select('id, factions, equipage, rangs'),
+      db.from('iles').select('id, factions').contains('factions', [oldNom]),
+      db.from('factions').select('id, factions_parentes').contains('factions_parentes', [oldNom]),
     ])
     let failures = 0
     for (const p of (psAll.data || []) as { id: string; factions?: string[]; equipage?: string; rangs?: { faction: string; rang: string }[] }[]) {
@@ -213,22 +213,22 @@ export default function FactionsPage() {
       if (hasFaction) patch.factions = (p.factions || []).map(n => n === oldNom ? newNom : n)
       if (hasEquipage) patch.equipage = newNom
       if (hasRang) patch.rangs = (p.rangs || []).map(r => r.faction === oldNom ? { ...r, faction: newNom } : r)
-      const { error } = await supabase.from('personnages').update(patch).eq('id', p.id)
+      const { error } = await db.from('personnages').update(patch).eq('id', p.id)
       if (error) failures++
     }
     for (const i of (ilesFac.data || []) as { id: string; factions?: string[] }[]) {
-      const { error } = await supabase.from('iles').update({ factions: (i.factions || []).map(n => n === oldNom ? newNom : n) }).eq('id', i.id)
+      const { error } = await db.from('iles').update({ factions: (i.factions || []).map(n => n === oldNom ? newNom : n) }).eq('id', i.id)
       if (error) failures++
     }
     for (const f of (childFac.data || []) as { id: string; factions_parentes?: string[] }[]) {
-      const { error } = await supabase.from('factions').update({ factions_parentes: (f.factions_parentes || []).map(n => n === oldNom ? newNom : n) }).eq('id', f.id)
+      const { error } = await db.from('factions').update({ factions_parentes: (f.factions_parentes || []).map(n => n === oldNom ? newNom : n) }).eq('id', f.id)
       if (error) failures++
     }
     return failures
   }
 
   async function fetchIlesList() {
-    const { data } = await supabase.from('iles').select('id, nom, emoji, factions')
+    const { data } = await db.from('iles').select('id, nom, emoji, factions')
     setLinkedIles(data || [])
   }
 
@@ -244,7 +244,7 @@ export default function FactionsPage() {
     for (let i = 0; i < reordered.length; i++) {
       const m = reordered[i]
       const newRangs = (m.rangs || []).map(r => r.faction === factionNom ? { ...r, ordre: i } : r)
-      await supabase.from('personnages').update({ rangs: newRangs }).eq('id', m.id)
+      await db.from('personnages').update({ rangs: newRangs }).eq('id', m.id)
     }
     fetchMembers()
   }
@@ -260,11 +260,11 @@ export default function FactionsPage() {
     let failures = 0
     for (let i = 0; i < reordered.length; i++) {
       if (reordered[i].ordre_manuel !== i) {
-        const { error } = await supabase.from('factions').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        const { error } = await db.from('factions').update({ ordre_manuel: i }).eq('id', reordered[i].id)
         if (error) failures++
       }
     }
-    if (failures > 0) alert(`Le nouvel ordre n'a pas pu être enregistré (colonne "ordre_manuel" manquante ? voir supabase-migration-14.sql).`)
+    if (failures > 0) alert(`Le nouvel ordre n'a pas pu être enregistré (colonne "ordre_manuel" manquante ? voir serveur/schema.sql).`)
     fetchList()
   }
 
@@ -315,8 +315,8 @@ export default function FactionsPage() {
     const data = { ...form, nom: newNom, rangs: (form.rangs || []).filter(r => r.nom.trim()), photos }
     const original = editId ? list.find(f => f.id === editId) : null
     const { error } = editId
-      ? await supabase.from('factions').update(data).eq('id', editId)
-      : await supabase.from('factions').insert([data])
+      ? await db.from('factions').update(data).eq('id', editId)
+      : await db.from('factions').insert([data])
     setUploading(false)
     if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
     if (original && original.nom !== newNom) {
@@ -328,13 +328,13 @@ export default function FactionsPage() {
 
   async function deleteFaction(id: string) {
     if (!confirm('Supprimer cette faction ?')) return
-    await supabase.from('factions').delete().eq('id', id); fetchList()
+    await db.from('factions').delete().eq('id', id); fetchList()
   }
 
   async function duplicateFaction(f: Faction) {
     const { id, ...rest } = f
     void id
-    await supabase.from('factions').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
+    await db.from('factions').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
     fetchList()
   }
 

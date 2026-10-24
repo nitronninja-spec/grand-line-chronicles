@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, uploadImage } from '@/lib/supabase'
+import { db, uploadImage } from '@/lib/db'
 import { fetchCategoryValues } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import ImageLightbox from '@/components/ImageLightbox'
@@ -95,7 +95,7 @@ export default function CristauxPage() {
     let failures = 0
     for (let i = 0; i < reordered.length; i++) {
       if (reordered[i].ordre_manuel !== i) {
-        const { error } = await supabase.from('cristaux_primordiaux').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        const { error } = await db.from('cristaux_primordiaux').update({ ordre_manuel: i }).eq('id', reordered[i].id)
         if (error) failures++
       }
     }
@@ -104,12 +104,12 @@ export default function CristauxPage() {
   }
 
   async function fetchList() {
-    const { data } = await supabase.from('cristaux_primordiaux').select('*').order('created_at', { ascending: false })
+    const { data } = await db.from('cristaux_primordiaux').select('*').order('created_at', { ascending: false })
     setList(data || [])
   }
 
   async function fetchPersonnages() {
-    const { data } = await supabase.from('personnages').select('id, nom').order('nom', { ascending: true })
+    const { data } = await db.from('personnages').select('id, nom').order('nom', { ascending: true })
     setPersonnages(data || [])
   }
 
@@ -148,8 +148,8 @@ export default function CristauxPage() {
     }
     const data = { ...form, photos, photo: photos[0] || null }
     const { error } = editId
-      ? await supabase.from('cristaux_primordiaux').update(data).eq('id', editId)
-      : await supabase.from('cristaux_primordiaux').insert([data])
+      ? await db.from('cristaux_primordiaux').update(data).eq('id', editId)
+      : await db.from('cristaux_primordiaux').insert([data])
     setUploading(false)
     if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
     setShowForm(false)
@@ -158,14 +158,14 @@ export default function CristauxPage() {
 
   async function deleteCristal(id: string) {
     if (!confirm('Supprimer ce cristal ?')) return
-    await supabase.from('cristaux_primordiaux').delete().eq('id', id)
+    await db.from('cristaux_primordiaux').delete().eq('id', id)
     fetchList()
   }
 
   async function duplicateCristal(c: Cristal) {
     const { id, ...rest } = c
     void id
-    await supabase.from('cristaux_primordiaux').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
+    await db.from('cristaux_primordiaux').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
     fetchList()
   }
 

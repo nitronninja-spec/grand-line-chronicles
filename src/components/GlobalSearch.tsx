@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 
 interface ResultItem {
   id: string
@@ -47,7 +47,7 @@ export default function GlobalSearch() {
     setLoading(true)
     const t = setTimeout(async () => {
       const results = await Promise.all(SOURCES.map(async src => {
-        const { data } = await supabase.from(src.table).select('*').ilike(src.col, `%${query.trim()}%`).limit(5)
+        const { data } = await db.from(src.table).select('*').ilike(src.col, `%${query.trim()}%`).limit(5)
         const items: ResultItem[] = (data || [])
           .filter((row: Record<string, unknown>) => row[src.col])
           .map((row: Record<string, unknown>) => ({

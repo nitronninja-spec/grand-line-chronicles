@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, uploadImage } from '@/lib/supabase'
+import { db, uploadImage } from '@/lib/db'
 import { fetchCategoryValues } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import PersonnageSearchSelect from '@/components/PersonnageSearchSelect'
@@ -106,7 +106,7 @@ export default function DespaPage() {
     let failures = 0
     for (let i = 0; i < reordered.length; i++) {
       if (reordered[i].ordre_manuel !== i) {
-        const { error } = await supabase.from('despas').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        const { error } = await db.from('despas').update({ ordre_manuel: i }).eq('id', reordered[i].id)
         if (error) failures++
       }
     }
@@ -125,12 +125,12 @@ export default function DespaPage() {
   }
 
   async function fetchList() {
-    const { data } = await supabase.from('despas').select('*').order('created_at', { ascending: false })
+    const { data } = await db.from('despas').select('*').order('created_at', { ascending: false })
     setList(data || [])
   }
 
   async function fetchPersonnages() {
-    const { data } = await supabase.from('personnages').select('id, nom').order('nom', { ascending: true })
+    const { data } = await db.from('personnages').select('id, nom').order('nom', { ascending: true })
     setPersonnages(data || [])
   }
 
@@ -155,8 +155,8 @@ export default function DespaPage() {
     if (photoFile) photo = await uploadImage(photoFile, 'despa')
     const data = { ...form, photo }
     const { error } = editId
-      ? await supabase.from('despas').update(data).eq('id', editId)
-      : await supabase.from('despas').insert([data])
+      ? await db.from('despas').update(data).eq('id', editId)
+      : await db.from('despas').insert([data])
     setUploading(false)
     if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
     setShowForm(false)
@@ -165,14 +165,14 @@ export default function DespaPage() {
 
   async function deleteDespa(id: string) {
     if (!confirm('Supprimer ce DS ?')) return
-    await supabase.from('despas').delete().eq('id', id)
+    await db.from('despas').delete().eq('id', id)
     fetchList()
   }
 
   async function duplicateDespa(d: Despa) {
     const { id, ...rest } = d
     void id
-    await supabase.from('despas').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
+    await db.from('despas').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
     fetchList()
   }
 

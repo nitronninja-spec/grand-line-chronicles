@@ -7,11 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "export": "node build-statique.mjs"
+    "export": "node build-statique.mjs",
+    "migrer": "node --env-file=.env.local migrer-vers-o2switch.mjs"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.10.3",
-    "@supabase/supabase-js": "^2.105.4",
     "@tanstack/react-query": "^5.100.10",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.14.0",

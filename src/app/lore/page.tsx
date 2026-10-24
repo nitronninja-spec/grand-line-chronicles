@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { supabase, uploadImage } from '@/lib/supabase'
+import { db, uploadImage } from '@/lib/db'
 import { fetchCategoryRows, CategoryRow } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 
@@ -101,7 +101,7 @@ export default function LorePage() {
   }, [])
 
   async function fetchArticles() {
-    const { data } = await supabase.from('lore').select('*').order('modifie', { ascending: false })
+    const { data } = await db.from('lore').select('*').order('modifie', { ascending: false })
     setArticles(data || [])
   }
 
@@ -117,7 +117,7 @@ export default function LorePage() {
     let failures = 0
     for (let i = 0; i < reordered.length; i++) {
       if (reordered[i].ordre_manuel !== i) {
-        const { error } = await supabase.from('lore').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        const { error } = await db.from('lore').update({ ordre_manuel: i }).eq('id', reordered[i].id)
         if (error) failures++
       }
     }
@@ -150,9 +150,9 @@ export default function LorePage() {
     }
     const data = { ...form, photos, modifie: new Date().toISOString() }
     if (selected) {
-      await supabase.from('lore').update(data).eq('id', selected.id)
+      await db.from('lore').update(data).eq('id', selected.id)
     } else {
-      const { data: inserted } = await supabase.from('lore').insert([data]).select().single()
+      const { data: inserted } = await db.from('lore').insert([data]).select().single()
       if (inserted) setSelected(inserted)
     }
     setForm(f => ({ ...f, photos }))
@@ -170,7 +170,7 @@ export default function LorePage() {
 
   async function deleteArticle(id: string) {
     if (!confirm('Supprimer cet article ?')) return
-    await supabase.from('lore').delete().eq('id', id)
+    await db.from('lore').delete().eq('id', id)
     setSelected(null); setEditing(false); fetchArticles()
   }
 
@@ -178,7 +178,7 @@ export default function LorePage() {
     const { id, ...rest } = a
     void id
     const data = { ...rest, titre: rest.titre + ' (copie)', modifie: new Date().toISOString() }
-    await supabase.from('lore').insert([data])
+    await db.from('lore').insert([data])
     fetchArticles()
   }
 

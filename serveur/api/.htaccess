@@ -1,0 +1,5 @@
+# Seuls db.php et upload.php sont appelables depuis le navigateur (config.php contient le mot de passe MySQL).
+<FilesMatch "^(?!(db|upload)\.php$)">
+  Require all denied
+</FilesMatch>
+Options -Indexes

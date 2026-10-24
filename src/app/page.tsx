@@ -1,13 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db'
 import GlobalSearch from '@/components/GlobalSearch'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 interface Stats {
   personnages: number
@@ -27,14 +22,14 @@ export default function Home() {
   useEffect(() => {
     async function fetchStats() {
       const [p, f, d, pd, l, c, i, s] = await Promise.all([
-        supabase.from('personnages').select('id', { count: 'exact', head: true }),
-        supabase.from('fruits').select('id', { count: 'exact', head: true }),
-        supabase.from('despas').select('id', { count: 'exact', head: true }),
-        supabase.from('pds').select('id', { count: 'exact', head: true }),
-        supabase.from('lames').select('id', { count: 'exact', head: true }),
-        supabase.from('cristaux_primordiaux').select('id', { count: 'exact', head: true }),
-        supabase.from('iles').select('id', { count: 'exact', head: true }),
-        supabase.from('sessions').select('id', { count: 'exact', head: true }),
+        db.from('personnages').select('id', { count: 'exact', head: true }),
+        db.from('fruits').select('id', { count: 'exact', head: true }),
+        db.from('despas').select('id', { count: 'exact', head: true }),
+        db.from('pds').select('id', { count: 'exact', head: true }),
+        db.from('lames').select('id', { count: 'exact', head: true }),
+        db.from('cristaux_primordiaux').select('id', { count: 'exact', head: true }),
+        db.from('iles').select('id', { count: 'exact', head: true }),
+        db.from('sessions').select('id', { count: 'exact', head: true }),
       ])
       setStats({
         personnages: p.count || 0,

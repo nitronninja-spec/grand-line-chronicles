@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase, uploadImage } from '@/lib/supabase'
+import { db, uploadImage } from '@/lib/db'
 import { fetchCategoryFull, CategoryFull } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import PersonnageSearchSelect from '@/components/PersonnageSearchSelect'
@@ -113,7 +113,7 @@ export default function LamesPage() {
     let failures = 0
     for (let i = 0; i < reordered.length; i++) {
       if (reordered[i].ordre_manuel !== i) {
-        const { error } = await supabase.from('lames').update({ ordre_manuel: i }).eq('id', reordered[i].id)
+        const { error } = await db.from('lames').update({ ordre_manuel: i }).eq('id', reordered[i].id)
         if (error) failures++
       }
     }
@@ -122,17 +122,17 @@ export default function LamesPage() {
   }
 
   async function fetchList() {
-    const { data } = await supabase.from('lames').select('*').order('created_at', { ascending: false })
+    const { data } = await db.from('lames').select('*').order('created_at', { ascending: false })
     setList(data || [])
   }
 
   async function fetchPersonnages() {
-    const { data } = await supabase.from('personnages').select('id, nom').order('nom', { ascending: true })
+    const { data } = await db.from('personnages').select('id, nom').order('nom', { ascending: true })
     setPersonnages(data || [])
   }
 
   async function fetchFruitsMangeurs() {
-    const { data } = await supabase.from('fruits').select('id, nom, lame_id').not('lame_id', 'is', null)
+    const { data } = await db.from('fruits').select('id, nom, lame_id').not('lame_id', 'is', null)
     setFruitsMangeurs((data || []) as { id: string; nom: string; lame_id: string }[])
   }
 
@@ -171,8 +171,8 @@ export default function LamesPage() {
     }
     const data = { ...form, photos, photo: photos[0] || null }
     const { error } = editId
-      ? await supabase.from('lames').update(data).eq('id', editId)
-      : await supabase.from('lames').insert([data])
+      ? await db.from('lames').update(data).eq('id', editId)
+      : await db.from('lames').insert([data])
     setUploading(false)
     if (error) { alert('Erreur lors de la sauvegarde : ' + error.message); return }
     setShowForm(false)
@@ -181,14 +181,14 @@ export default function LamesPage() {
 
   async function deleteLame(id: string) {
     if (!confirm('Supprimer cette lame ?')) return
-    await supabase.from('lames').delete().eq('id', id)
+    await db.from('lames').delete().eq('id', id)
     fetchList()
   }
 
   async function duplicateLame(l: Lame) {
     const { id, ...rest } = l
     void id
-    await supabase.from('lames').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
+    await db.from('lames').insert([{ ...rest, nom: rest.nom + ' (copie)' }])
     fetchList()
   }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { db } from '@/lib/db'
 import GlobalSearch from '@/components/GlobalSearch'
 import CategoryManager from '@/components/CategoryManager'
 
@@ -62,7 +62,7 @@ export default function DashboardPage() {
       ['sessions', 'journaux'], ['lore', 'lore'],
     ]
     const results = await Promise.all(
-      tableKeys.map(([t]) => supabase.from(t).select('*', { count: 'exact', head: false }).order('created_at', { ascending: false }).limit(3))
+      tableKeys.map(([t]) => db.from(t).select('*', { count: 'exact', head: false }).order('created_at', { ascending: false }).limit(3))
     )
     const newStats: Stats = { personnages: 0, fruits: 0, despas: 0, pds: 0, lames: 0, cristaux_primordiaux: 0, iles: 0, factions: 0, journaux: 0, lore: 0 }
     const newRecents: { section: string; items: RecentItem[] }[] = []
