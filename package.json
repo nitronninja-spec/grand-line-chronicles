@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "export": "node build-statique.mjs",
-    "migrer": "node --env-file=.env.local migrer-vers-o2switch.mjs"
+    "miniatures": "node miniatures.mjs",
+    "migrer":"node --env-file=.env.local migrer-vers-o2switch.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.10",

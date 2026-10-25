@@ -5,6 +5,7 @@ import { db, uploadImage } from '@/lib/db'
 import { fetchCategoryValues } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
 import PersonnageSearchSelect from '@/components/PersonnageSearchSelect'
+import Miniature from '@/components/Miniature'
 
 interface Despa {
   id: string
@@ -350,7 +351,7 @@ export default function DespaPage() {
         onMouseLeave={e => { const el = e.currentTarget; el.style.transform = 'none'; el.style.borderColor = 'rgba(30,120,200,.2)'; el.style.boxShadow = 'none' }}>
         <div style={{ height: 3, background: tc }} />
         <div style={{ width: '100%', height: 160, background: 'linear-gradient(135deg,#0a1829,#050d1a)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem', overflow: 'hidden' }}>
-          {d.photo && <img loading="lazy" src={d.photo} alt={d.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
+          {d.photo && <Miniature src={d.photo} alt={d.nom} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: .85 }} />}
           {d.emoji && <span style={{ position: 'relative', zIndex: 1, opacity: d.photo ? 0.3 : 1 }}>{d.emoji}</span>}
         </div>
         <div style={{ padding: '1.1rem' }}>

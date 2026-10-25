@@ -7,6 +7,7 @@ import GlobalSearch from '@/components/GlobalSearch'
 import ImageCropper from '@/components/ImageCropper'
 import ImageLightbox from '@/components/ImageLightbox'
 import MoneyInput from '@/components/MoneyInput'
+import Miniature from '@/components/Miniature'
 
 interface PersonnageRang { faction: string; rang: string }
 interface PersonnageIle { ile: string; notes: string }
@@ -490,7 +491,7 @@ export default function PersonnagesPage() {
         <div style={{ width:'100%', height:195, overflow:'hidden', background:'linear-gradient(135deg,#0a1829,#050d1a)', position:'relative', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'5rem', cursor:'pointer' }}
           onClick={() => { setSelected(p); setShowView(true) }}>
           {p.photos && p.photos[0]
-            ? <img loading="lazy" src={p.photos[0]} alt={p.nom} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top', display:'block', position:'absolute', inset:0, filter: isMort ? 'grayscale(1)' : 'none', opacity: isMort ? .5 : 1 }} />
+            ? <Miniature src={p.photos[0]} alt={p.nom} style={{ width:'100%', height:'100%', objectFit:'cover', objectPosition:'top', display:'block', position:'absolute', inset:0, filter: isMort ? 'grayscale(1)' : 'none', opacity: isMort ? .5 : 1 }} />
             : null}
           <span style={{ position:'relative', zIndex:1, opacity: p.photos && p.photos[0] ? 0 : 1 }}>{p.emoji || '👤'}</span>
           {isMort && <span style={{ position:'absolute', fontSize:'3.2rem', opacity:.85, zIndex:2, filter:'drop-shadow(0 2px 6px rgba(0,0,0,.8))' }}>☠️</span>}
@@ -709,7 +710,7 @@ export default function PersonnagesPage() {
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'.6rem', marginBottom:'.65rem' }}>
                   {(form.photos || []).map((src, i) => (
                     <div key={`existing-${i}`} style={{ aspectRatio:'1', borderRadius:8, overflow:'hidden', position:'relative', border: i===0?'2px solid #d4a017':'2px solid rgba(30,120,200,.2)' }}>
-                      <img loading="lazy" src={src} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block', opacity: cropLoading===i?.4:1 }} />
+                      <Miniature src={src} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block', opacity: cropLoading===i?.4:1 }} />
                       {cropLoading===i && <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.2rem' }}>⏳</div>}
                       <button onClick={() => cropExistingPhoto(i)} title="Recadrer"
                         style={{ position:'absolute', top:2, left:2, background:'rgba(0,200,255,.85)', border:'none', borderRadius:'50%', width:20, height:20, color:'#050d1a', fontSize:'.6rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✂️</button>
@@ -720,7 +721,7 @@ export default function PersonnagesPage() {
                   ))}
                   {photoPreviews.map((src, i) => (
                     <div key={`new-${i}`} style={{ aspectRatio:'1', borderRadius:8, overflow:'hidden', position:'relative', border: ((form.photos||[]).length===0 && i===0) ? '2px solid #d4a017' : '2px solid rgba(30,120,200,.2)' }}>
-                      <img loading="lazy" src={src} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+                      <Miniature src={src} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
                       <button onClick={() => setCropTarget({ kind:'new', index:i, file:photoFiles[i] })} title="Recadrer"
                         style={{ position:'absolute', top:2, left:2, background:'rgba(0,200,255,.85)', border:'none', borderRadius:'50%', width:20, height:20, color:'#050d1a', fontSize:'.6rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✂️</button>
                       <button onClick={() => removeNewPhoto(i)}
@@ -1105,7 +1106,7 @@ export default function PersonnagesPage() {
                     {selected.photos.map((ph,i) => (
                       <div key={i} style={{ width:70, height:70, borderRadius:8, overflow:'hidden', border:`2px solid ${i===0?'#d4a017':'rgba(30,120,200,.2)'}`, cursor:'zoom-in' }}
                         onClick={() => setLightbox({ images: selected.photos!, index: i })}>
-                        <img loading="lazy" src={ph} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+                        <Miniature src={ph} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
                       </div>
                     ))}
                   </div>

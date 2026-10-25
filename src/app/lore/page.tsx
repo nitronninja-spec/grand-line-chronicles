@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { db, uploadImage } from '@/lib/db'
 import { fetchCategoryRows, CategoryRow } from '@/lib/categories'
 import GlobalSearch from '@/components/GlobalSearch'
+import Miniature from '@/components/Miniature'
 
 interface LoreArticle {
   id: string
@@ -257,7 +258,7 @@ export default function LorePage() {
                     style={{width:'100%',textAlign:'left',background:selected?.id===a.id?'rgba(212,160,23,.15)':'none',border:`1px solid ${selected?.id===a.id?'#d4a017':'transparent'}`,borderRadius:9,padding:'.6rem .85rem',cursor:sortMode==='manuel'?'grab':'pointer',transition:'all .2s',display:'flex',alignItems:'center',gap:'.65rem',opacity:sortMode==='manuel'&&draggingId===a.id?.4:1}}>
                     {sortMode === 'manuel' && <span style={{color:'#4a6880',fontSize:'.7rem',flexShrink:0}}>⠿</span>}
                     {a.photos && a.photos[0]
-                      ? <img loading="lazy" src={a.photos[0]} style={{width:26,height:26,borderRadius:6,objectFit:'cover',flexShrink:0}} />
+                      ? <Miniature src={a.photos[0]} style={{width:26,height:26,borderRadius:6,objectFit:'cover',flexShrink:0}} />
                       : <span style={{fontSize:'1.1rem',flexShrink:0,width:26,textAlign:'center'}}>{a.emoji||'📄'}</span>}
                     <div style={{flex:1,overflow:'hidden'}}>
                       <div style={{fontFamily:"'Cinzel',serif",fontSize:'.72rem',color:'#e8eef5',fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.titre}</div>
@@ -285,7 +286,7 @@ export default function LorePage() {
               {/* Cover */}
               {(form.photos && form.photos[0]) && (
                 <div style={{height:180,position:'relative',overflow:'hidden'}}>
-                  <img loading="lazy" src={form.photos[0]} style={{width:'100%',height:'100%',objectFit:'cover',display:'block',cursor:'pointer'}} onClick={() => setLightbox(form.photos![0])} />
+                  <Miniature src={form.photos[0]} style={{width:'100%',height:'100%',objectFit:'cover',display:'block',cursor:'pointer'}} onClick={() => setLightbox(form.photos![0])} />
                   <div style={{position:'absolute',bottom:0,left:0,right:0,height:60,background:'linear-gradient(to top,#0d2040,transparent)'}} />
                 </div>
               )}
@@ -310,13 +311,13 @@ export default function LorePage() {
                 <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap',alignItems:'center'}}>
                   {(form.photos||[]).map((src,i) => (
                     <div key={`existing-${i}`} style={{width:56,height:56,borderRadius:8,overflow:'hidden',position:'relative',border:i===0?'2px solid #d4a017':'1px solid rgba(30,120,200,.2)'}}>
-                      <img loading="lazy" src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block',cursor:'pointer'}} onClick={() => setLightbox(src)} />
+                      <Miniature src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block',cursor:'pointer'}} onClick={() => setLightbox(src)} />
                       <button onClick={() => setForm(f => ({...f, photos:(f.photos||[]).filter((_,j)=>j!==i)}))} style={{position:'absolute',top:1,right:1,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:16,height:16,color:'#fff',fontSize:'.5rem',cursor:'pointer'}}>✕</button>
                     </div>
                   ))}
                   {photoPreviews.map((src,i) => (
                     <div key={`new-${i}`} style={{width:56,height:56,borderRadius:8,overflow:'hidden',position:'relative',border:'2px solid #40d060'}}>
-                      <img loading="lazy" src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                      <Miniature src={src} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
                       <button onClick={() => { setPhotoPreviews(p=>p.filter((_,j)=>j!==i)); setPhotoFiles(p=>p.filter((_,j)=>j!==i)) }} style={{position:'absolute',top:1,right:1,background:'rgba(224,48,48,.85)',border:'none',borderRadius:'50%',width:16,height:16,color:'#fff',fontSize:'.5rem',cursor:'pointer'}}>✕</button>
                     </div>
                   ))}
@@ -357,7 +358,7 @@ export default function LorePage() {
                       <div style={{display:'flex',gap:'.5rem',flexWrap:'wrap',marginBottom:'1.5rem'}}>
                         {form.photos.slice(1).map((ph,i) => (
                           <div key={i} onClick={() => setLightbox(ph)} style={{width:80,height:80,borderRadius:8,overflow:'hidden',border:'1px solid rgba(30,120,200,.2)',cursor:'pointer'}}>
-                            <img loading="lazy" src={ph} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
+                            <Miniature src={ph} style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} />
                           </div>
                         ))}
                       </div>

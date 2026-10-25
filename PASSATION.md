@@ -13,7 +13,10 @@ sans l'historique de conversation. Aucun secret ici : les identifiants MySQL / c
 5. `npm run dev` puis ouvrir http://localhost:3000 (attention : on travaille alors sur les vraies données).
 
 ## Hébergement : tout sur O2switch (plus de Supabase ni de Vercel)
-Guide pas à pas : **`MISE-EN-LIGNE-O2SWITCH.md`**. Pas de déploiement automatique : `npm run export`
+En ligne depuis le 25/10/2026 : **https://grand-line-chronicles.fr** (cPanel brocolis.o2switch.net:2083,
+base `ayma4633_glc`, domaine en « addon » pointant sur `public_html`, certificat via l'outil Let's Encrypt
+de cPanel — ne pas y inclure les alias `*.odns.fr`, dont la vérification échoue ; `serveur/.htaccess`
+force https sans www). Guide pas à pas : **`MISE-EN-LIGNE-O2SWITCH.md`**. Pas de déploiement automatique : `npm run export`
 puis envoi du contenu de `.next-export/` dans `public_html` (cPanel). Un `git push` ne met plus le site à jour.
 
 ## Base de données (MySQL / MariaDB sur O2switch)
@@ -55,6 +58,10 @@ après une erreur. Penser à copier ce dossier hors du PC (disque externe / clou
   JPEG) puis `serveur/api/upload.php` → `public_html/media/<dossier>/` ; toutes les `<img>` ont
   `loading="lazy"`. Raison : une crise de « Cached Egress » Supabase (68 Go en 2 jours) venait d'images
   de 20 Mo+ servies sans compression ni lazy-loading. `media/.htaccess` interdit d'y exécuter du code.
+- **Miniatures** : cartes, listes et galeries affichent `<Miniature src=...>` (`src/components/Miniature.tsx`)
+  → `media/_mini/<chemin>.webp` (600 px, ~7× plus léger), créée par `upload.php` à chaque envoi
+  (`npm run miniatures <dossier>` pour des images anciennes). Repli automatique sur l'original si la
+  miniature manque. L'agrandissement (`ImageLightbox`), le recadrage et les vues détail gardent l'original.
 - Remplacer une photo laisse l'ancien fichier dans `media/` (les orphelins de Supabase n'ont pas été transférés).
 
 ## Fonctionnalités récentes

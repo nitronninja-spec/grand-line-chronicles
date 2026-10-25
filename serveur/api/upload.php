@@ -30,5 +30,28 @@ if (!is_dir("$racine/$dossier") && !mkdir("$racine/$dossier", 0755, true)) repon
 // Même nommage que l'ancien bucket Supabase ; suffixe aléatoire contre deux envois la même milliseconde.
 $nom = (int)round(microtime(true) * 1000) . '-' . bin2hex(random_bytes(3)) . ".$ext";
 if (!move_uploaded_file($f['tmp_name'], "$racine/$dossier/$nom")) repondre_erreur("Impossible d'enregistrer le fichier", 500);
+creer_miniature("$racine/$dossier/$nom", "$racine/_mini/$dossier/" . pathinfo($nom, PATHINFO_FILENAME) . '.webp');
+
+// Miniature WebP 600 px de large pour les cartes et listes (src/components/Miniature.tsx) ; l'original
+// sert à l'agrandissement. En cas d'échec, le site affiche simplement l'original.
+function creer_miniature(string $source, string $cible): void {
+  if (!function_exists('imagewebp')) return;
+  $ouvrir = ['jpg' => 'imagecreatefromjpeg', 'jpeg' => 'imagecreatefromjpeg', 'png' => 'imagecreatefrompng',
+    'gif' => 'imagecreatefromgif', 'webp' => 'imagecreatefromwebp', 'avif' => 'imagecreatefromavif'];
+  $fn = $ouvrir[strtolower(pathinfo($source, PATHINFO_EXTENSION))] ?? null;
+  if (!$fn || !function_exists($fn)) return;
+  $img = @$fn($source);
+  if (!$img) return;
+  $l = imagesx($img);
+  $h = imagesy($img);
+  $largeur = min(600, $l);
+  $mini = imagecreatetruecolor($largeur, max(1, (int)round($h * $largeur / $l)));
+  imagealphablending($mini, false);
+  imagesavealpha($mini, true);
+  imagecopyresampled($mini, $img, 0, 0, 0, 0, imagesx($mini), imagesy($mini), $l, $h);
+  if (is_dir(dirname($cible)) || @mkdir(dirname($cible), 0755, true)) @imagewebp($mini, $cible, 75);
+  imagedestroy($img);
+  imagedestroy($mini);
+}
 
 repondre(['url' => rtrim(config()['media_url'] ?? '/media', '/') . "/$dossier/$nom", 'error' => null]);

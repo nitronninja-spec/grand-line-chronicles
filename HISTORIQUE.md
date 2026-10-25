@@ -35,12 +35,15 @@ Détails techniques et conventions : voir `PASSATION.md`. Aucun secret dans ce f
    (204 personnages… + 392 images utilisées, 100 Mo ; orphelines laissées). Testé en local avec PHP 8.3 +
    MariaDB 11.4 : résultats identiques à Supabase, lecture/écriture/upload OK. Guide : `MISE-EN-LIGNE-O2SWITCH.md`.
 
+9. **Mise en ligne O2switch** (25/10/2026) — compte cPanel activé après un ticket support ; base importée
+   (comptes identiques à Supabase), site + 392 images envoyés, utilisateur MySQL créé par Matéis,
+   https://grand-line-chronicles.fr avec certificat Let's Encrypt. Lecture, écriture et upload testés en ligne.
+
 ## Décisions et idées écartées
 - Notes privées par compte utilisateur : écarté, un simple champ « notes » suffit.
 - Partage du compte Claude avec un ami : déconseillé ; chacun utilise son compte et ce dossier de passation.
 - Pas de suppression des ~320 images orphelines du bucket sans validation explicite.
 
 ## Reste à faire / pistes
-- Mise en ligne sur O2switch par Matéis (suivre `MISE-EN-LIGNE-O2SWITCH.md`), puis fusion de la branche
-  `o2switch` dans `main`, arrêt de Vercel, Supabase repassé en gratuit puis supprimé.
+- Fusion de la branche `o2switch` dans `main`, arrêt de Vercel, Supabase repassé en gratuit puis supprimé.
 - Corriger le doublon d'article Lore (sauvegarde auto).
