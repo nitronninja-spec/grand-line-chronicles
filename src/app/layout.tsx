@@ -15,13 +15,13 @@ const geistMono = Geist_Mono({
 // Titre et description affichés dans l'onglet et dans l'aperçu des liens (Discord, réseaux...).
 export const metadata: Metadata = {
   metadataBase: new URL("https://grand-line-chronicles.fr"),
-  title: "Wiki AOP — Age of Piracy",
-  description: "Le wiki du JDR One Piece Age of Piracy : personnages, fruits du démon, lames, îles, factions et journaux de bord.",
+  title: "Wiki d'Age Of Piracy",
+  description: "Wiki d'Age Of Piracy : le JDR One Piece — personnages, fruits du démon, lames, îles, factions et journaux de bord.",
   openGraph: {
-    title: "Wiki AOP — Age of Piracy",
-    description: "Le wiki du JDR One Piece Age of Piracy : personnages, fruits du démon, lames, îles, factions et journaux de bord.",
+    title: "Wiki d'Age Of Piracy",
+    description: "Wiki d'Age Of Piracy : le JDR One Piece — personnages, fruits du démon, lames, îles, factions et journaux de bord.",
     url: "/",
-    siteName: "Wiki AOP",
+    siteName: "Age Of Piracy",
     locale: "fr_FR",
     type: "website",
   },
